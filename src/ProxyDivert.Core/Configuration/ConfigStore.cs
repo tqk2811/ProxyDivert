@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Routing.Models;
+using TqkLibrary.WinDivert.Redirect.Enums;
 
 namespace ProxyDivert.Core.Configuration;
 
@@ -45,6 +46,7 @@ public sealed class ConfigStore
             AppConfig? config = JsonSerializer.Deserialize<AppConfig>(json, SerializerOptions);
             if (config == null) return AppConfig.CreateDefault();
             DecryptSecrets(config);
+            Migrate(config);
             return config;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
@@ -71,6 +73,21 @@ public sealed class ConfigStore
         // File.Replace needs an existing destination; on a first save there isn't one.
         if (File.Exists(FilePath)) File.Replace(tempPath, FilePath, null);
         else File.Move(tempPath, FilePath);
+    }
+
+    // Brings a file written by an older version up to the current shape. Kept here rather than in
+    // the model so AppConfig stays plain data.
+    //
+    // v1 -> v2: BlockIpv6 became Ipv6 (Redirect / Block / Ignore). "Block it" carries over as-is.
+    // "Don't block it" used to mean the target's IPv6 escaped the proxy entirely — that was the
+    // only thing the old code could do, not what the setting was asking for, so it becomes Redirect.
+    internal static void Migrate(AppConfig config)
+    {
+        if (config.Version < 2)
+            config.Ipv6 = config.BlockIpv6 == true ? Ipv6Mode.Block : Ipv6Mode.Redirect;
+
+        config.BlockIpv6 = null;
+        config.Version = AppConfig.CurrentVersion;
     }
 
     private static void DecryptSecrets(AppConfig config)

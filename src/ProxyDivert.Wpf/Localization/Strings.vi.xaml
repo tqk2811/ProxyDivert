@@ -44,9 +44,10 @@
     <sys:String x:Key="Str.Outbound.Url">URL</sys:String>
     <sys:String x:Key="Str.Outbound.Username">Tài khoản</sys:String>
     <sys:String x:Key="Str.Outbound.Password">Mật khẩu</sys:String>
+    <sys:String x:Key="Str.Outbound.Ipv6">IPv6</sys:String>
     <sys:String x:Key="Str.Outbound.TestOk">Kết nối thành công.</sys:String>
     <sys:String x:Key="Str.Outbound.TestFailed">Kết nối thất bại:</sys:String>
-    <sys:String x:Key="Str.Outbound.Hint">Direct và Block luôn có sẵn. Chỉ SOCKS5 chở được UDP.</sys:String>
+    <sys:String x:Key="Str.Outbound.Hint">Direct và Block luôn tồn tại. Chỉ SOCKS5 chở được UDP.</sys:String>
 
     <sys:String x:Key="Str.Rules.Policies">Bộ luật</sys:String>
     <sys:String x:Key="Str.Rules.Rules">Luật (khớp đầu tiên thắng)</sys:String>
@@ -71,8 +72,8 @@
     <sys:String x:Key="Str.Settings.Dns">DNS</sys:String>
     <sys:String x:Key="Str.Settings.DnsMode">Chế độ</sys:String>
     <sys:String x:Key="Str.Settings.DohEndpoint">Máy chủ DoH</sys:String>
-    <sys:String x:Key="Str.Settings.BlockIpv6">Chặn IPv6 của tiến trình đích</sys:String>
-    <sys:String x:Key="Str.Settings.BlockIpv6Hint">Bộ chuyển hướng chỉ làm IPv4; không chặn thì mọi kết nối phân giải ra AAAA sẽ đi vòng qua proxy.</sys:String>
+    <sys:String x:Key="Str.Settings.Ipv6">IPv6 của tiến trình đích</sys:String>
+    <sys:String x:Key="Str.Settings.Ipv6Hint">Redirect: đưa IPv6 qua luật định tuyến y như IPv4. Block: chặn để ứng dụng tự lùi về IPv4 — dùng khi đường ra không có tuyến IPv6. Ignore: thả cho đi thẳng, tức là lọt ra ngoài proxy.</sys:String>
     <sys:String x:Key="Str.Settings.LogPath">File nhật ký chi tiết</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Giao diện</sys:String>
     <sys:String x:Key="Str.Settings.Language">Ngôn ngữ</sys:String>

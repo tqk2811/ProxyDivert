@@ -40,6 +40,11 @@
                                         Binding="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
                     <DataGridTextColumn Header="{DynamicResource Str.Outbound.Password}"
                                         Binding="{Binding Password, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
+                    <DataGridComboBoxColumn Header="{DynamicResource Str.Outbound.Ipv6}"
+                                            SelectedItemBinding="{Binding Ipv6Support, UpdateSourceTrigger=PropertyChanged}"
+                                            ItemsSource="{Binding DataContext.Ipv6Supports,
+                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            Width="100"/>
                 </DataGrid.Columns>
             </DataGrid>
         </DockPanel>

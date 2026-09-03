@@ -27,6 +27,8 @@ public sealed partial class OutboundsViewModel : ObservableObject
         OutboundKind.HttpProxy, OutboundKind.Socks4, OutboundKind.Socks5,
     };
 
+    public Array Ipv6Supports { get; } = Enum.GetValues(typeof(Ipv6Support));
+
     [ObservableProperty]
     private Outbound? _selected;
 

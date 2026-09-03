@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ProxyDivert.Core.Routing.Models;
+using TqkLibrary.WinDivert.Redirect.Enums;
 
 namespace ProxyDivert.Core.Configuration.Models;
 
@@ -8,8 +9,10 @@ namespace ProxyDivert.Core.Configuration.Models;
 // passwords are encrypted before they get there (see ConfigStore).
 public sealed class AppConfig
 {
-    // Bumped when a future change needs a migration step on load.
-    public int Version { get; set; } = 1;
+    // Bumped when a change needs a migration step on load (see ConfigStore.Migrate).
+    public const int CurrentVersion = 2;
+
+    public int Version { get; set; } = CurrentVersion;
 
     public List<Outbound> Outbounds { get; set; } = new List<Outbound>();
 
@@ -23,9 +26,15 @@ public sealed class AppConfig
     // log pane still works).
     public string? DiagnosticLogPath { get; set; }
 
-    // Drop the target's IPv6 traffic. The redirector is IPv4-only, so leaving IPv6 alone would let
-    // any AAAA-resolved connection bypass the proxy entirely.
-    public bool BlockIpv6 { get; set; } = true;
+    // What happens to the target's IPv6 traffic: Redirect (default) sends it through the relay and
+    // the routing rules exactly like IPv4; Block drops it so the application falls back to IPv4;
+    // Ignore lets it leave untouched (it then bypasses the proxy — diagnostics only).
+    public Ipv6Mode Ipv6 { get; set; } = Ipv6Mode.Redirect;
+
+    // Config v1 only. Back then the redirector was IPv4-only and this switch decided whether the
+    // target's IPv6 was dropped. ConfigStore maps it onto Ipv6 on load and then clears it, so it is
+    // never written back (null properties are omitted).
+    public bool? BlockIpv6 { get; set; }
 
     // UI preferences kept with the rest so one file is the whole state.
     public string? Language { get; set; }

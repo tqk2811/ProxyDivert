@@ -25,8 +25,16 @@ public sealed class Outbound
 
     public bool IsEnabled { get; set; } = true;
 
+    // Whether this way out can reach IPv6 destinations. See Ipv6Support — Auto learns it from the
+    // first failure rather than asking the user to know.
+    public Ipv6Support Ipv6Support { get; set; } = Ipv6Support.Auto;
+
     // True when this outbound can carry UDP (SOCKS5 UDP ASSOCIATE). Direct carries UDP too.
     public bool SupportsUdp => Kind is OutboundKind.Direct or OutboundKind.Socks5 or OutboundKind.Vpn;
+
+    // SOCKS4 has no IPv6 in the protocol at all — no address type for it — so no setting can make
+    // it carry IPv6. Direct is the machine's own stack: if the machine has IPv6, so does Direct.
+    public bool CanEverCarryIpv6 => Kind != OutboundKind.Socks4;
 
     public static Outbound CreateDirect() => new Outbound
     {

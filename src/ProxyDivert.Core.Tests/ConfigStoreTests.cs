@@ -4,6 +4,8 @@ using ProxyDivert.Core.Configuration;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using System.Linq;
+using TqkLibrary.WinDivert.Redirect.Enums;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;
@@ -114,6 +116,58 @@ public class ConfigStoreTests : IDisposable
 
         Assert.NotEmpty(config.Policies);
         Assert.True(File.Exists(ConfigPath + ".bak"));
+    }
+
+    [Fact]
+    public void A_v1_file_that_blocked_ipv6_keeps_blocking_it()
+    {
+        File.WriteAllText(ConfigPath, """
+            { "Version": 1, "BlockIpv6": true, "Outbounds": [], "Policies": [], "ProcessRules": [] }
+            """);
+
+        AppConfig config = new ConfigStore(ConfigPath).Load();
+
+        Assert.Equal(Ipv6Mode.Block, config.Ipv6);
+        Assert.Equal(AppConfig.CurrentVersion, config.Version);
+        Assert.Null(config.BlockIpv6);
+    }
+
+    [Fact]
+    public void A_v1_file_that_let_ipv6_through_now_redirects_it()
+    {
+        // "Don't block" used to mean the target's IPv6 escaped the proxy — the only thing the code
+        // could do then. Redirecting it is what that setting was actually asking for.
+        File.WriteAllText(ConfigPath, """
+            { "Version": 1, "BlockIpv6": false, "Outbounds": [], "Policies": [], "ProcessRules": [] }
+            """);
+
+        AppConfig config = new ConfigStore(ConfigPath).Load();
+
+        Assert.Equal(Ipv6Mode.Redirect, config.Ipv6);
+    }
+
+    [Fact]
+    public void The_ipv6_mode_survives_a_save_and_load()
+    {
+        var store = new ConfigStore(ConfigPath);
+        AppConfig config = AppConfig.CreateDefault();
+        config.Ipv6 = Ipv6Mode.Block;
+        config.Outbounds.Add(new Outbound
+        {
+            Id = Guid.NewGuid(),
+            Name = "vpn-ish",
+            Kind = OutboundKind.Socks5,
+            Url = "socks5://127.0.0.1:1080",
+            Ipv6Support = Ipv6Support.Disabled,
+        });
+
+        store.Save(config);
+        AppConfig loaded = store.Load();
+
+        Assert.Equal(Ipv6Mode.Block, loaded.Ipv6);
+        Assert.Equal(Ipv6Support.Disabled, loaded.Outbounds.Single(o => o.Name == "vpn-ish").Ipv6Support);
+        // A brand-new outbound has no answer for this yet, and must not pretend it does.
+        Assert.Equal(Ipv6Support.Auto, loaded.Outbounds.Single(o => o.Kind == OutboundKind.Direct).Ipv6Support);
     }
 
     public void Dispose()

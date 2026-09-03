@@ -12,10 +12,11 @@ namespace ProxyDivert.Core.Engine;
 // Carries the target's UDP through SOCKS5 UDP ASSOCIATE tunnels and injects the replies back into
 // the process.
 //
-// One tunnel per (outbound, process source port). A SOCKS5 reply identifies only the remote peer,
-// never the local socket it belongs to, so a shared tunnel cannot tell two process sockets talking
-// to the same server apart. Giving each source port its own tunnel makes the tunnel itself the
-// correlation key — the reply loop knows exactly which port to inject into.
+// One tunnel per (outbound, process source port, address family). A SOCKS5 reply identifies only
+// the remote peer, never the local socket it belongs to, so a shared tunnel cannot tell two process
+// sockets talking to the same server apart. Giving each source port its own tunnel makes the tunnel
+// itself the correlation key — the reply loop knows exactly which port to inject into, and on which
+// of the relay's two loopback listeners.
 public sealed class UdpProxyForwarder : IDisposable
 {
     private readonly ProcessRedirector _redirector;
@@ -34,11 +35,11 @@ public sealed class UdpProxyForwarder : IDisposable
     // Queues one datagram for delivery through `source`. Returns false when the tunnel is not
     // ready yet — the datagram is dropped, which UDP callers already tolerate and which is far
     // better than falling back to a direct send that would expose the real IP.
-    public bool Send(Guid outboundId, IProxySource source, ushort clientPort, IPEndPoint destination, byte[] payload)
+    public bool Send(Guid outboundId, IProxySource source, ushort clientPort, IPEndPoint destination, byte[] payload, bool isIpv6)
     {
         if (_disposed) return false;
 
-        var key = new TunnelKey(outboundId, clientPort);
+        var key = new TunnelKey(outboundId, clientPort, isIpv6);
         PortTunnel tunnel = _tunnels.GetOrAdd(key, k => new PortTunnel(this, source, k));
         return tunnel.Send(destination, payload);
     }
@@ -53,11 +54,11 @@ public sealed class UdpProxyForwarder : IDisposable
         }
     }
 
-    private void OnReply(ushort clientPort, IPEndPoint from, byte[] payload)
+    private void OnReply(ushort clientPort, IPEndPoint from, byte[] payload, bool isIpv6)
     {
         try
         {
-            _redirector.InjectUdpReplyToProcessAsync(clientPort, payload).GetAwaiter().GetResult();
+            _redirector.InjectUdpReplyToProcessAsync(clientPort, payload, isIpv6).GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
@@ -78,16 +79,22 @@ public sealed class UdpProxyForwarder : IDisposable
     {
         public Guid OutboundId { get; }
         public ushort ClientPort { get; }
+        // IPv4 and IPv6 have separate port spaces, so the same port number can belong to two
+        // different sockets at once. Without this the two would share a tunnel and the replies of
+        // one would be injected into the other.
+        public bool IsIpv6 { get; }
 
-        public TunnelKey(Guid outboundId, ushort clientPort)
+        public TunnelKey(Guid outboundId, ushort clientPort, bool isIpv6)
         {
             OutboundId = outboundId;
             ClientPort = clientPort;
+            IsIpv6 = isIpv6;
         }
 
-        public bool Equals(TunnelKey other) => ClientPort == other.ClientPort && OutboundId.Equals(other.OutboundId);
+        public bool Equals(TunnelKey other)
+            => ClientPort == other.ClientPort && IsIpv6 == other.IsIpv6 && OutboundId.Equals(other.OutboundId);
         public override bool Equals(object? obj) => obj is TunnelKey k && Equals(k);
-        public override int GetHashCode() => OutboundId.GetHashCode() ^ ClientPort;
+        public override int GetHashCode() => OutboundId.GetHashCode() ^ ClientPort ^ (IsIpv6 ? 1 << 17 : 0);
     }
 
     // One UDP ASSOCIATE dedicated to a single process source port on a single outbound.
@@ -164,7 +171,7 @@ public sealed class UdpProxyForwarder : IDisposable
                     return;
                 }
 
-                _owner.OnReply(_key.ClientPort, datagram.Source, datagram.Payload);
+                _owner.OnReply(_key.ClientPort, datagram.Source, datagram.Payload, _key.IsIpv6);
             }
         }
 

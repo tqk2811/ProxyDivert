@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using ProxyDivert.Core.Configuration.Enums;
+using TqkLibrary.WinDivert.Redirect.Enums;
 using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.Services;
 using ProxyDivert.Wpf.Themes;
@@ -10,7 +11,7 @@ using ProxyDivert.Wpf.Themes;
 namespace ProxyDivert.Wpf.ViewModels;
 
 // The Settings tab. Everything here writes straight into AppConfig and saves; the options that
-// live inside the WinDivert handles (DNS mode, IPv6 blocking, log file) only take effect on the
+// live inside the WinDivert handles (DNS mode, the IPv6 mode, log file) only take effect on the
 // next engine start, which the view says out loud rather than pretending otherwise.
 public sealed partial class SettingsViewModel : ObservableObject
 {
@@ -21,6 +22,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public Array DnsModes { get; } = Enum.GetValues(typeof(DnsMode));
 
+    public Array Ipv6Modes { get; } = Enum.GetValues(typeof(Ipv6Mode));
+
     public Array Themes { get; } = Enum.GetValues(typeof(ThemeMode));
 
     public Array Languages { get; } = Enum.GetValues(typeof(AppLanguage));
@@ -30,7 +33,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _services = services;
         _dnsMode = services.Config.Dns.Mode;
         _dohEndpoint = services.Config.Dns.DohEndpoint;
-        _blockIpv6 = services.Config.BlockIpv6;
+        _ipv6 = services.Config.Ipv6;
         _diagnosticLogPath = services.Config.DiagnosticLogPath ?? string.Empty;
         _theme = ThemeManager.Parse(services.Config.Theme);
         _language = LocalizationManager.Parse(services.Config.Language);
@@ -44,7 +47,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string _dohEndpoint;
 
     [ObservableProperty]
-    private bool _blockIpv6;
+    private Ipv6Mode _ipv6;
 
     [ObservableProperty]
     private string _diagnosticLogPath;
@@ -62,7 +65,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnDohEndpointChanged(string value) => _services.Config.Dns.DohEndpoint = value;
 
-    partial void OnBlockIpv6Changed(bool value) => _services.Config.BlockIpv6 = value;
+    partial void OnIpv6Changed(Ipv6Mode value) => _services.Config.Ipv6 = value;
 
     partial void OnDiagnosticLogPathChanged(string value)
         => _services.Config.DiagnosticLogPath = string.IsNullOrWhiteSpace(value) ? null : value;

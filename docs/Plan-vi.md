@@ -37,12 +37,12 @@ Thuật ngữ: [docs/Glossary-vi.md](Glossary-vi.md). Ngày lập: 2026-09-03.
 | W2 | Không có rule engine, chỉ whitelist port đích. | `Redirect\RedirectOptions.cs:39` |
 | W3 | Relay **luôn connect thẳng tới đích thật trước** khi gọi handler → rò IP thật + tốn socket kể cả khi đi proxy. | `Redirect\TcpRelayServer.cs:75-87` |
 | W4 | `SocketTracker` có `AddProcess` nhưng **không có `RemoveProcess`**; `ProcessRedirector` không có Stop, chỉ Dispose. | `Flow\SocketTracker.cs:93`, `Redirect\ProcessRedirector.cs:160` |
-| W5 | Khoá `NatTable` là `(protocol, srcPort)` toàn cục, không có PID. Đủ dùng vì cổng nguồn là duy nhất toàn máy, nhưng cần ghi rõ giả định. | `Redirect\NatTable.cs:11` |
+| W5 | Khoá `NatTable` là `(protocol, họ địa chỉ, srcPort)`, không có PID. Đủ dùng vì cổng nguồn là duy nhất toàn máy **trong từng họ địa chỉ** ([dual-stack](Glossary-vi.md#L85)), nhưng cần ghi rõ giả định. | `Redirect\NatTable.cs` |
 | W6 | Demo gọi `ConnectAsync` bằng **IP literal**, proxy không bao giờ thấy hostname → không remote-DNS. | `Demo\Running\ProxyRedirectorRunner.cs:180` |
 | W7 | Không có bộ đếm byte, không có danh sách kết nối observable; log ghi file qua `DiagnosticLogger` static toàn cục, `Configure` xoá file cũ. | `Redirect\DiagnosticLogger.cs:22` |
 | W8 | UDP qua SOCKS5 map reply chỉ theo endpoint server, hai socket cùng server sẽ nhầm. | `Demo\Running\UdpProxyForwarder.cs:12-17` |
 | W9 | Helper process và parser proxy URI nằm ở Demo, `internal`, không tái dùng được. | `Demo\Process\*`, `Demo\Parsing\ProxyUriParser.cs` |
-| W10 | Chỉ IPv4; IPv6 bị chặn chứ không chuyển hướng. `RedirectOptions.SocketPriority` khai báo nhưng không dùng. | `Redirect\ProcessRedirector.cs:109`, `RedirectOptions.cs:22` |
+| W10 | ~~Chỉ IPv4; IPv6 bị chặn chứ không chuyển hướng.~~ **Đã xử lý 03/09/2026**: `Ipv6Mode.Redirect` NAT cả IPv6 qua listener `[::1]` riêng; khoá `NatTable` thêm họ địa chỉ. `RedirectOptions.SocketPriority` giờ đã được dùng. | `Redirect\ProcessRedirector.cs`, `Redirect\NatTable.cs` |
 
 ### 2.2 TqkLibrary.Proxy (đường ra, dùng gần như nguyên)
 
@@ -88,7 +88,7 @@ ConnectionTracker → sự kiện Opened/Updated/Closed cho UI (PID, domain, đ�
 - **Quyết định định tuyến ở tầng kết nối** (trong `TcpConnectionHandler`), không ở tầng gói, vì domain chỉ biết sau khi TCP mở (SNI). Mọi kết nối của tiến trình mục tiêu đều đi qua relay; "direct" nghĩa là relay nối thẳng bằng `LocalProxySource`. Ưu điểm: đếm được byte, ghi log, đổi luật không cần attach lại. Nhược: thêm một bước copy trong tool. Chấp nhận ở giai đoạn 1; sau này có thể thêm tầng "pass-through theo IP/CIDR" ở middleware nếu cần hiệu năng.
 - **Domain lấy theo thứ tự**: SNI (TLS) → header Host (HTTP) → bảng DNS ngược → chỉ IP. Với UDP chỉ có bảng DNS ngược hoặc IP.
 - **UDP**: DNS (53) xử lý riêng (DoH hoặc chuyển qua outbound mặc định nếu là SOCKS5, hoặc direct); [QUIC](Glossary-vi.md#L29) UDP/443 **chặn mặc định** để trình duyệt lùi về TCP; UDP khác theo policy (direct / SOCKS5 / chặn). Proxy HTTP và SOCKS4 không chở được UDP nên khi outbound không hỗ trợ thì chặn, không để rò.
-- **IPv6**: giữ chặn mặc định như thư viện.
+- **IPv6**: chuyển hướng như IPv4 (mặc định `Ipv6Mode.Redirect`) — pump NETWORK IPv6 chạy đúng pipeline NAT của IPv4 nhưng trỏ vào cặp listener `[::1]` riêng của relay. Vẫn giữ được hai chế độ cũ: `Block` (chặn để ứng dụng lùi về IPv4) và `Ignore`. Đường ra không có tuyến IPv6 thì đích có tên miền đi bằng tên (đường ra tự phân giải sang A), đích chỉ có IP trần thì từ chối ngay để ứng dụng lùi IPv4 ([Happy Eyeballs](Glossary-vi.md#L81)); mỗi outbound có `Ipv6Support` = Auto/Enabled/Disabled, Auto tự học từ lần hỏng đầu tiên.
 - **Nhiều tiến trình, mỗi tiến trình một policy**: một `ProcessRedirector` duy nhất, handler tra policy theo `conn.ProcessId`. Không tạo nhiều redirector vì mỗi cái mở thêm một handle NETWORK cùng filter.
 
 ### 3.2 Mô hình dữ liệu (ProxyDivert.Core)

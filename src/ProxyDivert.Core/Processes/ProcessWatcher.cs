@@ -113,12 +113,37 @@ public sealed class ProcessWatcher : IDisposable
         ReapExitedProcesses(processes);
     }
 
+    // Puts one specific process under redirection without a rule describing it. This is what the
+    // CLI's --pid and --launch use, and it is the only safe way to redirect "this Chrome" rather
+    // than every chrome.exe on the machine — including the user's own browser.
+    public TrackedProcess? AttachProcessId(uint processId, Guid policyId, bool includeChildren = true)
+    {
+        if (processId == 0) return null;
+        if (_tracked.TryGetValue(processId, out TrackedProcess? existing)) return existing;
+
+        ProcessInfo? info = ProcessFinder.FindById(processId);
+        var tracked = new TrackedProcess(
+            processId,
+            info?.Name ?? $"pid {processId}",
+            info?.ExecutablePath,
+            matchedRule: null,
+            policyId: policyId,
+            parentProcessId: 0,
+            isExplicit: true,
+            includeChildren: includeChildren);
+
+        if (!_tracked.TryAdd(processId, tracked)) return _tracked[processId];
+        _log.Log("PRC", $"attach pid={processId} name={tracked.Name} (explicit) policy={policyId}");
+        ProcessAttached?.Invoke(tracked);
+        return tracked;
+    }
+
     // Called by the engine when the redirector's tree monitor reports a child of a tracked process.
     public void AttachChild(uint childPid, uint parentPid)
     {
         if (_tracked.ContainsKey(childPid)) return;
         if (!_tracked.TryGetValue(parentPid, out TrackedProcess? parent)) return;
-        if (parent.MatchedRule?.IncludeChildren == false) return;
+        if (!parent.IncludeChildren) return;
 
         ProcessInfo? info = ProcessFinder.FindById(childPid);
         var child = new TrackedProcess(
@@ -184,6 +209,11 @@ public sealed class ProcessWatcher : IDisposable
         foreach (var kv in _tracked)
         {
             TrackedProcess tracked = kv.Value;
+
+            // A process the caller named directly is not described by any rule, so a rule edit has
+            // nothing to say about it.
+            if (tracked.IsExplicit) continue;
+
             if (tracked.IsChild)
             {
                 if (!_tracked.ContainsKey(tracked.ParentProcessId)) Detach(kv.Key, "parent no longer tracked");

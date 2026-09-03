@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -43,6 +44,9 @@ public sealed class RedirectEngine : IDisposable
 
     private readonly ILoggerFactory? _loggerFactory;
     private readonly object _stateLock = new object();
+    // What we have learned about which outbounds can actually reach IPv6. Lives across Start/Stop
+    // because it describes the proxies, not the run.
+    private readonly OutboundIpv6Capability _ipv6Capability = new OutboundIpv6Capability();
 
     private RedirectLogger _log = RedirectLogger.Null;
     private AppConfig _config = AppConfig.CreateDefault();
@@ -94,7 +98,7 @@ public sealed class RedirectEngine : IDisposable
                 ProcessId = 0,
                 Protocols = RedirectProtocol.All,
                 Logger = _log,
-                BlockIpv6 = config.BlockIpv6,
+                Ipv6Mode = config.Ipv6,
                 EnableDnsSniff = true,
                 EnableSecureDns = config.Dns.Mode == DnsMode.DnsOverHttps,
                 DohEndpoint = ParseDohEndpoint(config.Dns.DohEndpoint),
@@ -112,13 +116,13 @@ public sealed class RedirectEngine : IDisposable
             _watcher.Start(config.ProcessRules);
 
             IsRunning = true;
-            _log.Log("ENG", $"Engine started, relay tcp={_redirector.TcpRelayPort} udp={_redirector.UdpRelayPort}");
+            _log.Log("ENG", $"Engine started, relay tcp={_redirector.TcpRelayPort} udp={_redirector.UdpRelayPort} tcpV6={_redirector.TcpRelayPortV6} udpV6={_redirector.UdpRelayPortV6} ipv6={config.Ipv6}");
         }
     }
 
     // Applies an edited configuration without dropping the redirector: rules, outbounds and DNS
     // preferences take effect on the NEXT connection. Options that live in the WinDivert handles
-    // (IPv6 blocking, DoH) need a restart — the UI says so rather than silently ignoring them.
+    // (the IPv6 mode, DoH) need a restart — the UI says so rather than silently ignoring them.
     public void ApplyConfig(AppConfig config)
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
@@ -129,10 +133,30 @@ public sealed class RedirectEngine : IDisposable
             if (!IsRunning) return;
 
             _outboundFactory?.InvalidateAll();
+            // The edit may be exactly the fix for what we learned (a VPN that now has an IPv6
+            // route, a different proxy behind the same entry), so give every outbound a clean slate.
+            _ipv6Capability.ResetAll();
             _watcher?.ApplyRules(config.ProcessRules);
             RebuildResolver();
             _log.Log("ENG", "Configuration applied");
         }
+    }
+
+    /// <summary>
+    /// Redirects one specific process (and, by default, whatever it spawns) without a rule
+    /// describing it. This is how you redirect "this browser I just launched" instead of every
+    /// process that happens to share its file name — the user's own copy included.
+    /// </summary>
+    public TrackedProcess? AttachProcessId(uint processId, Guid policyId, bool includeChildren = true)
+    {
+        if (!IsRunning) throw new InvalidOperationException("Engine is not running");
+
+        TrackedProcess? tracked = _watcher?.AttachProcessId(processId, policyId, includeChildren);
+        // The tree monitor is normally only needed when WMI is unavailable, but an explicitly
+        // attached process is usually one just launched suspended: its children appear within
+        // milliseconds of the resume, and the poller is what catches them either way.
+        if (tracked != null && includeChildren) StartTreeMonitor(processId);
+        return tracked;
     }
 
     /// <summary>
@@ -289,7 +313,7 @@ public sealed class RedirectEngine : IDisposable
                 return;
             }
 
-            await TunnelAsync(connection, decision.Outbound, host, ct).ConfigureAwait(false);
+            await TunnelAsync(connection, decision.Outbound, host, info, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -306,8 +330,33 @@ public sealed class RedirectEngine : IDisposable
         }
     }
 
-    private async Task TunnelAsync(RedirectedTcpConnection connection, Outbound outbound, string? host, CancellationToken ct)
+    private async Task TunnelAsync(
+        RedirectedTcpConnection connection, Outbound outbound, string? host, ConnectionInfo info, CancellationToken ct)
     {
+        IPEndPoint destination = connection.OriginalDestination;
+        bool isIpv6 = destination.Address.AddressFamily == AddressFamily.InterNetworkV6;
+
+        // Through a proxy, hand over the HOST NAME when we have one: the proxy then resolves it on
+        // its own side (remote DNS), so the destination is never leaked to the local resolver and
+        // CDN answers stay correct for the proxy's location. That is also the IPv6 fallback that
+        // costs nothing — a name lets an outbound without an IPv6 route pick the A record itself.
+        // Going direct, use the IP the process itself chose: re-resolving could pick a different
+        // server than the one the application decided on.
+        bool byName = outbound.Kind != OutboundKind.Direct && !string.IsNullOrEmpty(host);
+
+        // An IPv6 literal and no name to fall back on: there is no IPv4 address to reach this
+        // destination with, so an outbound without an IPv6 route cannot serve it at all. Refusing
+        // now — instead of waiting for a timeout — is what lets the application fall back to IPv4
+        // on its own (Happy Eyeballs retries the A record within a couple of hundred milliseconds).
+        if (isIpv6 && !byName && !_ipv6Capability.AllowsIpv6(outbound))
+        {
+            info.Error = "outbound has no IPv6 route and the connection carries no host name";
+            _log.Log("ENG",
+                $"tcp pid={connection.ProcessId} -> {destination} REFUSED: {outbound.Name} has no IPv6 route " +
+                "and there is no host name to resolve to IPv4; the application should retry over IPv4");
+            return;
+        }
+
         IProxySource source = _outboundFactory!.GetOrCreate(outbound);
         IConnectSource? tunnel = null;
         Guid tunnelId = Guid.NewGuid();
@@ -315,17 +364,24 @@ public sealed class RedirectEngine : IDisposable
         {
             tunnel = await source.GetConnectSourceAsync(tunnelId, ct).ConfigureAwait(false);
 
-            // Through a proxy, hand over the HOST NAME when we have one: the proxy then resolves
-            // it on its own side (remote DNS), so the destination is never leaked to the local
-            // resolver and CDN answers stay correct for the proxy's location.
-            // Going direct, use the IP the process itself chose — re-resolving could pick a
-            // different server than the one the application decided on.
-            string targetHost = outbound.Kind == OutboundKind.Direct || string.IsNullOrEmpty(host)
-                ? connection.OriginalDestination.Address.ToString()
-                : host!;
+            string targetHost = byName ? host! : destination.Address.ToString();
+            // UriBuilder brackets an IPv6 literal for us ("tcp://[2606:4700::1111]:443"), which is
+            // what the SOCKS5/HTTP address parsers expect to see.
+            var targetUri = new UriBuilder("tcp", targetHost, destination.Port).Uri;
 
-            var targetUri = new UriBuilder("tcp", targetHost, connection.OriginalDestination.Port).Uri;
-            await tunnel.ConnectAsync(targetUri, ct).ConfigureAwait(false);
+            try
+            {
+                await tunnel.ConnectAsync(targetUri, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (isIpv6 && !byName && !ct.IsCancellationRequested)
+            {
+                // First IPv6 destination this outbound failed to reach. Nothing says the far side
+                // is v4-only rather than that host being down, but assuming the cheaper of the two
+                // is right: later IPv6 connections are refused immediately instead of stalling,
+                // and named ones keep working because the outbound resolves them itself.
+                NoteIpv6Failure(outbound, destination, ex);
+                throw;
+            }
 
             await tunnel.ForwardAsync(
                 connection.ClientStream, tunnelId, _loggerFactory,
@@ -336,6 +392,20 @@ public sealed class RedirectEngine : IDisposable
         {
             try { tunnel?.Dispose(); } catch { }
         }
+    }
+
+    // Direct is the machine's own stack: if it had no IPv6 the process could not have opened an
+    // IPv6 connection in the first place, so one unreachable destination says nothing about it.
+    private void NoteIpv6Failure(Outbound outbound, IPEndPoint destination, Exception ex)
+    {
+        if (outbound.Kind == OutboundKind.Direct) return;
+        if (!_ipv6Capability.RecordIpv6Failure(outbound)) return;
+
+        _outboundFactory?.SetIpv6Support(outbound.Id, false);
+        _log.Log("ENG",
+            $"outbound '{outbound.Name}' marked IPv4-only: {destination} failed with " +
+            $"{ex.GetType().Name}: {ex.Message}. Later IPv6 destinations go out over IPv4 " +
+            "(by name where one is known); set Ipv6Support=Enabled to override.");
     }
 
     // ---- UDP --------------------------------------------------------------------------------
@@ -366,12 +436,25 @@ public sealed class RedirectEngine : IDisposable
 
                 default:
                 {
+                    bool isIpv6 = datagram.OriginalDestination.AddressFamily == AddressFamily.InterNetworkV6;
+                    // A UDP datagram carries no name to fall back on, so an outbound without an
+                    // IPv6 route has nothing to send it over. Dropping is the safe answer: letting
+                    // it out direct would expose the real address.
+                    if (isIpv6 && !_ipv6Capability.AllowsIpv6(decision.Outbound))
+                    {
+                        _log.Log("ENG",
+                            $"udp pid={datagram.ProcessId} -> {datagram.OriginalDestination} dropped " +
+                            $"({decision.Outbound.Name} has no IPv6 route)");
+                        return null;
+                    }
+
                     IProxySource source = _outboundFactory!.GetOrCreate(decision.Outbound);
                     bool queued = _udpForwarder!.Send(
                         decision.Outbound.Id, source,
                         (ushort)datagram.OriginalSource.Port,
                         datagram.OriginalDestination,
-                        datagram.Payload);
+                        datagram.Payload,
+                        isIpv6);
                     if (!queued)
                         _log.Log("ENG", $"udp pid={datagram.ProcessId} -> {datagram.OriginalDestination} dropped (tunnel not ready)");
                     return null;

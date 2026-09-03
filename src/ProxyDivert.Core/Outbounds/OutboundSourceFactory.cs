@@ -34,6 +34,31 @@ public sealed class OutboundSourceFactory : IDisposable
         return _cache.GetOrAdd(outbound.Id, _ => Create(outbound));
     }
 
+    /// <summary>
+    /// Turns IPv6 off (or back on) for the live instance of an outbound. Used when a connection
+    /// teaches us that an Ipv6Support.Auto outbound has no IPv6 route: the source then stops
+    /// handing IPv6 addresses to it on its own — for Direct that means name lookups return A
+    /// records only, which is what makes "no IPv6 out there, use IPv4" actually happen.
+    /// No-op for sources that do not expose the switch.
+    /// </summary>
+    public void SetIpv6Support(Guid outboundId, bool supported)
+    {
+        if (_cache.TryGetValue(outboundId, out IProxySource? source))
+            ApplyIpv6Support(source, supported);
+    }
+
+    private static void ApplyIpv6Support(IProxySource source, bool supported)
+    {
+        // IProxySource only exposes IsSupportIpv6 as a getter; the concrete sources make it
+        // settable. Socks4ProxySource is hard-wired to false — the protocol has no IPv6 at all.
+        switch (source)
+        {
+            case LocalProxySource local: local.IsSupportIpv6 = supported; break;
+            case HttpProxySource http: http.IsSupportIpv6 = supported; break;
+            case Socks5ProxySource socks5: socks5.IsSupportIpv6 = supported; break;
+        }
+    }
+
     // Call after the user edits or removes an outbound.
     public void Invalidate(Guid outboundId)
     {
@@ -52,6 +77,16 @@ public sealed class OutboundSourceFactory : IDisposable
     {
         if (outbound is null) throw new ArgumentNullException(nameof(outbound));
 
+        IProxySource source = CreateCore(outbound);
+        // Ipv6Support.Disabled is a statement about this way out, so it belongs on the source
+        // itself: LocalProxySource then filters name lookups down to A records instead of handing
+        // the connection an AAAA it cannot use.
+        if (outbound.Ipv6Support == Ipv6Support.Disabled) ApplyIpv6Support(source, false);
+        return source;
+    }
+
+    private IProxySource CreateCore(Outbound outbound)
+    {
         switch (outbound.Kind)
         {
             case OutboundKind.Direct:
@@ -124,7 +159,10 @@ public sealed class OutboundSourceFactory : IDisposable
         if (uri.Port <= 0)
             throw new FormatException($"Proxy URL must include a port: {uri}");
 
-        if (IPAddress.TryParse(uri.Host, out IPAddress? ip))
+        // Uri.Host keeps the brackets of an IPv6 literal ("[::1]"), which IPAddress.TryParse
+        // rejects — without trimming them an IPv6 proxy address would be sent to the resolver as
+        // if it were a host name.
+        if (IPAddress.TryParse(uri.Host.Trim('[', ']'), out IPAddress? ip))
             return new IPEndPoint(ip, uri.Port);
 
         IPAddress[] addresses = System.Net.Dns.GetHostAddresses(uri.Host);

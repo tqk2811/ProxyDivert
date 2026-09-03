@@ -23,9 +23,12 @@
             <!-- ==== network ==== -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,8">
                 <StackPanel>
-                    <CheckBox Content="{DynamicResource Str.Settings.BlockIpv6}" IsChecked="{Binding BlockIpv6}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{DynamicResource Str.Settings.Ipv6}" VerticalAlignment="Center" MinWidth="120"/>
+                        <ComboBox ItemsSource="{Binding Ipv6Modes}" SelectedItem="{Binding Ipv6}" Width="200"/>
+                    </StackPanel>
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,4,0,10" TextWrapping="Wrap"
-                               Text="{DynamicResource Str.Settings.BlockIpv6Hint}"/>
+                               Text="{DynamicResource Str.Settings.Ipv6Hint}"/>
 
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{DynamicResource Str.Settings.LogPath}" VerticalAlignment="Center" MinWidth="120"/>
