@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<UseWPF>true</UseWPF>
+		<RootNamespace>ProxyDivert.Wpf</RootNamespace>
+		<AssemblyName>ProxyDivert</AssemblyName>
+		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<!-- Native WinDivert chỉ có win-x64; cần RID để asset runtimes/win-x64/native được copy ra output. -->
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<SelfContained>false</SelfContained>
+		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\ProxyDivert.Core\ProxyDivert.Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="CommunityToolkit.Mvvm" />
+		<PackageReference Include="Microsoft.Extensions.Logging" />
+		<PackageReference Include="Native.WinDivert" />
+	</ItemGroup>
+
+</Project>

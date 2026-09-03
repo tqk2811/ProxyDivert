@@ -1,0 +1,17 @@
+<Project>
+	<!--
+		Chỉ áp cho project của tool (nằm dưới src/). KHÔNG đặt file này ở gốc repo:
+		libs/TqkLibrary.* không có Directory.Build.props riêng nên file ở gốc sẽ lan sang chúng.
+	-->
+	<PropertyGroup>
+		<LangVersion>12.0</LangVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+		<PathMap>$(MSBuildProjectDirectory)=$(MSBuildProjectName)</PathMap>
+		<Platforms>x64</Platforms>
+		<PlatformTarget>x64</PlatformTarget>
+		<Company>tqk2811</Company>
+		<Product>ProxyDivert</Product>
+	</PropertyGroup>
+</Project>

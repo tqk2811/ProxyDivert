@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<RootNamespace>ProxyDivert.Core.Tests</RootNamespace>
+		<IsPackable>false</IsPackable>
+		<IsTestProject>true</IsTestProject>
+		<!-- The UI smoke test loads the real XAML (application resources + every view), which is
+		     the only way to catch a bad resource key or a broken template without launching the
+		     app — and the app requires elevation, so it cannot run unattended. -->
+		<UseWPF>true</UseWPF>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\ProxyDivert.Core\ProxyDivert.Core.csproj" />
+		<ProjectReference Include="..\ProxyDivert.Wpf\ProxyDivert.Wpf.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.NET.Test.Sdk" />
+		<PackageReference Include="xunit" />
+		<PackageReference Include="xunit.runner.visualstudio" />
+	</ItemGroup>
+
+</Project>

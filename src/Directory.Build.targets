@@ -1,0 +1,9 @@
+<Project>
+	<!-- Siết ở Release: không lộ đường dẫn máy build, URL repo, commit hash. -->
+	<PropertyGroup Condition="$(Configuration.Contains('Release'))">
+		<DebugType>portable</DebugType>
+		<EnableSourceLink>false</EnableSourceLink>
+		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+		<Deterministic>true</Deterministic>
+	</PropertyGroup>
+</Project>
