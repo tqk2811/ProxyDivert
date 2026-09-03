@@ -126,14 +126,14 @@ ProxyDivert/
 
 ## 4. Các bước thực hiện
 
-### Bước 0. Dựng khung repo (không có logic)
+### Bước 0. Dựng khung repo (không có logic) — ĐÃ XONG 2026-09-03
 
 1. `git init`, `.gitignore`, `Directory.Build.rsp` (gitignore), README.
 2. Thêm 2 submodule WinDivert và Proxy vào `libs/` (`--recursive` vì Proxy có submodule lồng). VpnClient thêm ở giai đoạn 2.
 3. Tạo solution, 3 project trong `src/`, ProjectReference tới 2 thư viện. Build Debug và Release phải xanh; kiểm chứng GitVersion không vỡ.
 4. Copy WinDivert native ra output; app.manifest requireAdministrator.
 
-### Bước 1. Sửa TqkLibrary.WinDivert (trong submodule, commit về repo thư viện)
+### Bước 1. Sửa TqkLibrary.WinDivert (trong submodule, commit về repo thư viện) — ĐÃ XONG 2026-09-03
 
 1. **W3** Relay không tự connect đích; handler nhận `RedirectedTcpConnection` chỉ có `ClientStream` + thông tin đích, tự quyết mở upstream. Thêm helper `RelayDirectAsync` cho ai vẫn muốn hành vi cũ (Demo `attach`/`launch`).
 2. **W4** `SocketTracker.RemoveProcess(pid)` đóng handle SOCKET của PID và xoá flow; `ProcessRedirector.RemoveTrackedProcessId(pid)`.
@@ -144,7 +144,7 @@ ProxyDivert/
 7. Cập nhật Demo theo API mới để nó vẫn chạy (Demo là bộ test thủ công nhanh nhất).
 8. Bỏ hoặc dùng `RedirectOptions.SocketPriority`.
 
-### Bước 2. ProxyDivert.Core
+### Bước 2. ProxyDivert.Core — ĐÃ XONG 2026-09-03
 
 1. Models + `AppConfig` + `ConfigStore` (JSON, DPAPI cho mật khẩu).
 2. `HostMatcher` tách từ ProxyRouterWpf (Wildcard/Suffix/Regex/Equals/CIDR, IsNot) + unit test.
@@ -155,7 +155,7 @@ ProxyDivert/
 7. `ConnectionTracker` + `TrafficLog` FIFO (mượn `InMemoryTunnelLogStore`).
 8. Test: matcher, SNI parser, DNS parser, resolver với policy mẫu.
 
-### Bước 3. ProxyDivert.Wpf
+### Bước 3. ProxyDivert.Wpf — ĐÃ XONG 2026-09-03 (trừ title bar tự vẽ, kéo-thả rule, biểu đồ băng thông; chưa kiểm tra thủ công)
 
 - Nền: theme, localization vi/en, title bar, `AppServices` composition root, mượn từ ProxyRouterWpf.
 - Tab **Tiến trình**: danh sách đang chạy (tên, PID, đường dẫn, trạng thái đã attach), ProcessRule CRUD, nút Launch suspended (né race SYN).
