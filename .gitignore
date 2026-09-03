@@ -1,0 +1,13 @@
+# Build
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# Local MSBuild config (per-machine, do not commit)
+Directory.Build.rsp
+
+# Runtime config written next to exe
+*.config.json
