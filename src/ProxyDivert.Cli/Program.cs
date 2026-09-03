@@ -83,6 +83,18 @@ if (options.SelfHostPort != 0)
     };
     Console.WriteLine($"Self-hosted HTTP proxy: http://{listening}  (backend = direct)");
 }
+else if (options.VpnConfig != null)
+{
+    outbound = new Outbound
+    {
+        Id = Guid.NewGuid(),
+        Name = "vpn",
+        Kind = OutboundKind.Vpn,
+        Url = options.VpnConfig,
+        Ipv6Support = options.OutboundIpv6,
+    };
+    Console.WriteLine($"WireGuard tunnel: {options.VpnConfig}");
+}
 else
 {
     string url = options.ProxyUrl!;
@@ -121,6 +133,7 @@ var config = new AppConfig
     Outbounds = { Outbound.CreateDirect(), Outbound.CreateBlock(), outbound },
     Policies = { policy },
     Ipv6 = options.Ipv6,
+    WireProxyPath = options.WireProxyPath,
     DiagnosticLogPath = options.LogFile,
 };
 

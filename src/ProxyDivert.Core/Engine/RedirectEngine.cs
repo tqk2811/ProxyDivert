@@ -89,7 +89,7 @@ public sealed class RedirectEngine : IDisposable
             _config = config;
             _log = new RedirectLogger(_loggerFactory, config.DiagnosticLogPath);
             _cts = new CancellationTokenSource();
-            _outboundFactory = new OutboundSourceFactory(_loggerFactory);
+            _outboundFactory = new OutboundSourceFactory(_loggerFactory, config.WireProxyPath);
             _resolver = BuildResolver(config, new Dictionary<uint, Guid>());
 
             var options = new RedirectOptions
@@ -133,6 +133,7 @@ public sealed class RedirectEngine : IDisposable
             if (!IsRunning) return;
 
             _outboundFactory?.InvalidateAll();
+            if (_outboundFactory != null) _outboundFactory.WireProxyPath = config.WireProxyPath;
             // The edit may be exactly the fix for what we learned (a VPN that now has an IPv6
             // route, a different proxy behind the same entry), so give every outbound a clean slate.
             _ipv6Capability.ResetAll();
@@ -476,12 +477,14 @@ public sealed class RedirectEngine : IDisposable
     /// </summary>
     public static async Task<string?> TestOutboundAsync(
         Outbound outbound, string testHost = "example.com", int testPort = 80,
-        ILoggerFactory? loggerFactory = null, CancellationToken ct = default)
+        ILoggerFactory? loggerFactory = null, string? wireProxyPath = null, CancellationToken ct = default)
     {
         if (outbound is null) throw new ArgumentNullException(nameof(outbound));
         if (outbound.Kind == OutboundKind.Block) return "Block never connects anywhere.";
 
-        using var factory = new OutboundSourceFactory(loggerFactory);
+        // A VPN test starts its own wireproxy subprocess and tears it down with the factory, so it
+        // never disturbs a tunnel that live traffic is already using.
+        using var factory = new OutboundSourceFactory(loggerFactory, wireProxyPath);
         IConnectSource? tunnel = null;
         try
         {

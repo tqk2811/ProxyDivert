@@ -36,6 +36,11 @@ public sealed class AppConfig
     // never written back (null properties are omitted).
     public bool? BlockIpv6 { get; set; }
 
+    // Path to wireproxy.exe, which runs the WireGuard tunnel of a VPN outbound in user space.
+    // Null = look next to this executable and then on PATH. One setting for the whole machine:
+    // it is the same binary whichever tunnel it runs.
+    public string? WireProxyPath { get; set; }
+
     // UI preferences kept with the rest so one file is the whole state.
     public string? Language { get; set; }
     public string? Theme { get; set; }

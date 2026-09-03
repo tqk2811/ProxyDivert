@@ -34,6 +34,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _dnsMode = services.Config.Dns.Mode;
         _dohEndpoint = services.Config.Dns.DohEndpoint;
         _ipv6 = services.Config.Ipv6;
+        _wireProxyPath = services.Config.WireProxyPath ?? string.Empty;
         _diagnosticLogPath = services.Config.DiagnosticLogPath ?? string.Empty;
         _theme = ThemeManager.Parse(services.Config.Theme);
         _language = LocalizationManager.Parse(services.Config.Language);
@@ -48,6 +49,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private Ipv6Mode _ipv6;
+
+    [ObservableProperty]
+    private string _wireProxyPath;
 
     [ObservableProperty]
     private string _diagnosticLogPath;
@@ -66,6 +70,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnDohEndpointChanged(string value) => _services.Config.Dns.DohEndpoint = value;
 
     partial void OnIpv6Changed(Ipv6Mode value) => _services.Config.Ipv6 = value;
+
+    partial void OnWireProxyPathChanged(string value)
+        => _services.Config.WireProxyPath = string.IsNullOrWhiteSpace(value) ? null : value;
 
     partial void OnDiagnosticLogPathChanged(string value)
         => _services.Config.DiagnosticLogPath = string.IsNullOrWhiteSpace(value) ? null : value;
@@ -101,6 +108,17 @@ public sealed partial class SettingsViewModel : ObservableObject
             OverwritePrompt = false,
         };
         if (dialog.ShowDialog() == true) DiagnosticLogPath = dialog.FileName;
+    }
+
+    [RelayCommand]
+    private void BrowseWireProxy()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "wireproxy (wireproxy.exe)|wireproxy.exe|Executables (*.exe)|*.exe|All files (*.*)|*.*",
+            CheckFileExists = true,
+        };
+        if (dialog.ShowDialog() == true) WireProxyPath = dialog.FileName;
     }
 
     // Registry Run key rather than a scheduled task: the tool needs elevation anyway, and a Run

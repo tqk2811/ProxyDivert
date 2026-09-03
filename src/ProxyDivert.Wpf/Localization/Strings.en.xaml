@@ -47,7 +47,7 @@
     <sys:String x:Key="Str.Outbound.Ipv6">IPv6</sys:String>
     <sys:String x:Key="Str.Outbound.TestOk">Connection succeeded.</sys:String>
     <sys:String x:Key="Str.Outbound.TestFailed">Connection failed:</sys:String>
-    <sys:String x:Key="Str.Outbound.Hint">Direct and Block always exist. Only SOCKS5 can carry UDP.</sys:String>
+    <sys:String x:Key="Str.Outbound.Hint">Direct and Block always exist. Only SOCKS5 can carry UDP. For a VPN, the URL box is the path to a WireGuard .conf file.</sys:String>
 
     <sys:String x:Key="Str.Rules.Policies">Policies</sys:String>
     <sys:String x:Key="Str.Rules.Rules">Rules (first match wins)</sys:String>
@@ -74,6 +74,8 @@
     <sys:String x:Key="Str.Settings.DohEndpoint">DoH endpoint</sys:String>
     <sys:String x:Key="Str.Settings.Ipv6">IPv6 of the target</sys:String>
     <sys:String x:Key="Str.Settings.Ipv6Hint">Redirect sends the IPv6 traffic through the rules like IPv4. Block drops it so the application falls back to IPv4 — use it when the way out has no IPv6 route. Ignore lets it leave untouched, bypassing the proxy.</sys:String>
+    <sys:String x:Key="Str.Settings.WireProxy">wireproxy.exe</sys:String>
+    <sys:String x:Key="Str.Settings.WireProxyHint">Needed only by VPN outbounds: wireproxy runs the WireGuard tunnel in user space, with no TUN adapter. Leave empty to look next to ProxyDivert.exe and then on PATH.</sys:String>
     <sys:String x:Key="Str.Settings.LogPath">Diagnostic log file</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Appearance</sys:String>
     <sys:String x:Key="Str.Settings.Language">Language</sys:String>

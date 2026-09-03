@@ -10,6 +10,9 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\libs\TqkLibrary.WinDivert\src\TqkLibrary.WinDivert\TqkLibrary.WinDivert.csproj" />
 		<ProjectReference Include="..\..\libs\TqkLibrary.Proxy\src\TqkLibrary.Proxy\TqkLibrary.Proxy.csproj" />
+		<!-- VPN outbound: wireproxy runs the WireGuard tunnel in user space and exposes it as SOCKS5,
+		     so no TUN adapter and no route-table surgery. -->
+		<ProjectReference Include="..\..\libs\TqkLibrary.Proxy\src\TqkLibrary.Proxy.Vpn.WireProxyCli\TqkLibrary.Proxy.Vpn.WireProxyCli.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -2,7 +2,11 @@ using System;
 using System.Collections.Concurrent;
 using System.Net;
 using Microsoft.Extensions.Logging;
+using System.IO;
+using System.Security.Cryptography;
 using ProxyDivert.Core.Routing.Enums;
+using ProxyDivert.Core.Vpn;
+using TqkLibrary.Proxy.Vpn.WireProxyCli;
 using ProxyDivert.Core.Routing.Models;
 using TqkLibrary.Proxy.Authentications;
 using TqkLibrary.Proxy.Interfaces;
@@ -23,9 +27,18 @@ public sealed class OutboundSourceFactory : IDisposable
     private readonly ILoggerFactory? _loggerFactory;
     private readonly ConcurrentDictionary<Guid, IProxySource> _cache = new ConcurrentDictionary<Guid, IProxySource>();
 
-    public OutboundSourceFactory(ILoggerFactory? loggerFactory = null)
+    /// <summary>
+    /// Where wireproxy.exe lives, for VPN outbounds. Null or empty means "look next to this
+    /// executable, then on PATH" — which is what a user who dropped the binary in the tool's folder
+    /// expects. One setting for the machine rather than one per outbound: it is the same binary
+    /// whichever tunnel it runs.
+    /// </summary>
+    public string? WireProxyPath { get; set; }
+
+    public OutboundSourceFactory(ILoggerFactory? loggerFactory = null, string? wireProxyPath = null)
     {
         _loggerFactory = loggerFactory;
+        WireProxyPath = wireProxyPath;
     }
 
     public IProxySource GetOrCreate(Outbound outbound)
@@ -126,12 +139,59 @@ public sealed class OutboundSourceFactory : IDisposable
                     "Block has no proxy source — the caller must close the connection instead of tunnelling it.");
 
             case OutboundKind.Vpn:
-                throw new NotSupportedException(
-                    "VPN outbounds arrive in phase 2 (TqkLibrary.VpnClient wrapped as an IProxySource).");
+                return CreateVpn(outbound);
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(outbound), outbound.Kind, "Unknown outbound kind");
         }
+    }
+
+    // A WireGuard tunnel run in user space by wireproxy, which exposes it as a loopback SOCKS5
+    // listener. Nothing touches the OS: no TUN adapter, no route table, no second elevation prompt,
+    // and — unlike the official client — other applications keep their normal network while this
+    // one process goes through the VPN.
+    //
+    // Outbound.Url is the path to the .conf file. Two shapes are accepted:
+    //   * the file a VPN provider gives you (only [Interface]/[Peer]) — it is read here and
+    //     wireproxy gets a generated copy with a [Socks5] section on a private loopback port;
+    //   * a file that already has a [Socks5] section — handed to wireproxy untouched.
+    private IProxySource CreateVpn(Outbound outbound)
+    {
+        if (string.IsNullOrWhiteSpace(outbound.Url))
+            throw new InvalidOperationException(
+                $"VPN outbound '{outbound.Name}' has no configuration file. Point it at a WireGuard .conf.");
+
+        string configPath = Environment.ExpandEnvironmentVariables(outbound.Url!.Trim().Trim('"'));
+        if (!File.Exists(configPath))
+            throw new FileNotFoundException($"VPN outbound '{outbound.Name}': config file not found.", configPath);
+
+        var options = new WireGuardOptions
+        {
+            BinaryPath = string.IsNullOrWhiteSpace(WireProxyPath) ? null : WireProxyPath,
+            // wireproxy's SOCKS5 is TCP-only, so UDP must not be advertised: the router downgrades
+            // "UDP through this outbound" to Block rather than letting the datagrams out direct.
+            IsSupportUdp = false,
+            IsSupportIpv6 = outbound.Ipv6Support != Ipv6Support.Disabled,
+        };
+
+        string text = File.ReadAllText(configPath);
+        IPEndPoint? existingSocks5 = WireGuardConfigParser.ParseSocks5BindAddress(text);
+        if (existingSocks5 != null)
+        {
+            options.ConfigFilePath = configPath;
+            options.ExternalSocks5Endpoint = existingSocks5;
+        }
+        else
+        {
+            options.Config = WireGuardConfigParser.Parse(text);
+            // A loopback SOCKS5 listener with no credentials is usable by every process on the
+            // machine — including the ones the user is deliberately keeping OUT of the tunnel.
+            // A random per-instance credential closes that without asking the user for anything.
+            options.Socks5Username = "pd";
+            options.Socks5Password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18));
+        }
+
+        return new WireGuardProxySource(options, _loggerFactory);
     }
 
     private static bool HasCredential(Outbound outbound)

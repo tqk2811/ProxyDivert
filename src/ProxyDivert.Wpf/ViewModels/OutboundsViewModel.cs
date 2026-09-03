@@ -24,7 +24,7 @@ public sealed partial class OutboundsViewModel : ObservableObject
 
     public Array Kinds { get; } = new[]
     {
-        OutboundKind.HttpProxy, OutboundKind.Socks4, OutboundKind.Socks5,
+        OutboundKind.HttpProxy, OutboundKind.Socks4, OutboundKind.Socks5, OutboundKind.Vpn,
     };
 
     public Array Ipv6Supports { get; } = Enum.GetValues(typeof(Ipv6Support));
@@ -107,7 +107,9 @@ public sealed partial class OutboundsViewModel : ObservableObject
         TestResult = null;
         try
         {
-            string? error = await RedirectEngine.TestOutboundAsync(outbound).ConfigureAwait(true);
+            string? error = await RedirectEngine
+                .TestOutboundAsync(outbound, wireProxyPath: _services.Config.WireProxyPath)
+                .ConfigureAwait(true);
             TestResult = error is null
                 ? (string)Application.Current.Resources["Str.Outbound.TestOk"]
                 : $"{Application.Current.Resources["Str.Outbound.TestFailed"]} {error}";

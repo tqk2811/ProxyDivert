@@ -30,7 +30,9 @@ public sealed class Outbound
     public Ipv6Support Ipv6Support { get; set; } = Ipv6Support.Auto;
 
     // True when this outbound can carry UDP (SOCKS5 UDP ASSOCIATE). Direct carries UDP too.
-    public bool SupportsUdp => Kind is OutboundKind.Direct or OutboundKind.Socks5 or OutboundKind.Vpn;
+    // The VPN outbound is NOT in this list: it runs on wireproxy, whose SOCKS5 implementation is
+    // TCP-only, so "UDP through the outbound" downgrades to Block for it rather than leaking.
+    public bool SupportsUdp => Kind is OutboundKind.Direct or OutboundKind.Socks5;
 
     // SOCKS4 has no IPv6 in the protocol at all — no address type for it — so no setting can make
     // it carry IPv6. Direct is the machine's own stack: if the machine has IPv6, so does Direct.

@@ -18,6 +18,11 @@ public sealed class CliOptions
     // Route through an existing proxy instead ("socks5://127.0.0.1:1080").
     public string? ProxyUrl { get; private set; }
 
+    // Route through a WireGuard tunnel: path to the .conf, plus where wireproxy.exe is if it is
+    // not next to this exe or on PATH.
+    public string? VpnConfig { get; private set; }
+    public string? WireProxyPath { get; private set; }
+
     // Launch this program suspended, attach, then resume it. The only way to be sure not one
     // connection escapes before the redirect is in place.
     public string? LaunchExe { get; private set; }
@@ -62,6 +67,8 @@ public sealed class CliOptions
             {
                 case "--selfhost": options.SelfHostPort = ParsePort(Next(arg)!); break;
                 case "--proxy": options.ProxyUrl = Next(arg); break;
+                case "--vpn": options.VpnConfig = Next(arg); break;
+                case "--wireproxy": options.WireProxyPath = Next(arg); break;
                 case "--launch": options.LaunchExe = Next(arg); break;
                 case "--launch-args": options.LaunchArgs = Next(arg); break;
                 case "--pid": options.Pids.Add(uint.Parse(Next(arg)!, CultureInfo.InvariantCulture)); break;
@@ -81,10 +88,11 @@ public sealed class CliOptions
             }
         }
 
-        if (options.SelfHostPort == 0 && options.ProxyUrl == null)
-            throw new FormatException("Give --selfhost <port> or --proxy <url>.");
-        if (options.SelfHostPort != 0 && options.ProxyUrl != null)
-            throw new FormatException("--selfhost and --proxy are mutually exclusive.");
+        int ways = (options.SelfHostPort != 0 ? 1 : 0) + (options.ProxyUrl != null ? 1 : 0) + (options.VpnConfig != null ? 1 : 0);
+        if (ways == 0)
+            throw new FormatException("Give --selfhost <port>, --proxy <url> or --vpn <config.conf>.");
+        if (ways > 1)
+            throw new FormatException("--selfhost, --proxy and --vpn are mutually exclusive.");
         if (options.LaunchExe == null && options.Pids.Count == 0 && options.ProcessPattern == null)
             throw new FormatException("Give --launch <exe>, --pid <id> or --process <name> — otherwise nothing is redirected.");
 
@@ -106,6 +114,8 @@ public sealed class CliOptions
         Outbound (pick one):
           --selfhost <port>     host an HTTP proxy in this process and route through it
           --proxy <url>         use an existing proxy (http://, socks4://, socks5://)
+          --vpn <config.conf>   route through a WireGuard tunnel (user space, via wireproxy)
+          --wireproxy <exe>     where wireproxy.exe is, when not on PATH
 
         What to redirect (at least one):
           --launch <exe>        start it suspended, attach, then resume

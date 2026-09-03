@@ -72,7 +72,23 @@ Cấu hình lưu ở `proxydivert.config.json` cạnh exe; mật khẩu proxy đ
 - UDP chỉ đi qua proxy được với **SOCKS5**; đường ra khác thì UDP bị chặn chứ không rò ra ngoài.
   QUIC (UDP/443) chặn mặc định để trình duyệt lùi về TCP.
 - Game có anti-cheat kernel có thể coi việc chuyển hướng gói tin là can thiệp.
-- VPN dưới dạng đường ra là giai đoạn 2 (xem [docs/Plan-vi.md](docs/Plan-vi.md)).
+- Đường ra **VPN (WireGuard)** cần `wireproxy.exe` — xem mục dưới. UDP không đi qua VPN được
+  (SOCKS5 của wireproxy chỉ có TCP) nên UDP qua đường ra VPN bị chặn chứ không rò.
+
+## Đường ra VPN (WireGuard)
+
+Chọn loại đường ra **Vpn** rồi trỏ ô URL vào file `.conf` WireGuard — đúng file nhà cung cấp VPN đưa,
+không cần sửa gì. Đường hầm chạy ở **tầng ứng dụng** bằng [wireproxy](https://github.com/pufferffish/wireproxy):
+không tạo card mạng ảo, không đụng bảng route, nên **chỉ tiến trình bị chuyển hướng đi qua VPN**,
+phần còn lại của máy vẫn dùng mạng bình thường.
+
+Cần tải `wireproxy.exe` và để cạnh `ProxyDivert.exe` (hoặc trong PATH, hoặc trỏ đường dẫn ở tab
+**Cài đặt**). File `.conf` đã có sẵn mục `[Socks5]` thì được dùng nguyên trạng; file thường sẽ được
+sinh bản sao tạm có `[Socks5]` trên cổng loopback ngẫu nhiên **kèm mật khẩu ngẫu nhiên**, để tiến
+trình khác trên máy không dùng ké được đường hầm.
+
+Lưu ý: bản sao tạm đó nằm trong `%TEMP%` và **chứa private key dạng rõ** trong lúc wireproxy chạy
+(bị xoá khi dừng) — đúng như cách wireproxy vốn nhận cấu hình.
 
 ## Công cụ dòng lệnh (`ProxyDivert.Cli`)
 

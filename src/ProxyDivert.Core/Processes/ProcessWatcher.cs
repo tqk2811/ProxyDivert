@@ -122,6 +122,13 @@ public sealed class ProcessWatcher : IDisposable
         if (_tracked.TryGetValue(processId, out TrackedProcess? existing)) return existing;
 
         ProcessInfo? info = ProcessFinder.FindById(processId);
+        // Even asked for by hand: redirecting this process or the VPN helper loops the traffic
+        // back into the relay and nothing works again until the tool is killed.
+        if (IsSelfOrHelper(processId, info?.Name ?? string.Empty))
+        {
+            _log.Log("PRC", $"refusing to attach pid={processId} ({info?.Name}) — it carries the redirected traffic itself");
+            return null;
+        }
         var tracked = new TrackedProcess(
             processId,
             info?.Name ?? $"pid {processId}",
@@ -162,6 +169,7 @@ public sealed class ProcessWatcher : IDisposable
     private bool TryAttach(uint pid, string name, string? path, uint parentPid)
     {
         if (pid == 0 || _tracked.ContainsKey(pid)) return false;
+        if (IsSelfOrHelper(pid, name)) return false;
 
         ProcessRule? rule = FindMatchingRule(name, path);
         if (rule == null) return false;
@@ -173,6 +181,22 @@ public sealed class ProcessWatcher : IDisposable
         ProcessAttached?.Invoke(tracked);
         return true;
     }
+
+    // Two processes must never be redirected, however broad a rule is ("*.exe", Contains "e"):
+    //
+    //   * this one — its traffic IS the redirected traffic once it leaves the proxy, so capturing
+    //     it again would loop every connection back into the relay forever;
+    //   * wireproxy — it carries the VPN outbound. Redirecting the tunnel through the tunnel is the
+    //     same loop, one process further out. A wireproxy the user started for something else is
+    //     excluded too; that is the safe way round, and a rule can never be written that needs it.
+    private static bool IsSelfOrHelper(uint pid, string name)
+    {
+        if (pid == CurrentProcessId) return true;
+        return name.Equals("wireproxy.exe", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("wireproxy", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static readonly uint CurrentProcessId = (uint)Environment.ProcessId;
 
     private ProcessRule? FindMatchingRule(string name, string? path)
     {

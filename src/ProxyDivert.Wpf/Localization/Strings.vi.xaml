@@ -47,7 +47,7 @@
     <sys:String x:Key="Str.Outbound.Ipv6">IPv6</sys:String>
     <sys:String x:Key="Str.Outbound.TestOk">Kết nối thành công.</sys:String>
     <sys:String x:Key="Str.Outbound.TestFailed">Kết nối thất bại:</sys:String>
-    <sys:String x:Key="Str.Outbound.Hint">Direct và Block luôn tồn tại. Chỉ SOCKS5 chở được UDP.</sys:String>
+    <sys:String x:Key="Str.Outbound.Hint">Direct và Block luôn tồn tại. Chỉ SOCKS5 chở được UDP. Với VPN, ô URL là đường dẫn tới file .conf WireGuard.</sys:String>
 
     <sys:String x:Key="Str.Rules.Policies">Bộ luật</sys:String>
     <sys:String x:Key="Str.Rules.Rules">Luật (khớp đầu tiên thắng)</sys:String>
@@ -74,6 +74,8 @@
     <sys:String x:Key="Str.Settings.DohEndpoint">Máy chủ DoH</sys:String>
     <sys:String x:Key="Str.Settings.Ipv6">IPv6 của tiến trình đích</sys:String>
     <sys:String x:Key="Str.Settings.Ipv6Hint">Redirect: đưa IPv6 qua luật định tuyến y như IPv4. Block: chặn để ứng dụng tự lùi về IPv4 — dùng khi đường ra không có tuyến IPv6. Ignore: thả cho đi thẳng, tức là lọt ra ngoài proxy.</sys:String>
+    <sys:String x:Key="Str.Settings.WireProxy">wireproxy.exe</sys:String>
+    <sys:String x:Key="Str.Settings.WireProxyHint">Chỉ cần cho đường ra VPN: wireproxy chạy đường hầm WireGuard ở tầng ứng dụng, không tạo card mạng ảo. Bỏ trống thì tìm cạnh ProxyDivert.exe rồi tới PATH.</sys:String>
     <sys:String x:Key="Str.Settings.LogPath">File nhật ký chi tiết</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Giao diện</sys:String>
     <sys:String x:Key="Str.Settings.Language">Ngôn ngữ</sys:String>

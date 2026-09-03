@@ -167,9 +167,15 @@ ProxyDivert/
 
 ### Giai đoạn 2. VPN dưới dạng đường ra
 
-1. Thêm submodule VpnClient. Tách `VpnProxySource` + `VpnTarget`/`VpnTunnel` từ demo thành project `TqkLibrary.VpnClient.Proxy` trong repo thư viện (resolve DNS qua tunnel, chỉ ProjectReference driver cần dùng).
-2. `Outbound.Kind = Vpn` với URI scheme (`wg://`, `openvpn://`, `sstp://`...) hoặc file config; `OutboundSourceFactory` dựng `VpnProxySource`; trạng thái kết nối/reconnect hiện lên UI.
-3. Nếu lúc đó thấy API khó ghép (vòng đời session, reconnect, DNS trong tunnel), thiết kế lại phần façade của VpnClient theo hướng `IVpnOutbound` đơn giản: `ConnectAsync → IProxySource`, `State`, `Disconnect`.
+**WireGuard ĐÃ XONG (03/09/2026)** — và không cần tới submodule VpnClient: `TqkLibrary.Proxy.Vpn.WireProxyCli` trong chính submodule Proxy đã bọc [wireproxy](Glossary-vi.md#L93) thành `IProxySource`, tức là đúng hình dạng mà kế hoạch dự tính đi tới. Đã làm:
+
+1. `OutboundKind.Vpn` → `WireGuardProxySource`; ô `Outbound.Url` là đường dẫn file `.conf`.
+2. `Vpn/WireGuardConfigParser` đọc file `.conf` **nguyên bản của nhà cung cấp** (chỉ `[Interface]`/`[Peer]`) rồi để runner sinh bản có `[Socks5]` trên cổng loopback ngẫu nhiên + mật khẩu ngẫu nhiên; file nào đã có sẵn `[Socks5]` thì dùng nguyên trạng (đọc `BindAddress` để biết chỗ nối).
+3. `AppConfig.WireProxyPath` (một thiết lập cho cả máy) + ô chọn file trong tab Cài đặt; bỏ trống thì tìm cạnh exe rồi tới PATH.
+4. `Outbound.SupportsUdp` KHÔNG còn gồm Vpn — SOCKS5 của wireproxy chỉ có TCP, nên UDP qua đường ra VPN bị hạ xuống Block thay vì rò ra ngoài.
+5. `ProcessWatcher` từ chối attach chính tiến trình tool và `wireproxy.exe`: luật rộng kiểu `*.exe` mà tóm phải chúng thì mọi kết nối quay vòng lại relay.
+
+Còn lại cho các loại VPN khác (OpenVPN/SSTP/L2TP qua TqkLibrary.VpnClient): giữ nguyên hướng cũ — thêm submodule VpnClient, tách `VpnProxySource` + `VpnTarget`/`VpnTunnel` từ demo lên thư viện (resolve DNS trong tunnel), rồi cắm vào cùng chỗ `OutboundSourceFactory.CreateVpn` đang đứng. Trạng thái kết nối/reconnect hiện lên UI cũng chưa làm.
 
 ## 5. Rủi ro và điểm cần quyết định
 
