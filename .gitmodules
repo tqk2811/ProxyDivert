@@ -1,0 +1,6 @@
+[submodule "libs/TqkLibrary.WinDivert"]
+	path = libs/TqkLibrary.WinDivert
+	url = https://github.com/tqk2811/TqkLibrary.WinDivert.git
+[submodule "libs/TqkLibrary.Proxy"]
+	path = libs/TqkLibrary.Proxy
+	url = https://github.com/tqk2811/TqkLibrary.Proxy.git
