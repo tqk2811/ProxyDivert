@@ -1,0 +1,67 @@
+<UserControl x:Class="ProxyDivert.Wpf.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="4">
+
+            <!-- ==== DNS ==== -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Heading}" Text="{DynamicResource Str.Settings.Dns}"
+                               Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="{DynamicResource Str.Settings.DnsMode}" VerticalAlignment="Center" MinWidth="120"/>
+                        <ComboBox ItemsSource="{Binding DnsModes}" SelectedItem="{Binding DnsMode}" Width="200"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{DynamicResource Str.Settings.DohEndpoint}" VerticalAlignment="Center" MinWidth="120"/>
+                        <TextBox Text="{Binding DohEndpoint, UpdateSourceTrigger=PropertyChanged}" Width="320"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ==== network ==== -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <CheckBox Content="{DynamicResource Str.Settings.BlockIpv6}" IsChecked="{Binding BlockIpv6}"/>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,4,0,10" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.BlockIpv6Hint}"/>
+
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{DynamicResource Str.Settings.LogPath}" VerticalAlignment="Center" MinWidth="120"/>
+                        <TextBox Text="{Binding DiagnosticLogPath, UpdateSourceTrigger=PropertyChanged}" Width="320"/>
+                        <Button Content="…" Command="{Binding BrowseLogPathCommand}" Margin="8,0,0,0" MinWidth="36"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ==== appearance ==== -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Heading}" Text="{DynamicResource Str.Settings.Appearance}"
+                               Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="{DynamicResource Str.Settings.Language}" VerticalAlignment="Center" MinWidth="120"/>
+                        <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" Width="200"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="{DynamicResource Str.Settings.Theme}" VerticalAlignment="Center" MinWidth="120"/>
+                        <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" Width="200"/>
+                    </StackPanel>
+                    <CheckBox Content="{DynamicResource Str.Settings.StartWithWindows}"
+                              IsChecked="{Binding StartWithWindows}"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal">
+                <Button Content="{DynamicResource Str.App.Save}" Command="{Binding SaveCommand}"
+                        Style="{StaticResource AccentButton}" MinWidth="100"/>
+                <TextBlock Style="{StaticResource Subtle}" VerticalAlignment="Center" Margin="12,0,0,0"
+                           TextWrapping="Wrap" Text="{DynamicResource Str.Settings.RestartHint}"/>
+            </StackPanel>
+
+            <TextBlock Style="{StaticResource Subtle}" Margin="0,12,0,0" TextWrapping="Wrap"
+                       Text="{DynamicResource Str.Warn.AntiCheat}"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

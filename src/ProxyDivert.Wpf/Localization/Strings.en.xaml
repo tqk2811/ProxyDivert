@@ -1,0 +1,85 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- Present in every strings dictionary so LocalizationManager can find and replace the active one. -->
+    <sys:String x:Key="Str._Marker">en</sys:String>
+
+    <sys:String x:Key="Str.App.Title">ProxyDivert</sys:String>
+    <sys:String x:Key="Str.App.Start">Start</sys:String>
+    <sys:String x:Key="Str.App.Stop">Stop</sys:String>
+    <sys:String x:Key="Str.App.Running">Running</sys:String>
+    <sys:String x:Key="Str.App.Stopped">Stopped</sys:String>
+    <sys:String x:Key="Str.App.Save">Save</sys:String>
+    <sys:String x:Key="Str.App.Add">Add</sys:String>
+    <sys:String x:Key="Str.App.Remove">Remove</sys:String>
+    <sys:String x:Key="Str.App.Up">Up</sys:String>
+    <sys:String x:Key="Str.App.Down">Down</sys:String>
+    <sys:String x:Key="Str.App.Refresh">Refresh</sys:String>
+    <sys:String x:Key="Str.App.Clear">Clear</sys:String>
+    <sys:String x:Key="Str.App.Test">Test</sys:String>
+    <sys:String x:Key="Str.App.Enabled">Enabled</sys:String>
+    <sys:String x:Key="Str.App.Name">Name</sys:String>
+    <sys:String x:Key="Str.App.Pattern">Pattern</sys:String>
+    <sys:String x:Key="Str.App.Type">Type</sys:String>
+
+    <sys:String x:Key="Str.Tab.Processes">Processes</sys:String>
+    <sys:String x:Key="Str.Tab.Outbounds">Outbounds</sys:String>
+    <sys:String x:Key="Str.Tab.Rules">Rules</sys:String>
+    <sys:String x:Key="Str.Tab.Connections">Connections</sys:String>
+    <sys:String x:Key="Str.Tab.Log">Log</sys:String>
+    <sys:String x:Key="Str.Tab.Settings">Settings</sys:String>
+
+    <sys:String x:Key="Str.Process.Rules">Process rules</sys:String>
+    <sys:String x:Key="Str.Process.Running">Running processes</sys:String>
+    <sys:String x:Key="Str.Process.Attached">Redirected</sys:String>
+    <sys:String x:Key="Str.Process.IncludeChildren">Children</sys:String>
+    <sys:String x:Key="Str.Process.Policy">Policy</sys:String>
+    <sys:String x:Key="Str.Process.Pid">PID</sys:String>
+    <sys:String x:Key="Str.Process.Path">Path</sys:String>
+    <sys:String x:Key="Str.Process.AddFromSelection">Add rule from selection</sys:String>
+    <sys:String x:Key="Str.Process.Launch">Launch suspended…</sys:String>
+    <sys:String x:Key="Str.Process.LaunchHint">Launching a program suspended lets the redirect attach before its first connection, so nothing escapes at startup.</sys:String>
+
+    <sys:String x:Key="Str.Outbound.Url">URL</sys:String>
+    <sys:String x:Key="Str.Outbound.Username">Username</sys:String>
+    <sys:String x:Key="Str.Outbound.Password">Password</sys:String>
+    <sys:String x:Key="Str.Outbound.TestOk">Connection succeeded.</sys:String>
+    <sys:String x:Key="Str.Outbound.TestFailed">Connection failed:</sys:String>
+    <sys:String x:Key="Str.Outbound.Hint">Direct and Block always exist. Only SOCKS5 can carry UDP.</sys:String>
+
+    <sys:String x:Key="Str.Rules.Policies">Policies</sys:String>
+    <sys:String x:Key="Str.Rules.Rules">Rules (first match wins)</sys:String>
+    <sys:String x:Key="Str.Rules.Outbound">Outbound</sys:String>
+    <sys:String x:Key="Str.Rules.Default">Default outbound</sys:String>
+    <sys:String x:Key="Str.Rules.Not">Not</sys:String>
+    <sys:String x:Key="Str.Rules.UdpMode">UDP</sys:String>
+    <sys:String x:Key="Str.Rules.BlockQuic">Block QUIC (UDP/443)</sys:String>
+    <sys:String x:Key="Str.Rules.BlockQuicHint">Blocking QUIC makes browsers fall back to TCP, which the proxy can actually carry.</sys:String>
+
+    <sys:String x:Key="Str.Conn.Process">Process</sys:String>
+    <sys:String x:Key="Str.Conn.Host">Host</sys:String>
+    <sys:String x:Key="Str.Conn.Destination">Destination</sys:String>
+    <sys:String x:Key="Str.Conn.Outbound">Outbound</sys:String>
+    <sys:String x:Key="Str.Conn.Reason">Reason</sys:String>
+    <sys:String x:Key="Str.Conn.Up">Up</sys:String>
+    <sys:String x:Key="Str.Conn.Down">Down</sys:String>
+    <sys:String x:Key="Str.Conn.Duration">Duration</sys:String>
+    <sys:String x:Key="Str.Conn.ShowClosed">Show closed</sys:String>
+    <sys:String x:Key="Str.Conn.Filter">Filter</sys:String>
+
+    <sys:String x:Key="Str.Settings.Dns">DNS</sys:String>
+    <sys:String x:Key="Str.Settings.DnsMode">Mode</sys:String>
+    <sys:String x:Key="Str.Settings.DohEndpoint">DoH endpoint</sys:String>
+    <sys:String x:Key="Str.Settings.BlockIpv6">Block the target's IPv6</sys:String>
+    <sys:String x:Key="Str.Settings.BlockIpv6Hint">The redirect is IPv4-only; without this, any AAAA-resolved connection would bypass the proxy.</sys:String>
+    <sys:String x:Key="Str.Settings.LogPath">Diagnostic log file</sys:String>
+    <sys:String x:Key="Str.Settings.Appearance">Appearance</sys:String>
+    <sys:String x:Key="Str.Settings.Language">Language</sys:String>
+    <sys:String x:Key="Str.Settings.Theme">Theme</sys:String>
+    <sys:String x:Key="Str.Settings.StartWithWindows">Start with Windows</sys:String>
+    <sys:String x:Key="Str.Settings.RestartHint">DNS mode, IPv6 blocking and the log file take effect the next time the engine starts.</sys:String>
+
+    <sys:String x:Key="Str.Warn.Admin">ProxyDivert must run as Administrator: WinDivert loads a kernel driver.</sys:String>
+    <sys:String x:Key="Str.Warn.AntiCheat">Games with kernel anti-cheat may treat packet redirection or process suspension as tampering.</sys:String>
+</ResourceDictionary>

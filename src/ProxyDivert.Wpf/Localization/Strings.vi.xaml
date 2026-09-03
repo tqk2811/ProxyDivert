@@ -1,0 +1,85 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- Present in every strings dictionary so LocalizationManager can find and replace the active one. -->
+    <sys:String x:Key="Str._Marker">vi</sys:String>
+
+    <sys:String x:Key="Str.App.Title">ProxyDivert</sys:String>
+    <sys:String x:Key="Str.App.Start">Chạy</sys:String>
+    <sys:String x:Key="Str.App.Stop">Dừng</sys:String>
+    <sys:String x:Key="Str.App.Running">Đang chạy</sys:String>
+    <sys:String x:Key="Str.App.Stopped">Đã dừng</sys:String>
+    <sys:String x:Key="Str.App.Save">Lưu</sys:String>
+    <sys:String x:Key="Str.App.Add">Thêm</sys:String>
+    <sys:String x:Key="Str.App.Remove">Xoá</sys:String>
+    <sys:String x:Key="Str.App.Up">Lên</sys:String>
+    <sys:String x:Key="Str.App.Down">Xuống</sys:String>
+    <sys:String x:Key="Str.App.Refresh">Làm mới</sys:String>
+    <sys:String x:Key="Str.App.Clear">Xoá hết</sys:String>
+    <sys:String x:Key="Str.App.Test">Thử</sys:String>
+    <sys:String x:Key="Str.App.Enabled">Bật</sys:String>
+    <sys:String x:Key="Str.App.Name">Tên</sys:String>
+    <sys:String x:Key="Str.App.Pattern">Mẫu</sys:String>
+    <sys:String x:Key="Str.App.Type">Kiểu</sys:String>
+
+    <sys:String x:Key="Str.Tab.Processes">Tiến trình</sys:String>
+    <sys:String x:Key="Str.Tab.Outbounds">Đường ra</sys:String>
+    <sys:String x:Key="Str.Tab.Rules">Luật</sys:String>
+    <sys:String x:Key="Str.Tab.Connections">Kết nối</sys:String>
+    <sys:String x:Key="Str.Tab.Log">Nhật ký</sys:String>
+    <sys:String x:Key="Str.Tab.Settings">Cài đặt</sys:String>
+
+    <sys:String x:Key="Str.Process.Rules">Luật tiến trình</sys:String>
+    <sys:String x:Key="Str.Process.Running">Tiến trình đang chạy</sys:String>
+    <sys:String x:Key="Str.Process.Attached">Đang chuyển hướng</sys:String>
+    <sys:String x:Key="Str.Process.IncludeChildren">Cả tiến trình con</sys:String>
+    <sys:String x:Key="Str.Process.Policy">Bộ luật</sys:String>
+    <sys:String x:Key="Str.Process.Pid">PID</sys:String>
+    <sys:String x:Key="Str.Process.Path">Đường dẫn</sys:String>
+    <sys:String x:Key="Str.Process.AddFromSelection">Tạo luật từ dòng đang chọn</sys:String>
+    <sys:String x:Key="Str.Process.Launch">Chạy ở trạng thái tạm dừng…</sys:String>
+    <sys:String x:Key="Str.Process.LaunchHint">Chạy chương trình ở trạng thái tạm dừng để gắn chuyển hướng trước kết nối đầu tiên, không lọt gói nào lúc khởi động.</sys:String>
+
+    <sys:String x:Key="Str.Outbound.Url">URL</sys:String>
+    <sys:String x:Key="Str.Outbound.Username">Tài khoản</sys:String>
+    <sys:String x:Key="Str.Outbound.Password">Mật khẩu</sys:String>
+    <sys:String x:Key="Str.Outbound.TestOk">Kết nối thành công.</sys:String>
+    <sys:String x:Key="Str.Outbound.TestFailed">Kết nối thất bại:</sys:String>
+    <sys:String x:Key="Str.Outbound.Hint">Direct và Block luôn có sẵn. Chỉ SOCKS5 chở được UDP.</sys:String>
+
+    <sys:String x:Key="Str.Rules.Policies">Bộ luật</sys:String>
+    <sys:String x:Key="Str.Rules.Rules">Luật (khớp đầu tiên thắng)</sys:String>
+    <sys:String x:Key="Str.Rules.Outbound">Đường ra</sys:String>
+    <sys:String x:Key="Str.Rules.Default">Đường ra mặc định</sys:String>
+    <sys:String x:Key="Str.Rules.Not">Phủ định</sys:String>
+    <sys:String x:Key="Str.Rules.UdpMode">UDP</sys:String>
+    <sys:String x:Key="Str.Rules.BlockQuic">Chặn QUIC (UDP/443)</sys:String>
+    <sys:String x:Key="Str.Rules.BlockQuicHint">Chặn QUIC để trình duyệt lùi về TCP — thứ mà proxy thật sự chở được.</sys:String>
+
+    <sys:String x:Key="Str.Conn.Process">Tiến trình</sys:String>
+    <sys:String x:Key="Str.Conn.Host">Tên miền</sys:String>
+    <sys:String x:Key="Str.Conn.Destination">Đích</sys:String>
+    <sys:String x:Key="Str.Conn.Outbound">Đường ra</sys:String>
+    <sys:String x:Key="Str.Conn.Reason">Lý do</sys:String>
+    <sys:String x:Key="Str.Conn.Up">Gửi</sys:String>
+    <sys:String x:Key="Str.Conn.Down">Nhận</sys:String>
+    <sys:String x:Key="Str.Conn.Duration">Thời gian</sys:String>
+    <sys:String x:Key="Str.Conn.ShowClosed">Hiện kết nối đã đóng</sys:String>
+    <sys:String x:Key="Str.Conn.Filter">Lọc</sys:String>
+
+    <sys:String x:Key="Str.Settings.Dns">DNS</sys:String>
+    <sys:String x:Key="Str.Settings.DnsMode">Chế độ</sys:String>
+    <sys:String x:Key="Str.Settings.DohEndpoint">Máy chủ DoH</sys:String>
+    <sys:String x:Key="Str.Settings.BlockIpv6">Chặn IPv6 của tiến trình đích</sys:String>
+    <sys:String x:Key="Str.Settings.BlockIpv6Hint">Bộ chuyển hướng chỉ làm IPv4; không chặn thì mọi kết nối phân giải ra AAAA sẽ đi vòng qua proxy.</sys:String>
+    <sys:String x:Key="Str.Settings.LogPath">File nhật ký chi tiết</sys:String>
+    <sys:String x:Key="Str.Settings.Appearance">Giao diện</sys:String>
+    <sys:String x:Key="Str.Settings.Language">Ngôn ngữ</sys:String>
+    <sys:String x:Key="Str.Settings.Theme">Chủ đề</sys:String>
+    <sys:String x:Key="Str.Settings.StartWithWindows">Chạy cùng Windows</sys:String>
+    <sys:String x:Key="Str.Settings.RestartHint">Chế độ DNS, chặn IPv6 và file nhật ký chỉ có hiệu lực từ lần chạy engine kế tiếp.</sys:String>
+
+    <sys:String x:Key="Str.Warn.Admin">ProxyDivert phải chạy bằng quyền Administrator: WinDivert nạp driver kernel.</sys:String>
+    <sys:String x:Key="Str.Warn.AntiCheat">Game có anti-cheat kernel có thể coi việc chuyển hướng gói tin hoặc tạm dừng tiến trình là hành vi can thiệp.</sys:String>
+</ResourceDictionary>

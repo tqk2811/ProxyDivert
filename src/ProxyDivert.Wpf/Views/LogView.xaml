@@ -1,0 +1,35 @@
+<UserControl x:Class="ProxyDivert.Wpf.Views.LogView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource Card}" Margin="4">
+        <DockPanel>
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                <TextBlock Style="{StaticResource Heading}" Text="{DynamicResource Str.Tab.Log}"
+                           VerticalAlignment="Center"/>
+                <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged, Delay=250}"
+                         Width="240" Margin="16,0,0,0" HorizontalAlignment="Left"/>
+                <Button Content="{DynamicResource Str.App.Clear}" Command="{Binding ClearCommand}"
+                        HorizontalAlignment="Right" MinWidth="80"/>
+            </DockPanel>
+
+            <!-- Newest first: with the engine running the tail is the only part anyone reads, and
+                 an auto-scrolling list fights the user the moment they try to look at something. -->
+            <ListBox ItemsSource="{Binding Entries}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     VirtualizingPanel.IsVirtualizing="True"
+                     VirtualizingPanel.VirtualizationMode="Recycling">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding TimestampUtc, StringFormat=HH:mm:ss.fff}"
+                                       FontFamily="Consolas" Foreground="{DynamicResource Brush.Text.Secondary}"/>
+                            <TextBlock Text="{Binding Tag}" FontFamily="Consolas" Margin="8,0,0,0"
+                                       Foreground="{DynamicResource Brush.Accent}" MinWidth="42"/>
+                            <TextBlock Text="{Binding Message}" FontFamily="Consolas" Margin="8,0,0,0"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+    </Border>
+</UserControl>

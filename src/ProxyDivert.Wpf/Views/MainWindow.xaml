@@ -1,0 +1,71 @@
+<Window x:Class="ProxyDivert.Wpf.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:ProxyDivert.Wpf.Views"
+        Title="{DynamicResource Str.App.Title}"
+        Height="720" Width="1180" MinHeight="520" MinWidth="900"
+        Background="{DynamicResource Brush.Window.Background}"
+        TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
+
+    <DockPanel>
+        <!-- ==== command bar ==== -->
+        <Border DockPanel.Dock="Top" Padding="10,8"
+                Background="{DynamicResource Brush.TitleBar.Background}"
+                BorderBrush="{DynamicResource Brush.Surface.BorderBrush}" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal">
+                <Button Content="{DynamicResource Str.App.Start}" Style="{StaticResource AccentButton}"
+                        Command="{Binding StartCommand}" MinWidth="90"
+                        IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBool}}"/>
+                <Button Content="{DynamicResource Str.App.Stop}" Margin="8,0,0,0"
+                        Command="{Binding StopCommand}" MinWidth="90"
+                        IsEnabled="{Binding IsRunning}"/>
+
+                <Border Margin="16,0,0,0" Padding="10,3" CornerRadius="10"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource Brush.Surface.Alt}">
+                    <TextBlock VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                <Setter Property="Text" Value="{DynamicResource Str.App.Stopped}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                        <Setter Property="Text" Value="{DynamicResource Str.App.Running}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Border>
+
+                <TextBlock Style="{StaticResource Subtle}" Margin="16,0,0,0" VerticalAlignment="Center"
+                           Text="{DynamicResource Str.Warn.Admin}"
+                           Visibility="{Binding IsElevated, Converter={StaticResource FalseToVisible}}"/>
+
+                <TextBlock Style="{StaticResource Subtle}" Margin="16,0,0,0" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Brush.Danger}"
+                           Text="{Binding StatusMessage}"/>
+            </StackPanel>
+        </Border>
+
+        <TabControl Margin="8" Background="Transparent" BorderThickness="0">
+            <TabItem Header="{DynamicResource Str.Tab.Processes}">
+                <views:ProcessesView DataContext="{Binding Processes}"/>
+            </TabItem>
+            <TabItem Header="{DynamicResource Str.Tab.Outbounds}">
+                <views:OutboundsView DataContext="{Binding Outbounds}"/>
+            </TabItem>
+            <TabItem Header="{DynamicResource Str.Tab.Rules}">
+                <views:RulesView DataContext="{Binding Rules}"/>
+            </TabItem>
+            <TabItem Header="{DynamicResource Str.Tab.Connections}">
+                <views:ConnectionsView DataContext="{Binding Connections}"/>
+            </TabItem>
+            <TabItem Header="{DynamicResource Str.Tab.Log}">
+                <views:LogView DataContext="{Binding Log}"/>
+            </TabItem>
+            <TabItem Header="{DynamicResource Str.Tab.Settings}">
+                <views:SettingsView DataContext="{Binding Settings}"/>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

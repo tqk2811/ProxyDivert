@@ -1,0 +1,57 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ==== DARK palette ==== -->
+    <!-- Surfaces -->
+    <SolidColorBrush x:Key="Brush.Window.Background" Color="#0F1117"/>
+    <SolidColorBrush x:Key="Brush.TitleBar.Background" Color="#12141C"/>
+    <SolidColorBrush x:Key="Brush.Surface.Background" Color="#191D28"/>
+    <SolidColorBrush x:Key="Brush.Surface.BorderBrush" Color="#262B3A"/>
+    <SolidColorBrush x:Key="Brush.Surface.Alt" Color="#151925"/>
+
+    <!-- Text -->
+    <SolidColorBrush x:Key="Brush.Text.Primary" Color="#E7EAF1"/>
+    <SolidColorBrush x:Key="Brush.Text.Secondary" Color="#8A91A4"/>
+
+    <!-- Inputs / interactive neutrals -->
+    <SolidColorBrush x:Key="Brush.Control.Background" Color="#212636"/>
+    <SolidColorBrush x:Key="Brush.Control.BorderBrush" Color="#333A4E"/>
+    <SolidColorBrush x:Key="Brush.Control.Hover.Background" Color="#2A3042"/>
+    <SolidColorBrush x:Key="Brush.Control.Hover.BorderBrush" Color="#3E4661"/>
+
+    <!-- Accent (teal) -->
+    <SolidColorBrush x:Key="Brush.Accent" Color="#16B9A9"/>
+    <SolidColorBrush x:Key="Brush.Accent.Hover" Color="#1FCBBA"/>
+    <SolidColorBrush x:Key="Brush.Accent.Pressed" Color="#109A8D"/>
+    <SolidColorBrush x:Key="Brush.Accent.Foreground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Brush.Accent.Subtle" Color="#22323A"/>
+
+    <!-- Accent (purple) -->
+    <LinearGradientBrush x:Key="Brush.AccentPurple" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#7B61FF" Offset="0"/>
+        <GradientStop Color="#9C6BFF" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="Brush.AccentPurple.Hover" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#8C74FF" Offset="0"/>
+        <GradientStop Color="#AD7EFF" Offset="1"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="Brush.Purple.Foreground" Color="#FFFFFF"/>
+
+    <!-- Semantic status -->
+    <SolidColorBrush x:Key="Brush.Success" Color="#2FBF71"/>
+    <SolidColorBrush x:Key="Brush.Warning" Color="#E0A83A"/>
+    <SolidColorBrush x:Key="Brush.Danger" Color="#E5484D"/>
+    <SolidColorBrush x:Key="Brush.Info" Color="#4C8DFF"/>
+
+    <!-- Window caption buttons -->
+    <SolidColorBrush x:Key="Brush.WindowButton.Foreground" Color="#C7CCD8"/>
+    <SolidColorBrush x:Key="Brush.WindowButton.Hover" Color="#262B3A"/>
+    <SolidColorBrush x:Key="Brush.WindowButton.Close.Hover" Color="#E81123"/>
+
+    <!-- ListView items -->
+    <SolidColorBrush x:Key="Brush.ListItem.Selected.Border" Color="#16B9A9"/>
+
+    <!-- ScrollBar -->
+    <SolidColorBrush x:Key="Brush.ScrollBar.Thumb" Color="#333A4E"/>
+
+</ResourceDictionary>
