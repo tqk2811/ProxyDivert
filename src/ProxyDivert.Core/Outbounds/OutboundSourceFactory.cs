@@ -7,6 +7,8 @@ using System.IO;
 using System.Security.Cryptography;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Vpn;
+using ProxyDivert.Core.Vpn.Client;
+using ProxyDivert.Core.Vpn.Models;
 using TqkLibrary.Proxy.Vpn.WireProxyCli;
 using ProxyDivert.Core.Routing.Models;
 using TqkLibrary.Proxy.Authentications;
@@ -117,6 +119,9 @@ public sealed class OutboundSourceFactory : IDisposable
             case LocalProxySource local: local.IsSupportIpv6 = supported; break;
             case HttpProxySource http: http.IsSupportIpv6 = supported; break;
             case Socks5ProxySource socks5: socks5.IsSupportIpv6 = supported; break;
+            // The VPN tunnel takes the switch too, but it only ever narrows: a tunnel that got
+            // no global IPv6 stays without one however this is set.
+            case VpnClientProxySource vpn: vpn.IsSupportIpv6 = supported; break;
         }
     }
 
@@ -194,22 +199,32 @@ public sealed class OutboundSourceFactory : IDisposable
         }
     }
 
-    // A WireGuard tunnel run in user space by wireproxy, which exposes it as a loopback SOCKS5
-    // listener. Nothing touches the OS: no TUN adapter, no route table, no second elevation prompt,
-    // and — unlike the official client — other applications keep their normal network while this
-    // one process goes through the VPN.
+    // A VPN, run by one of two engines. Both keep the rest of the machine on its normal network:
+    // no TUN adapter, no route table, no second elevation prompt.
     //
-    // Outbound.Url is the path to the .conf file. Two shapes are accepted:
+    // Which engine is decided by the outbound's URL and its protocol box, and VpnProfileReader is
+    // the only thing that reads them. A WireGuard .conf still goes to wireproxy, exactly as it did
+    // before any of the other protocols existed; everything else is dialled inside this process by
+    // TqkLibrary.VpnClient, which also means those tunnels carry UDP.
+    private IProxySource CreateVpn(Outbound outbound)
+    {
+        VpnProfile profile = VpnProfileReader.Read(outbound);
+        if (!profile.RunsOnWireProxy)
+        {
+            return new VpnClientProxySource(
+                profile, outbound.Ipv6Support != Ipv6Support.Disabled, _loggerFactory);
+        }
+
+        return CreateWireProxyVpn(outbound, profile.ConfigPath!);
+    }
+
+    // The wireproxy engine: a subprocess running the WireGuard tunnel in user space and exposing it
+    // as a loopback SOCKS5 listener. Two shapes of .conf are accepted:
     //   * the file a VPN provider gives you (only [Interface]/[Peer]) — it is read here and
     //     wireproxy gets a generated copy with a [Socks5] section on a private loopback port;
     //   * a file that already has a [Socks5] section — handed to wireproxy untouched.
-    private IProxySource CreateVpn(Outbound outbound)
+    private IProxySource CreateWireProxyVpn(Outbound outbound, string configPath)
     {
-        if (string.IsNullOrWhiteSpace(outbound.Url))
-            throw new InvalidOperationException(
-                $"VPN outbound '{outbound.Name}' has no configuration file. Point it at a WireGuard .conf.");
-
-        string configPath = Environment.ExpandEnvironmentVariables(outbound.Url!.Trim().Trim('"'));
         if (!File.Exists(configPath))
             throw new FileNotFoundException($"VPN outbound '{outbound.Name}': config file not found.", configPath);
 

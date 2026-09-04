@@ -14,6 +14,12 @@
 		<!-- VPN outbound: wireproxy runs the WireGuard tunnel in user space and exposes it as SOCKS5,
 		     so no TUN adapter and no route-table surgery. -->
 		<ProjectReference Include="..\..\libs\TqkLibrary.Proxy\src\TqkLibrary.Proxy.Vpn.WireProxyCli\TqkLibrary.Proxy.Vpn.WireProxyCli.csproj" />
+		<!-- VPN outbound, second engine: TqkLibrary.VpnClient dials the tunnel inside this process and
+		     hands back a userspace IP stack, so OpenVPN/SSTP/L2TP/IKEv2/SoftEther need no external
+		     binary and UDP goes through the tunnel too. Tunnels pulls only the six drivers in scope;
+		     Sockets is the TCP/UDP API over the stack. -->
+		<ProjectReference Include="..\..\libs\TqkLibrary.VpnClient\src\TqkLibrary.VpnClient.Tunnels\TqkLibrary.VpnClient.Tunnels.csproj" />
+		<ProjectReference Include="..\..\libs\TqkLibrary.VpnClient\src\TqkLibrary.VpnClient.Sockets\TqkLibrary.VpnClient.Sockets.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
