@@ -8,6 +8,8 @@ using CommunityToolkit.Mvvm.Input;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Vpn.Enums;
+using ProxyDivert.Core.Vpn.Models;
 using ProxyDivert.Wpf.Services;
 
 namespace ProxyDivert.Wpf.ViewModels;
@@ -38,9 +40,19 @@ public sealed partial class OutboundsViewModel : ObservableObject
     [ObservableProperty]
     private bool _isTesting;
 
+    /// <summary>
+    /// The VPN tunnels the engine is holding up. Empty when nothing is running or no VPN outbound
+    /// is enabled, which is what hides the strip.
+    /// </summary>
+    public ObservableCollection<VpnTunnelViewModel> VpnTunnels { get; }
+        = new ObservableCollection<VpnTunnelViewModel>();
+
     public OutboundsViewModel(AppServices services)
     {
         _services = services;
+        // The engine supervises tunnels on its own threads and outlives this view model, so the
+        // subscription is for the life of the window.
+        _services.Engine.VpnStatusChanged += OnVpnStatusChanged;
         Reload();
     }
 
@@ -49,6 +61,34 @@ public sealed partial class OutboundsViewModel : ObservableObject
         Outbounds.Clear();
         foreach (Outbound outbound in _services.Config.Outbounds)
             Outbounds.Add(outbound);
+
+        VpnTunnels.Clear();
+        foreach (VpnStatus status in _services.Engine.VpnStatuses)
+            VpnTunnels.Add(new VpnTunnelViewModel(status));
+    }
+
+    // Called from the tunnel's supervision thread. BeginInvoke, never Invoke: the thread that
+    // saves the configuration is the UI thread, and it can be inside the keeper's Sync while this
+    // arrives — a synchronous marshal would have the two waiting on each other.
+    private void OnVpnStatusChanged(VpnStatus status)
+    {
+        Application.Current?.Dispatcher.BeginInvoke(new Action(() => ApplyVpnStatus(status)));
+    }
+
+    private void ApplyVpnStatus(VpnStatus status)
+    {
+        VpnTunnelViewModel? row = VpnTunnels.FirstOrDefault(t => t.Id == status.OutboundId);
+
+        // A stopped tunnel is one the engine is no longer keeping — the outbound was disabled,
+        // deleted, or the engine stopped — so it leaves the strip rather than sitting there greyed.
+        if (status.State == VpnConnectionState.Stopped)
+        {
+            if (row != null) VpnTunnels.Remove(row);
+            return;
+        }
+
+        if (row is null) VpnTunnels.Add(new VpnTunnelViewModel(status));
+        else row.Update(status);
     }
 
     // True for the two built-ins, which the UI keeps read-only.

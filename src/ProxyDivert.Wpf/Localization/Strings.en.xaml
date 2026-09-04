@@ -49,6 +49,13 @@
     <sys:String x:Key="Str.Outbound.TestFailed">Connection failed:</sys:String>
     <sys:String x:Key="Str.Outbound.Hint">Direct and Block always exist. Only SOCKS5 can carry UDP. For a VPN, the URL box is the path to a WireGuard .conf file.</sys:String>
 
+    <sys:String x:Key="Str.Vpn.Header">VPN tunnels</sys:String>
+    <sys:String x:Key="Str.Vpn.Connecting">connecting</sys:String>
+    <sys:String x:Key="Str.Vpn.Connected">connected</sys:String>
+    <sys:String x:Key="Str.Vpn.Reconnecting">reconnecting</sys:String>
+    <sys:String x:Key="Str.Vpn.Stopped">stopped</sys:String>
+    <sys:String x:Key="Str.Vpn.Attempt">attempt</sys:String>
+
     <sys:String x:Key="Str.Rules.Policies">Policies</sys:String>
     <sys:String x:Key="Str.Rules.Rules">Rules (first match wins)</sys:String>
     <sys:String x:Key="Str.Rules.Outbound">Outbound</sys:String>

@@ -9,6 +9,45 @@
                        Text="{DynamicResource Str.Outbound.Hint}" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
             <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                <!-- The tunnels the engine holds up. Hidden entirely when there are none, so a
+                     configuration without a VPN never grows an empty box. -->
+                <StackPanel Margin="0,0,0,8">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding VpnTunnels.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Style="{StaticResource Subtle}" Text="{DynamicResource Str.Vpn.Header}"/>
+                    <ItemsControl ItemsSource="{Binding VpnTunnels}" Margin="0,4,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,6,0">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Fill" Value="{DynamicResource Brush.Warning}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsUp}" Value="True">
+                                                        <Setter Property="Fill" Value="{DynamicResource Brush.Success}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Style="{StaticResource Subtle}" Margin="6,0,0,0"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding Detail}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
                 <StackPanel Orientation="Horizontal">
                     <Button Content="{DynamicResource Str.App.Add}" Command="{Binding AddCommand}" MinWidth="80"/>
                     <Button Content="{DynamicResource Str.App.Remove}" Command="{Binding RemoveCommand}"

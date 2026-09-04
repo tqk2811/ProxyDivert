@@ -49,6 +49,13 @@
     <sys:String x:Key="Str.Outbound.TestFailed">Kết nối thất bại:</sys:String>
     <sys:String x:Key="Str.Outbound.Hint">Direct và Block luôn tồn tại. Chỉ SOCKS5 chở được UDP. Với VPN, ô URL là đường dẫn tới file .conf WireGuard.</sys:String>
 
+    <sys:String x:Key="Str.Vpn.Header">Đường hầm VPN</sys:String>
+    <sys:String x:Key="Str.Vpn.Connecting">đang kết nối</sys:String>
+    <sys:String x:Key="Str.Vpn.Connected">đã kết nối</sys:String>
+    <sys:String x:Key="Str.Vpn.Reconnecting">đang kết nối lại</sys:String>
+    <sys:String x:Key="Str.Vpn.Stopped">đã dừng</sys:String>
+    <sys:String x:Key="Str.Vpn.Attempt">lần thử</sys:String>
+
     <sys:String x:Key="Str.Rules.Policies">Bộ luật</sys:String>
     <sys:String x:Key="Str.Rules.Rules">Luật (khớp đầu tiên thắng)</sys:String>
     <sys:String x:Key="Str.Rules.Outbound">Đường ra</sys:String>
