@@ -177,6 +177,29 @@ ProxyDivert/
 
 Còn lại cho các loại VPN khác (OpenVPN/SSTP/L2TP qua TqkLibrary.VpnClient): giữ nguyên hướng cũ — thêm submodule VpnClient, tách `VpnProxySource` + `VpnTarget`/`VpnTunnel` từ demo lên thư viện (resolve DNS trong tunnel), rồi cắm vào cùng chỗ `OutboundSourceFactory.CreateVpn` đang đứng. Trạng thái kết nối/reconnect hiện lên UI cũng chưa làm.
 
+### Bước 4. Redesign TqkLibrary.WinDivert — ĐÃ XONG 2026-09-03
+
+Thư viện được chia lại thành **5 project** để một host chỉ lấy đúng phần nó dùng, và để cắt phụ thuộc
+vòng: `PacketContext` trước đây mang theo `NatTable` (thuộc tầng Redirect) nên tầng lõi không thể tách rời
+tầng dựng trên nó.
+
+1. `TqkLibrary.WinDivert` (lõi: Native/Packet/Pipeline/Flow), `.SecureDns`, `.Inspection`, `.ProcessControl`,
+   `.Redirect`. Hai project `.Inspection` và `.ProcessControl` không đụng driver nên chạy và test được mà
+   không cần quyền Administrator.
+2. `PacketContext` giờ chỉ mang **gói tin** (Buffer/Length/Address/Packet/Disposition/Injector/CancellationToken);
+   middleware nhận `INatTable`/`ISocketTracker`/`IDnsCacheLookup`/`ILogger<T>` qua constructor.
+3. Bỏ hẳn `RedirectLogger`: mọi lớp ghi log qua `ILogger<T>`, host tự cấp `ILoggerProvider`. Bên tool là
+   `ProxyDivert.Core/Logging/AppLoggerProvider.cs` — vừa ghi file trace vừa đẩy vào `InMemoryLogStore`
+   cho khung Log, và đổi được đường dẫn file lúc đang chạy.
+4. Thêm `AddWinDivert()`, `AddWinDivertSecureDns()`, `AddWinDivertInspection()`, `AddWinDivertProcessControl()`,
+   `AddWinDivertRedirect()`; tool có `AddProxyDivert()` dùng chung cho cả WPF lẫn CLI.
+5. Thuần OOP: `WinDivertHandle.Open` static → `IWinDivertHandleFactory` (thay được driver khi test);
+   `PacketParser`/`DnsMessageParser`/`ProcessFinder`/`TlsClientHelloParser`/`HttpHostParser` thành đối tượng;
+   extension `TryPeekHostNameAsync` → `IConnectionHostNameResolver` + `IHostNameInspector` + `IHostNameParser`;
+   `SuspendedProcessLauncher` tách thành launcher + `SuspendedProcess` + `ProcessNativeMethods` (P/Invoke buộc static).
+6. Bỏ `net462` (WinDivert cần Win10+ nên .NET Framework vô nghĩa); còn `net6.0-windows;net8.0-windows`.
+   Riêng Demo chỉ `net8.0-windows` vì TqkLibrary.Proxy kéo Microsoft.Extensions.* 10.x không hỗ trợ net6.0.
+
 ## 5. Rủi ro và điểm cần quyết định
 
 - **Direct qua relay hay pass-through**: giai đoạn 1 mọi kết nối qua relay (đơn giản, đếm được byte). Nếu cần hiệu năng cao cho game/stream thì thêm luật pass-through theo IP ở tầng gói sau.

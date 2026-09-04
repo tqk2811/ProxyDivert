@@ -34,7 +34,7 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
 
 | Đường dẫn | Nội dung |
 |---|---|
-| `libs/TqkLibrary.WinDivert` | submodule — lõi chuyển hướng gói tin theo tiến trình |
+| `libs/TqkLibrary.WinDivert` | submodule — lõi chuyển hướng gói tin theo tiến trình (5 project: core, `.Redirect`, `.SecureDns`, `.Inspection`, `.ProcessControl`) |
 | `libs/TqkLibrary.Proxy` | submodule — `IProxySource` cho HTTP/SOCKS4/SOCKS5/SSH/WireGuard |
 | `src/ProxyDivert.Core` | engine, model, service (không phụ thuộc WPF) |
 | `src/ProxyDivert.Wpf` | giao diện |
