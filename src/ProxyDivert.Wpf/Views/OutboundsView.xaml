@@ -79,6 +79,17 @@
                                         Binding="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
                     <DataGridTextColumn Header="{DynamicResource Str.Outbound.Password}"
                                         Binding="{Binding Password, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
+                    <!-- Only L2TP/IPsec and IKEv2 use this, but a column costs less than a second
+                         editor, and it stays empty for everything else. -->
+                    <DataGridTextColumn Header="{DynamicResource Str.Outbound.PreSharedKey}"
+                                        Binding="{Binding PreSharedKey, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
+                    <!-- Auto for every row that is not a VPN, and for nearly every one that is; it
+                         is here for the .conf that should run in process rather than on wireproxy. -->
+                    <DataGridComboBoxColumn Header="{DynamicResource Str.Outbound.VpnProtocol}"
+                                            SelectedItemBinding="{Binding VpnProtocol, UpdateSourceTrigger=PropertyChanged}"
+                                            ItemsSource="{Binding DataContext.VpnProtocols,
+                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            Width="150"/>
                     <DataGridComboBoxColumn Header="{DynamicResource Str.Outbound.Ipv6}"
                                             SelectedItemBinding="{Binding Ipv6Support, UpdateSourceTrigger=PropertyChanged}"
                                             ItemsSource="{Binding DataContext.Ipv6Supports,

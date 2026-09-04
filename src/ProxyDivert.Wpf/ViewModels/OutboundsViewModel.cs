@@ -31,6 +31,10 @@ public sealed partial class OutboundsViewModel : ObservableObject
 
     public Array Ipv6Supports { get; } = Enum.GetValues(typeof(Ipv6Support));
 
+    // Every value, Auto included: Auto is the answer for all but one case, and that case — running
+    // a WireGuard .conf in this process instead of on wireproxy — can only be said by hand.
+    public Array VpnProtocols { get; } = Enum.GetValues(typeof(VpnProtocol));
+
     [ObservableProperty]
     private Outbound? _selected;
 

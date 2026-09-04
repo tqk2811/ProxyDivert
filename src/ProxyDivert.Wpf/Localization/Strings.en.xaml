@@ -44,10 +44,12 @@
     <sys:String x:Key="Str.Outbound.Url">URL</sys:String>
     <sys:String x:Key="Str.Outbound.Username">Username</sys:String>
     <sys:String x:Key="Str.Outbound.Password">Password</sys:String>
+    <sys:String x:Key="Str.Outbound.PreSharedKey">Pre-shared key</sys:String>
+    <sys:String x:Key="Str.Outbound.VpnProtocol">VPN protocol</sys:String>
     <sys:String x:Key="Str.Outbound.Ipv6">IPv6</sys:String>
     <sys:String x:Key="Str.Outbound.TestOk">Connection succeeded.</sys:String>
     <sys:String x:Key="Str.Outbound.TestFailed">Connection failed:</sys:String>
-    <sys:String x:Key="Str.Outbound.Hint">Direct and Block always exist. Only SOCKS5 can carry UDP. For a VPN, the URL box is the path to a WireGuard .conf file.</sys:String>
+    <sys:String x:Key="Str.Outbound.Hint">Direct and Block always exist. For a VPN the URL box is either a configuration file (.ovpn, .conf, .vpn) or the server itself, as in sstp://vpn.example.com:443 — see the README. A .conf runs on wireproxy and carries no UDP; every other VPN runs in this process and does.</sys:String>
 
     <sys:String x:Key="Str.Vpn.Header">VPN tunnels</sys:String>
     <sys:String x:Key="Str.Vpn.Connecting">connecting</sys:String>

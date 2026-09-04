@@ -44,10 +44,12 @@
     <sys:String x:Key="Str.Outbound.Url">URL</sys:String>
     <sys:String x:Key="Str.Outbound.Username">Tài khoản</sys:String>
     <sys:String x:Key="Str.Outbound.Password">Mật khẩu</sys:String>
+    <sys:String x:Key="Str.Outbound.PreSharedKey">Khoá chung</sys:String>
+    <sys:String x:Key="Str.Outbound.VpnProtocol">Giao thức VPN</sys:String>
     <sys:String x:Key="Str.Outbound.Ipv6">IPv6</sys:String>
     <sys:String x:Key="Str.Outbound.TestOk">Kết nối thành công.</sys:String>
     <sys:String x:Key="Str.Outbound.TestFailed">Kết nối thất bại:</sys:String>
-    <sys:String x:Key="Str.Outbound.Hint">Direct và Block luôn tồn tại. Chỉ SOCKS5 chở được UDP. Với VPN, ô URL là đường dẫn tới file .conf WireGuard.</sys:String>
+    <sys:String x:Key="Str.Outbound.Hint">Direct và Block luôn tồn tại. Với VPN, ô URL là file cấu hình (.ovpn, .conf, .vpn) hoặc chính máy chủ, dạng sstp://vpn.example.com:443 — xem README. File .conf chạy bằng wireproxy nên không chở UDP; VPN loại khác chạy trong tiến trình này thì chở được.</sys:String>
 
     <sys:String x:Key="Str.Vpn.Header">Đường hầm VPN</sys:String>
     <sys:String x:Key="Str.Vpn.Connecting">đang kết nối</sys:String>
