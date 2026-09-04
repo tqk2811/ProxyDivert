@@ -43,6 +43,10 @@
     <SolidColorBrush x:Key="Brush.Danger" Color="#D33A3F"/>
     <SolidColorBrush x:Key="Brush.Info" Color="#2F6FE0"/>
 
+    <!-- Engine switch -->
+    <SolidColorBrush x:Key="Brush.Switch.On" Color="#1DAF66"/>
+    <SolidColorBrush x:Key="Brush.Switch.Off" Color="#B6BECC"/>
+
     <!-- Window caption buttons -->
     <SolidColorBrush x:Key="Brush.WindowButton.Foreground" Color="#4A5160"/>
     <SolidColorBrush x:Key="Brush.WindowButton.Hover" Color="#E6E9F0"/>

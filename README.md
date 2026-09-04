@@ -59,11 +59,20 @@ with DPAPI, so only the Windows account that saved them can read them back.
 
 ## Language and theme
 
+The window draws its own title bar rather than using the system one, so that strip carries the tab
+headers, the engine switch and the appearance switches instead of sitting empty. It drags,
+double-clicks to maximize and resizes from the edges exactly as a normal window does; minimize,
+maximize and close are at the far right where they always were.
+
+The engine itself is one switch there rather than a Start button, a Stop button and a badge saying
+which of them applies. Throwing it starts or stops the redirect; if the start fails — no
+Administrator rights, most often — the knob goes back and the reason appears under the title bar.
+
 The window speaks English or Vietnamese, and comes in light, dark, or whatever Windows is set to.
-Both switches sit at the right of the command bar — a drop-down for the language, and next to it a
-button that cycles System → Light → Dark — and both are on the **Settings** tab as well. A change
-applies immediately and is written to the configuration file there and then, so it is still there
-the next time you start; the Save button is for the settings that go into the engine, not for these.
+Both switches sit in that title bar — a drop-down for the language, and next to it a button that
+cycles System → Light → Dark — and both are on the **Settings** tab as well. A change applies
+immediately and is written to the configuration file there and then, so it is still there the next
+time you start; the Save button is for the settings that go into the engine, not for these.
 
 `System` means the machine decides. The language follows the Windows UI culture — Vietnamese when
 that is what it says, English otherwise — and the theme follows the Windows app colour, changing

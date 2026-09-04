@@ -7,64 +7,88 @@
         Background="{DynamicResource Brush.Window.Background}"
         TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
 
-    <DockPanel>
-        <!-- ==== command bar ==== -->
-        <Border DockPanel.Dock="Top" Padding="10,8"
-                Background="{DynamicResource Brush.TitleBar.Background}"
-                BorderBrush="{DynamicResource Brush.Surface.BorderBrush}" BorderThickness="0,0,0,1">
-            <DockPanel>
-            <!-- Appearance switches sit on the right, out of the way of the engine controls but
-                 reachable from every tab — burying them in Settings would mean opening a tab to
-                 change how the window looks. -->
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                <ComboBox Width="150" VerticalAlignment="Center"
-                          ItemsSource="{Binding Settings.Languages}"
-                          SelectedItem="{Binding Settings.Language}"
-                          ItemTemplate="{StaticResource LanguageItemTemplate}"
-                          ToolTip="{DynamicResource Str.Settings.Language}"/>
-                <Button Style="{StaticResource IconButton}" Margin="6,0,0,0" VerticalAlignment="Center"
-                        Command="{Binding ToggleThemeCommand}" ToolTip="{Binding ThemeTooltip}">
-                    <TextBlock Text="{Binding ThemeGlyph}" FontFamily="Segoe MDL2 Assets" FontSize="15"/>
-                </Button>
-            </StackPanel>
+    <!-- The system title bar is replaced by the row below, so the tab strip and the appearance
+         switches can live in the space it was wasting. CaptionHeight must match that row's height
+         exactly: it is what the window treats as draggable, and anything interactive inside it has
+         to say IsHitTestVisibleInChrome or a click on it would drag the window instead. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="44" ResizeBorderThickness="6" GlassFrameThickness="0"
+                      CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
 
-            <StackPanel Orientation="Horizontal">
-                <Button Content="{DynamicResource Str.App.Start}" Style="{StaticResource AccentButton}"
-                        Command="{Binding StartCommand}" MinWidth="90"
-                        IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBool}}"/>
-                <Button Content="{DynamicResource Str.App.Stop}" Margin="8,0,0,0"
-                        Command="{Binding StopCommand}" MinWidth="90"
-                        IsEnabled="{Binding IsRunning}"/>
+    <Grid>
+        <TabControl>
+            <TabControl.Template>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="44"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
 
-                <Border Margin="16,0,0,0" Padding="10,3" CornerRadius="10"
-                        VerticalAlignment="Center"
-                        Background="{DynamicResource Brush.Surface.Alt}">
-                    <TextBlock VerticalAlignment="Center">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-                                <Setter Property="Text" Value="{DynamicResource Str.App.Stopped}"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                        <Setter Property="Text" Value="{DynamicResource Str.App.Running}"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Border>
+                        <!-- ==== title bar: app name, tabs, and room for the overlay ==== -->
+                        <Grid Grid.Row="0" Background="{DynamicResource Brush.TitleBar.Background}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <!-- Kept clear for the buttons overlaid on top; they are outside
+                                     this template so they can sit above the tab strip. -->
+                                <ColumnDefinition Width="336"/>
+                            </Grid.ColumnDefinitions>
 
-                <TextBlock Style="{StaticResource Subtle}" Margin="16,0,0,0" VerticalAlignment="Center"
-                           Text="{DynamicResource Str.Warn.Admin}"
-                           Visibility="{Binding IsElevated, Converter={StaticResource FalseToVisible}}"/>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                        VerticalAlignment="Center" Margin="16,0,18,0">
+                                <TextBlock Text="{DynamicResource Str.App.Title}"
+                                           FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
 
-                <TextBlock Style="{StaticResource Subtle}" Margin="16,0,0,0" VerticalAlignment="Center"
-                           Foreground="{DynamicResource Brush.Danger}"
-                           Text="{Binding StatusMessage}"/>
-            </StackPanel>
-            </DockPanel>
-        </Border>
+                                <!-- The engine switch. Its checked state is read from the engine
+                                     rather than owned by the control, so a Start that fails leaves
+                                     the knob where it was instead of lying about being on. -->
+                                <ToggleButton Margin="14,0,0,0" VerticalAlignment="Center"
+                                              IsChecked="{Binding IsRunning, Mode=OneWay}"
+                                              Command="{Binding ToggleEngineCommand}"
+                                              WindowChrome.IsHitTestVisibleInChrome="True">
+                                    <ToggleButton.Style>
+                                        <Style TargetType="ToggleButton" BasedOn="{StaticResource ToggleSwitch}">
+                                            <Setter Property="ToolTip" Value="{DynamicResource Str.App.Stopped}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                    <Setter Property="ToolTip" Value="{DynamicResource Str.App.Running}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ToggleButton.Style>
+                                </ToggleButton>
+                            </StackPanel>
 
-        <TabControl Margin="8" Background="Transparent" BorderThickness="0">
+                            <TabPanel Grid.Column="1" IsItemsHost="True" VerticalAlignment="Center"
+                                      HorizontalAlignment="Left"
+                                      WindowChrome.IsHitTestVisibleInChrome="True"/>
+                        </Grid>
+
+                        <!-- ==== notices: only present when there is something to say ==== -->
+                        <Border Grid.Row="1" Padding="16,6"
+                                Background="{DynamicResource Brush.TitleBar.Background}"
+                                BorderBrush="{DynamicResource Brush.Surface.BorderBrush}"
+                                BorderThickness="0,0,0,1"
+                                Visibility="{Binding HasNotice, Converter={StaticResource TrueToVisible}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Subtle}" VerticalAlignment="Center"
+                                           Text="{DynamicResource Str.Warn.Admin}"
+                                           Visibility="{Binding IsElevated, Converter={StaticResource FalseToVisible}}"/>
+
+                                <TextBlock Style="{StaticResource Subtle}" Margin="16,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Brush.Danger}"
+                                           Text="{Binding StatusMessage}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <ContentPresenter Grid.Row="2" ContentSource="SelectedContent" Margin="8"/>
+                    </Grid>
+                </ControlTemplate>
+            </TabControl.Template>
+
             <TabItem Header="{DynamicResource Str.Tab.Processes}">
                 <views:ProcessesView DataContext="{Binding Processes}"/>
             </TabItem>
@@ -84,5 +108,43 @@
                 <views:SettingsView DataContext="{Binding Settings}"/>
             </TabItem>
         </TabControl>
-    </DockPanel>
+
+        <!-- ==== overlaid top-right: appearance switches, then the window buttons ==== -->
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right"
+                    Height="44" WindowChrome.IsHitTestVisibleInChrome="True">
+            <ComboBox Width="150" VerticalAlignment="Center"
+                      ItemsSource="{Binding Settings.Languages}"
+                      SelectedItem="{Binding Settings.Language}"
+                      ItemTemplate="{StaticResource LanguageItemTemplate}"
+                      ToolTip="{DynamicResource Str.Settings.Language}"/>
+            <Button Style="{StaticResource IconButton}" Margin="6,0,4,0" VerticalAlignment="Center"
+                    Command="{Binding ToggleThemeCommand}" ToolTip="{Binding ThemeTooltip}">
+                <TextBlock Text="{Binding ThemeGlyph}" FontFamily="Segoe MDL2 Assets" FontSize="15"/>
+            </Button>
+
+            <Button Style="{StaticResource WindowControlButton}" VerticalAlignment="Center" Click="Minimize_Click">
+                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE921;" FontSize="10"/>
+            </Button>
+            <Button Style="{StaticResource WindowControlButton}" VerticalAlignment="Center" Click="Maximize_Click">
+                <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                            <!-- E922 maximize, E923 restore: the glyph has to say which one the
+                                 click will do, or a maximized window still offers to maximize. -->
+                            <Setter Property="Text" Value="&#xE922;"/>
+                            <Style.Triggers>
+                                <DataTrigger Value="Maximized"
+                                             Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}">
+                                    <Setter Property="Text" Value="&#xE923;"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Button>
+            <Button Style="{StaticResource WindowCloseButton}" VerticalAlignment="Center" Click="Close_Click">
+                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8BB;" FontSize="10"/>
+            </Button>
+        </StackPanel>
+    </Grid>
 </Window>

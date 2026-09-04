@@ -133,3 +133,7 @@ Hướng chảy dữ liệu của một data-binding WPF: `OneWay` chỉ đọc 
 ## Converter và MultiBinding
 
 `IValueConverter` biến giá trị nguồn thành thứ hiển thị được (vd giá trị enum → chuỗi đã dịch). Khác `DynamicResource`, kết quả của converter KHÔNG tự cập nhật khi từ điển chuỗi bị hoán đổi, vì nó không phải tham chiếu tài nguyên. `MultiBinding` gộp nhiều nguồn vào một binding qua `IMultiValueConverter`; cắm thêm một nguồn "phiên bản ngôn ngữ" vào đó là cách bắt WPF chạy lại converter mà không phải đụng vào `ItemsSource`.
+
+## WindowChrome (thanh tiêu đề tự vẽ)
+
+Lớp WPF cho phép thay thanh tiêu đề hệ thống bằng nội dung của chính cửa sổ, mà vẫn giữ nguyên hành vi cửa sổ thật: kéo, snap, bấm đúp phóng to, kéo cạnh đổi kích thước, và không đè lên thanh tác vụ khi maximize. `CaptionHeight` là chiều cao dải được coi là "thanh tiêu đề" — phải khớp đúng chiều cao hàng bạn vẽ. Mọi control có thể bấm nằm trong dải đó phải đặt `WindowChrome.IsHitTestVisibleInChrome="True"`, nếu không cú bấm bị hiểu thành kéo cửa sổ.

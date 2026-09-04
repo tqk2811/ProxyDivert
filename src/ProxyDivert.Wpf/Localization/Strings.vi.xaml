@@ -6,8 +6,6 @@
     <sys:String x:Key="Str._Marker">vi</sys:String>
 
     <sys:String x:Key="Str.App.Title">ProxyDivert</sys:String>
-    <sys:String x:Key="Str.App.Start">Chạy</sys:String>
-    <sys:String x:Key="Str.App.Stop">Dừng</sys:String>
     <sys:String x:Key="Str.App.Running">Đang chạy</sys:String>
     <sys:String x:Key="Str.App.Stopped">Đã dừng</sys:String>
     <sys:String x:Key="Str.App.Save">Lưu</sys:String>

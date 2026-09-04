@@ -58,9 +58,17 @@ Cấu hình lưu ở `proxydivert.config.json` cạnh exe; mật khẩu proxy đ
 
 ## Ngôn ngữ và giao diện
 
+Cửa sổ tự vẽ thanh tiêu đề thay vì dùng thanh của hệ thống, nên dải đó chở luôn tên các tab, công tắc
+engine và hai công tắc giao diện thay vì bỏ trống. Nó vẫn kéo được, bấm đúp để phóng to, kéo cạnh để
+đổi kích thước y như cửa sổ thường; ba nút thu nhỏ / phóng to / đóng vẫn nằm ở góc phải như mọi khi.
+
+Bản thân engine giờ là một công tắc trên đó, thay cho cặp nút Chạy/Dừng kèm huy hiệu báo cái nào đang
+đúng. Gạt là bật hoặc tắt chuyển hướng; nếu bật hỏng — hay gặp nhất là thiếu quyền Administrator —
+thì knob quay về chỗ cũ và lý do hiện ngay dưới thanh tiêu đề.
+
 Cửa sổ có tiếng Việt và tiếng Anh, có nền sáng, nền tối, hoặc theo đúng thiết lập của Windows. Cả hai
-công tắc nằm ở bên phải thanh lệnh — ô chọn ngôn ngữ, và cạnh nó là nút xoay vòng Theo hệ thống →
-Sáng → Tối — đồng thời cũng có trong tab **Cài đặt**. Đổi là ăn ngay và được ghi thẳng vào file cấu
+công tắc nằm ngay trên thanh tiêu đề đó — ô chọn ngôn ngữ, và cạnh nó là nút xoay vòng Theo hệ thống
+→ Sáng → Tối — đồng thời cũng có trong tab **Cài đặt**. Đổi là ăn ngay và được ghi thẳng vào file cấu
 hình, nên lần chạy sau vẫn giữ nguyên; nút Lưu dành cho những thiết lập đi vào engine, không phải cho
 hai thứ này.
 

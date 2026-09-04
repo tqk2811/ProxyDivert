@@ -25,7 +25,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private bool _isRunning;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasNotice))]
     private string? _statusMessage;
+
+    /// <summary>Whether there is anything for the notice strip to say; it is hidden otherwise.</summary>
+    public bool HasNotice => !IsElevated || !string.IsNullOrWhiteSpace(StatusMessage);
 
     // Segoe MDL2 Assets: E713 Settings (System), E706 Brightness (Light), E708 QuietHours (Dark).
     [ObservableProperty]
@@ -84,7 +88,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             "Str.Theme.Tooltip", LocalizationManager.EnumText(ThemeManager.CurrentMode));
     }
 
+    // One switch rather than two buttons, so there is one command: what it does is decided by what
+    // the engine is doing now, not by which control was pressed.
     [RelayCommand]
+    private void ToggleEngine()
+    {
+        if (IsRunning) Stop();
+        else Start();
+
+        // The switch moved itself the moment it was clicked. If Start threw, IsRunning never
+        // changed and nothing would push the knob back — so say so explicitly either way.
+        OnPropertyChanged(nameof(IsRunning));
+    }
+
     private void Start()
     {
         if (IsRunning) return;
@@ -103,7 +119,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    [RelayCommand]
     private void Stop()
     {
         if (!IsRunning) return;
