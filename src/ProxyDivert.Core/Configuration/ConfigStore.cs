@@ -93,7 +93,10 @@ public sealed class ConfigStore
     private static void DecryptSecrets(AppConfig config)
     {
         foreach (Outbound outbound in config.Outbounds)
+        {
             outbound.Password = SecretProtector.Unprotect(outbound.Password);
+            outbound.PreSharedKey = SecretProtector.Unprotect(outbound.PreSharedKey);
+        }
     }
 
     private static AppConfig CloneWithEncryptedSecrets(AppConfig config)
@@ -103,7 +106,12 @@ public sealed class ConfigStore
         string json = JsonSerializer.Serialize(config, SerializerOptions);
         AppConfig clone = JsonSerializer.Deserialize<AppConfig>(json, SerializerOptions)!;
         foreach (Outbound outbound in clone.Outbounds)
+        {
             outbound.Password = SecretProtector.Protect(outbound.Password);
+            // The IPsec group key opens the tunnel just as a password does, so it gets the same
+            // treatment rather than sitting in the JSON in the clear.
+            outbound.PreSharedKey = SecretProtector.Protect(outbound.PreSharedKey);
+        }
         return clone;
     }
 
