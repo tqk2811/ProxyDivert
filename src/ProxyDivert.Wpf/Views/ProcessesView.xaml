@@ -75,7 +75,7 @@
                         <DataGridTextColumn Header="{DynamicResource Str.Process.Pid}" Binding="{Binding Id}" Width="70"/>
                         <DataGridTextColumn Header="{DynamicResource Str.App.Name}" Binding="{Binding Name}" Width="180"/>
                         <DataGridCheckBoxColumn Header="{DynamicResource Str.Process.Attached}"
-                                                Binding="{Binding IsAttached}" Width="110"/>
+                                                Binding="{Binding IsAttached, Mode=OneWay}" Width="110"/>
                         <DataGridTextColumn Header="{DynamicResource Str.Process.Path}" Binding="{Binding Path}" Width="*"/>
                     </DataGrid.Columns>
                 </DataGrid>
