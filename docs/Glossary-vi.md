@@ -129,3 +129,7 @@ Mọi driver của TqkLibrary.VpnClient đều kế thừa `ReconnectingVpnConne
 ## Chế độ binding (OneWay / TwoWay)
 
 Hướng chảy dữ liệu của một data-binding WPF: `OneWay` chỉ đọc từ ViewModel ra giao diện, `TwoWay` ghi ngược lại. Mỗi dependency property có mặc định riêng — `TextBlock.Text` mặc định OneWay, còn `CheckBox.IsChecked` mặc định **TwoWay**, nên `DataGridCheckBoxColumn` trỏ vào một property chỉ có `get` sẽ ném `InvalidOperationException` ngay lúc gắn binding. Sửa bằng `Mode=OneWay` tường minh.
+
+## Converter và MultiBinding
+
+`IValueConverter` biến giá trị nguồn thành thứ hiển thị được (vd giá trị enum → chuỗi đã dịch). Khác `DynamicResource`, kết quả của converter KHÔNG tự cập nhật khi từ điển chuỗi bị hoán đổi, vì nó không phải tham chiếu tài nguyên. `MultiBinding` gộp nhiều nguồn vào một binding qua `IMultiValueConverter`; cắm thêm một nguồn "phiên bản ngôn ngữ" vào đó là cách bắt WPF chạy lại converter mà không phải đụng vào `ItemsSource`.

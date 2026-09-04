@@ -57,6 +57,22 @@ and `WinDivert64.sys` copied next to it.
 Configuration lives in `proxydivert.config.json` beside the executable; proxy passwords are encrypted
 with DPAPI, so only the Windows account that saved them can read them back.
 
+## Language and theme
+
+The window speaks English or Vietnamese, and comes in light, dark, or whatever Windows is set to.
+Both switches sit at the right of the command bar — a drop-down for the language, and next to it a
+button that cycles System → Light → Dark — and both are on the **Settings** tab as well. A change
+applies immediately and is written to the configuration file there and then, so it is still there
+the next time you start; the Save button is for the settings that go into the engine, not for these.
+
+`System` means the machine decides. The language follows the Windows UI culture — Vietnamese when
+that is what it says, English otherwise — and the theme follows the Windows app colour, changing
+live when you change it in Windows.
+
+Every piece of text is translated, the values inside the drop-downs included: a matcher type reads
+"Domain suffix" or "Hậu tố tên miền" rather than the identifier `DomainSuffix`. Protocol names
+(SOCKS5, IKEv2, WireGuard) stay as they are, because they are names rather than words.
+
 ## Current limits
 
 - IPv6 is redirected like IPv4 (default `Redirect`, see [Ipv6Mode](docs/Glossary-vi.md#L89) in

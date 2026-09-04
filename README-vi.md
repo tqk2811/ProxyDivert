@@ -56,6 +56,22 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
 Cấu hình lưu ở `proxydivert.config.json` cạnh exe; mật khẩu proxy được mã hoá bằng DPAPI
 (chỉ tài khoản Windows đã lưu mới đọc lại được).
 
+## Ngôn ngữ và giao diện
+
+Cửa sổ có tiếng Việt và tiếng Anh, có nền sáng, nền tối, hoặc theo đúng thiết lập của Windows. Cả hai
+công tắc nằm ở bên phải thanh lệnh — ô chọn ngôn ngữ, và cạnh nó là nút xoay vòng Theo hệ thống →
+Sáng → Tối — đồng thời cũng có trong tab **Cài đặt**. Đổi là ăn ngay và được ghi thẳng vào file cấu
+hình, nên lần chạy sau vẫn giữ nguyên; nút Lưu dành cho những thiết lập đi vào engine, không phải cho
+hai thứ này.
+
+`Theo hệ thống` nghĩa là để máy quyết định: ngôn ngữ đọc theo UI culture của Windows (tiếng Việt nếu
+Windows đang tiếng Việt, còn lại là tiếng Anh), còn giao diện bám theo màu ứng dụng của Windows và
+đổi ngay khi bạn đổi bên Windows.
+
+Mọi chữ đều được dịch, kể cả giá trị bên trong các ô chọn: kiểu khớp hiện "Hậu tố tên miền" chứ không
+phải định danh `DomainSuffix`. Riêng tên giao thức (SOCKS5, IKEv2, WireGuard) giữ nguyên, vì đó là
+tên riêng chứ không phải từ để dịch.
+
 ## Giới hạn hiện tại
 
 - IPv6 được chuyển hướng như IPv4 (mặc định `Redirect`, xem [Ipv6Mode](docs/Glossary-vi.md#L89) trong Cài đặt).
