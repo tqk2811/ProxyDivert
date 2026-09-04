@@ -29,8 +29,7 @@
     <sys:String x:Key="Str.Tab.Settings">Settings</sys:String>
 
     <sys:String x:Key="Str.Process.Rules">Process rules</sys:String>
-    <sys:String x:Key="Str.Process.Running">Running processes</sys:String>
-    <sys:String x:Key="Str.Process.Attached">Redirected</sys:String>
+    <sys:String x:Key="Str.Process.Applied">Processes being redirected</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Children</sys:String>
     <sys:String x:Key="Str.Process.Policy">Policy</sys:String>
     <sys:String x:Key="Str.Process.Pid">PID</sys:String>
@@ -38,6 +37,8 @@
     <sys:String x:Key="Str.Process.AddFromSelection">Add rule from selection</sys:String>
     <sys:String x:Key="Str.Process.Launch">Launch suspended…</sys:String>
     <sys:String x:Key="Str.Process.LaunchHint">Launching a program suspended lets the redirect attach before its first connection, so nothing escapes at startup.</sys:String>
+    <sys:String x:Key="Str.Process.Inherited">child</sys:String>
+    <sys:String x:Key="Str.Process.NoneApplied">Nothing is being redirected. Start the engine, and every process a rule claims turns up here.</sys:String>
 
     <sys:String x:Key="Str.Outbound.Url">URL</sys:String>
     <sys:String x:Key="Str.Outbound.Username">Username</sys:String>

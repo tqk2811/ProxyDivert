@@ -55,32 +55,65 @@
         <!-- ==== running processes ==== -->
         <Border Style="{StaticResource Card}" Grid.Row="2">
             <DockPanel>
-                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                    <TextBlock Style="{StaticResource Heading}" Text="{DynamicResource Str.Process.Running}"/>
-                    <TextBox Text="{Binding ProcessFilter, UpdateSourceTrigger=PropertyChanged, Delay=250}"
-                             Width="200" Margin="12,0,0,0" HorizontalAlignment="Left"/>
-                    <TextBlock/>
-                </DockPanel>
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Heading}"
+                           Text="{DynamicResource Str.Process.Applied}" Margin="0,0,0,6"/>
 
                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
-                    <Button Content="{DynamicResource Str.App.Refresh}" Command="{Binding RefreshProcessesCommand}" MinWidth="90"/>
+                    <Button Content="{DynamicResource Str.App.Refresh}" Command="{Binding RefreshAppliedCommand}" MinWidth="90"/>
                     <Button Content="{DynamicResource Str.Process.AddFromSelection}"
                             Command="{Binding AddRuleFromSelectionCommand}" Margin="8,0,0,0"/>
                     <Button Content="{DynamicResource Str.Process.Launch}"
                             Command="{Binding LaunchSuspendedCommand}" Margin="8,0,0,0"/>
                 </StackPanel>
 
-                <DataGrid ItemsSource="{Binding RunningProcesses}" SelectedItem="{Binding SelectedProcess}"
-                          AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
-                          HeadersVisibility="Column">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="{DynamicResource Str.Process.Pid}" Binding="{Binding Id}" Width="70"/>
-                        <DataGridTextColumn Header="{DynamicResource Str.App.Name}" Binding="{Binding Name}" Width="180"/>
-                        <DataGridCheckBoxColumn Header="{DynamicResource Str.Process.Attached}"
-                                                Binding="{Binding IsAttached, Mode=OneWay}" Width="110"/>
-                        <DataGridTextColumn Header="{DynamicResource Str.Process.Path}" Binding="{Binding Path}" Width="*"/>
-                    </DataGrid.Columns>
-                </DataGrid>
+                <!-- Column headings for the tree below. They cannot line up with the deeper rows —
+                     a child is indented, that is the point of a tree — so they label the roots. -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="18,0,0,4">
+                    <TextBlock Style="{StaticResource Subtle}" Width="64" Text="{DynamicResource Str.Process.Pid}"/>
+                    <TextBlock Style="{StaticResource Subtle}" Width="190" Text="{DynamicResource Str.App.Name}"/>
+                    <TextBlock Style="{StaticResource Subtle}" Width="150" Text="{DynamicResource Str.Process.Policy}"/>
+                    <TextBlock Style="{StaticResource Subtle}" Text="{DynamicResource Str.Process.Path}"/>
+                </StackPanel>
+
+                <Grid>
+                    <TreeView ItemsSource="{Binding AppliedProcesses}"
+                              SelectedItemChanged="AppliedProcesses_SelectedItemChanged">
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Id}" Width="64"
+                                               Foreground="{DynamicResource Brush.Text.Secondary}"/>
+                                    <TextBlock Text="{Binding Name}" Width="190" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Policy}" Width="150"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <Border CornerRadius="8" Padding="7,1" Margin="0,0,8,0"
+                                            VerticalAlignment="Center"
+                                            Background="{DynamicResource Brush.Accent.Subtle}"
+                                            Visibility="{Binding IsChild, Converter={StaticResource TrueToVisible}}">
+                                        <TextBlock Text="{DynamicResource Str.Process.Inherited}" FontSize="11"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding Path}" Style="{StaticResource Subtle}"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+
+                    <TextBlock Margin="18,4,0,0" Text="{DynamicResource Str.Process.NoneApplied}"
+                               VerticalAlignment="Top" HorizontalAlignment="Left">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Subtle}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding AppliedProcesses.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
             </DockPanel>
         </Border>
     </Grid>

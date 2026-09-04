@@ -157,6 +157,97 @@
         </Setter>
     </Style>
 
+    <!-- ===================== TREE VIEW ===================== -->
+    <!-- The stock TreeView paints itself white from the system theme, which is a hole in the dark
+         palette, and its expander arrow is a fixed grey that vanishes on either background. Both
+         are retemplated here rather than tinted. -->
+    <Style x:Key="TreeExpander" TargetType="ToggleButton">
+        <Setter Property="Width" Value="16"/>
+        <Setter Property="Height" Value="16"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border Background="Transparent">
+                        <Path x:Name="arrow" Data="M 0,0 L 4,4 L 0,8 Z"
+                              Fill="{DynamicResource Brush.Text.Secondary}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              RenderTransformOrigin="0.5,0.5"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="arrow" Property="RenderTransform">
+                                <Setter.Value>
+                                    <RotateTransform Angle="90"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="arrow" Property="Fill" Value="{DynamicResource Brush.Text.Primary}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="TreeView">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+    </Style>
+
+    <Style TargetType="TreeViewItem">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}"/>
+        <!-- Expanded by default: a child process is the interesting part of this list, and having
+             to open every root to find out what came along would defeat showing a tree at all. -->
+        <Setter Property="IsExpanded" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TreeViewItem">
+                    <StackPanel>
+                        <Border x:Name="row" CornerRadius="4" Padding="2,3" Background="Transparent">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="18"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <ToggleButton x:Name="expander" Grid.Column="0" ClickMode="Press"
+                                              Style="{StaticResource TreeExpander}"
+                                              IsChecked="{Binding IsExpanded, Mode=TwoWay,
+                                                  RelativeSource={RelativeSource TemplatedParent}}"/>
+                                <ContentPresenter x:Name="PART_Header" Grid.Column="1"
+                                                  ContentSource="Header" HorizontalAlignment="Left"/>
+                            </Grid>
+                        </Border>
+                        <ItemsPresenter x:Name="items" Margin="18,0,0,0"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="False">
+                            <Setter TargetName="items" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        <Trigger Property="HasItems" Value="False">
+                            <Setter TargetName="expander" Property="Visibility" Value="Hidden"/>
+                        </Trigger>
+                        <!-- SourceName, not the item's own IsMouseOver: that one is true for every
+                             ancestor of the row under the cursor, so the whole branch would light up. -->
+                        <Trigger SourceName="row" Property="IsMouseOver" Value="True">
+                            <Setter TargetName="row" Property="Background"
+                                    Value="{DynamicResource Brush.Control.Hover.Background}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="row" Property="Background"
+                                    Value="{DynamicResource Brush.Accent.Subtle}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ===================== ENGINE SWITCH ===================== -->
     <!-- The engine is one thing that is either on or off, so it gets one control saying which,
          instead of two buttons whose greyed-out state you have to read to work it out. -->

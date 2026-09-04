@@ -55,9 +55,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Settings = new SettingsViewModel(services);
 
         services.Engine.ProcessAttached += _ => Application.Current?.Dispatcher.BeginInvoke(
-            () => Processes.RefreshProcesses());
+            () => Processes.RefreshApplied());
         services.Engine.ProcessDetached += _ => Application.Current?.Dispatcher.BeginInvoke(
-            () => Processes.RefreshProcesses());
+            () => Processes.RefreshApplied());
 
         // The button's tooltip is composed in code rather than written in XAML, so it is one of the
         // few things a dictionary swap does not reach on its own.
@@ -109,6 +109,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             _services.StartEngine();
             IsRunning = true;
             StatusMessage = null;
+            Processes.RefreshApplied();
         }
         catch (Exception ex)
         {
@@ -124,6 +125,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (!IsRunning) return;
         _services.StopEngine();
         IsRunning = false;
+        // Nothing is being redirected any more, so the tree must not keep claiming otherwise.
+        Processes.RefreshApplied();
     }
 
     [RelayCommand]

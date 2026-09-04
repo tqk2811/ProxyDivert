@@ -49,10 +49,12 @@ and `WinDivert64.sys` copied next to it.
 2. **Outbounds** tab: add a proxy (`socks5://host:port`, `http://host:port`) and press **Test**.
 3. **Rules** tab: add a rule to the default policy — say `Wildcard` + `*.google.com` → the proxy you
    just made. Destinations matching no rule take the policy's default outbound (Direct).
-4. **Processes** tab: pick a process and press **Create a rule from the selected row**, or **Launch
-   suspended…** so not one connection escapes while the process starts.
-5. Press **Start** in the top bar. The **Connections** tab lists every connection with its host name,
-   outbound and byte counts.
+4. **Processes** tab: add a rule naming the program — by executable name, full path or wildcard — or
+   press **Launch suspended…** so not one connection escapes while the process starts.
+5. Throw the switch in the title bar. The lower half of the **Processes** tab then shows, as a tree,
+   every process the engine is actually holding, with anything adopted through **Children** nested
+   under the process that spawned it. The **Connections** tab lists every connection with its host
+   name, outbound and byte counts.
 
 Configuration lives in `proxydivert.config.json` beside the executable; proxy passwords are encrypted
 with DPAPI, so only the Windows account that saved them can read them back.

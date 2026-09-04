@@ -6,24 +6,27 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
+using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Wpf.Services;
 using TqkLibrary.WinDivert.ProcessControl;
 using TqkLibrary.WinDivert.ProcessControl.Interfaces;
-using TqkLibrary.WinDivert.ProcessControl.Models;
 
 namespace ProxyDivert.Wpf.ViewModels;
 
-// The Processes tab: which programs get redirected, plus a live view of what is running so a rule
-// can be created from a row instead of typed by hand.
+// The Processes tab: which programs get redirected, and which ones the engine is actually holding
+// right now — shown as a tree, because a process adopted through IncludeChildren only makes sense
+// underneath the process that dragged it in.
 public sealed partial class ProcessesViewModel : ObservableObject
 {
     private readonly AppServices _services;
 
     public ObservableCollection<ProcessRule> Rules { get; } = new ObservableCollection<ProcessRule>();
 
-    public ObservableCollection<ProcessRow> RunningProcesses { get; } = new ObservableCollection<ProcessRow>();
+    /// <summary>Roots of the redirected-process tree; children hang off <see cref="AppliedProcessNode.Children"/>.</summary>
+    public ObservableCollection<AppliedProcessNode> AppliedProcesses { get; }
+        = new ObservableCollection<AppliedProcessNode>();
 
     public ObservableCollection<RoutingPolicy> Policies { get; } = new ObservableCollection<RoutingPolicy>();
 
@@ -33,16 +36,13 @@ public sealed partial class ProcessesViewModel : ObservableObject
     private ProcessRule? _selectedRule;
 
     [ObservableProperty]
-    private ProcessRow? _selectedProcess;
-
-    [ObservableProperty]
-    private string _processFilter = string.Empty;
+    private AppliedProcessNode? _selectedProcess;
 
     public ProcessesViewModel(AppServices services)
     {
         _services = services;
         Reload();
-        RefreshProcesses();
+        RefreshApplied();
     }
 
     public void Reload()
@@ -54,22 +54,41 @@ public sealed partial class ProcessesViewModel : ObservableObject
         foreach (RoutingPolicy policy in _services.Config.Policies) Policies.Add(policy);
     }
 
-    partial void OnProcessFilterChanged(string value) => RefreshProcesses();
-
     [RelayCommand]
-    public void RefreshProcesses()
+    public void RefreshApplied()
     {
-        var attached = new HashSet<uint>(_services.Engine.TrackedProcesses.Select(p => p.ProcessId));
+        AppliedProcesses.Clear();
 
-        RunningProcesses.Clear();
-        foreach (ProcessInfo process in new ProcessFinder().ListAll())
+        Dictionary<Guid, string> policyNames = Policies
+            .GroupBy(p => p.Id)
+            .ToDictionary(g => g.Key, g => g.First().Name);
+
+        List<TrackedProcess> tracked = _services.Engine.TrackedProcesses
+            .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(p => p.ProcessId)
+            .ToList();
+
+        Dictionary<uint, AppliedProcessNode> nodes = tracked.ToDictionary(
+            p => p.ProcessId,
+            p => new AppliedProcessNode(
+                p, policyNames.TryGetValue(p.PolicyId, out string? name) ? name : "—"));
+
+        foreach (TrackedProcess process in tracked)
         {
-            if (!string.IsNullOrWhiteSpace(ProcessFilter)
-                && process.Name.IndexOf(ProcessFilter, StringComparison.OrdinalIgnoreCase) < 0)
+            AppliedProcessNode node = nodes[process.ProcessId];
+
+            // A child only hangs under its parent while that parent is redirected too. When the
+            // parent has already exited the child stands on its own rather than disappearing —
+            // it is still being redirected, which is the whole point of this list.
+            if (process.ParentProcessId != 0
+                && nodes.TryGetValue(process.ParentProcessId, out AppliedProcessNode? parent))
             {
-                continue;
+                parent.Children.Add(node);
             }
-            RunningProcesses.Add(new ProcessRow(process, attached.Contains(process.Id)));
+            else
+            {
+                AppliedProcesses.Add(node);
+            }
         }
     }
 
@@ -95,7 +114,7 @@ public sealed partial class ProcessesViewModel : ObservableObject
     [RelayCommand]
     private void AddRuleFromSelection()
     {
-        ProcessRow? row = SelectedProcess;
+        AppliedProcessNode? row = SelectedProcess;
         RoutingPolicy? policy = Policies.FirstOrDefault();
         if (row is null || policy is null) return;
 
@@ -166,7 +185,7 @@ public sealed partial class ProcessesViewModel : ObservableObject
             // is what closes the SYN race.
             _services.Engine.ForceProcessScan();
             suspended.Resume();
-            RefreshProcesses();
+            RefreshApplied();
         }
         catch (Exception ex)
         {
@@ -178,20 +197,29 @@ public sealed partial class ProcessesViewModel : ObservableObject
         }
     }
 
-    // One row of the running-process list.
-    public sealed class ProcessRow
+    // One process the engine is currently redirecting, plus whatever it dragged in with it.
+    public sealed class AppliedProcessNode
     {
         public uint Id { get; }
         public string Name { get; }
         public string? Path { get; }
-        public bool IsAttached { get; }
 
-        public ProcessRow(ProcessInfo info, bool isAttached)
+        /// <summary>Name of the policy this process routes through.</summary>
+        public string Policy { get; }
+
+        /// <summary>True when no rule named this process: it came along with its parent.</summary>
+        public bool IsChild { get; }
+
+        public ObservableCollection<AppliedProcessNode> Children { get; }
+            = new ObservableCollection<AppliedProcessNode>();
+
+        public AppliedProcessNode(TrackedProcess process, string policyName)
         {
-            Id = info.Id;
-            Name = info.Name;
-            Path = info.ExecutablePath;
-            IsAttached = isAttached;
+            Id = process.ProcessId;
+            Name = process.Name;
+            Path = process.ExecutablePath;
+            Policy = policyName;
+            IsChild = process.IsChild;
         }
     }
 }

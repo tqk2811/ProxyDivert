@@ -29,8 +29,7 @@
     <sys:String x:Key="Str.Tab.Settings">Cài đặt</sys:String>
 
     <sys:String x:Key="Str.Process.Rules">Luật tiến trình</sys:String>
-    <sys:String x:Key="Str.Process.Running">Tiến trình đang chạy</sys:String>
-    <sys:String x:Key="Str.Process.Attached">Đang chuyển hướng</sys:String>
+    <sys:String x:Key="Str.Process.Applied">Tiến trình đang áp dụng</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Cả tiến trình con</sys:String>
     <sys:String x:Key="Str.Process.Policy">Bộ luật</sys:String>
     <sys:String x:Key="Str.Process.Pid">PID</sys:String>
@@ -38,6 +37,8 @@
     <sys:String x:Key="Str.Process.AddFromSelection">Tạo luật từ dòng đang chọn</sys:String>
     <sys:String x:Key="Str.Process.Launch">Chạy ở trạng thái tạm dừng…</sys:String>
     <sys:String x:Key="Str.Process.LaunchHint">Chạy chương trình ở trạng thái tạm dừng để gắn chuyển hướng trước kết nối đầu tiên, không lọt gói nào lúc khởi động.</sys:String>
+    <sys:String x:Key="Str.Process.Inherited">kế thừa</sys:String>
+    <sys:String x:Key="Str.Process.NoneApplied">Chưa áp dụng cho tiến trình nào. Bấm chạy, rồi mọi tiến trình khớp luật sẽ hiện ở đây.</sys:String>
 
     <sys:String x:Key="Str.Outbound.Url">URL</sys:String>
     <sys:String x:Key="Str.Outbound.Username">Tài khoản</sys:String>

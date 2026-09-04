@@ -49,9 +49,11 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
 2. Tab **Đường ra**: thêm proxy (`socks5://host:port`, `http://host:port`), bấm **Thử** để kiểm tra.
 3. Tab **Luật**: thêm luật cho bộ luật mặc định, ví dụ `Wildcard` + `*.google.com` → proxy vừa tạo.
    Đích không khớp luật nào sẽ đi thẳng (đường ra mặc định).
-4. Tab **Tiến trình**: chọn tiến trình trong danh sách rồi bấm **Tạo luật từ dòng đang chọn**
-   (hoặc **Chạy ở trạng thái tạm dừng…** để không lọt kết nối nào lúc khởi động).
-5. Bấm **Chạy** trên thanh trên cùng. Tab **Kết nối** hiện từng kết nối kèm tên miền, đường ra và số byte.
+4. Tab **Tiến trình**: thêm luật gọi tên chương trình — theo tên tệp chạy, đường dẫn đầy đủ hoặc ký
+   tự đại diện — hoặc bấm **Chạy ở trạng thái tạm dừng…** để không lọt kết nối nào lúc khởi động.
+5. Gạt công tắc trên thanh tiêu đề. Nửa dưới tab **Tiến trình** khi đó hiện dạng cây mọi tiến trình
+   engine đang thực sự áp dụng, tiến trình con nhận theo **Cả tiến trình con** nằm lồng dưới tiến
+   trình đã sinh ra nó. Tab **Kết nối** hiện từng kết nối kèm tên miền, đường ra và số byte.
 
 Cấu hình lưu ở `proxydivert.config.json` cạnh exe; mật khẩu proxy được mã hoá bằng DPAPI
 (chỉ tài khoản Windows đã lưu mới đọc lại được).
