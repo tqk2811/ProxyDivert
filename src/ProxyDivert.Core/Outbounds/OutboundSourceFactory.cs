@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Net;
 using Microsoft.Extensions.Logging;
 using System.IO;
@@ -25,7 +26,7 @@ namespace ProxyDivert.Core.Outbounds;
 public sealed class OutboundSourceFactory : IDisposable
 {
     private readonly ILoggerFactory? _loggerFactory;
-    private readonly ConcurrentDictionary<Guid, IProxySource> _cache = new ConcurrentDictionary<Guid, IProxySource>();
+    private readonly ConcurrentDictionary<Guid, CachedSource> _cache = new ConcurrentDictionary<Guid, CachedSource>();
 
     /// <summary>
     /// Where wireproxy.exe lives, for VPN outbounds. Null or empty means "look next to this
@@ -33,7 +34,11 @@ public sealed class OutboundSourceFactory : IDisposable
     /// expects. One setting for the machine rather than one per outbound: it is the same binary
     /// whichever tunnel it runs.
     /// </summary>
-    public string? WireProxyPath { get; set; }
+    /// <remarks>
+    /// Set through <see cref="ApplyOutbounds"/> rather than directly, because changing it makes
+    /// every live VPN instance stale and that has to be noticed in the same step.
+    /// </remarks>
+    public string? WireProxyPath { get; private set; }
 
     public OutboundSourceFactory(ILoggerFactory? loggerFactory = null, string? wireProxyPath = null)
     {
@@ -44,7 +49,50 @@ public sealed class OutboundSourceFactory : IDisposable
     public IProxySource GetOrCreate(Outbound outbound)
     {
         if (outbound is null) throw new ArgumentNullException(nameof(outbound));
-        return _cache.GetOrAdd(outbound.Id, _ => Create(outbound));
+        return _cache.GetOrAdd(
+            outbound.Id,
+            _ => new CachedSource(OutboundSignature.Of(outbound, WireProxyPath), Create(outbound))).Source;
+    }
+
+    /// <summary>
+    /// The live instance of an outbound, or null when nothing has needed it yet. Does not build
+    /// one — a caller that wants it built asks <see cref="GetOrCreate"/>.
+    /// </summary>
+    public IProxySource? Find(Guid outboundId)
+        => _cache.TryGetValue(outboundId, out CachedSource? cached) ? cached.Source : null;
+
+    /// <summary>
+    /// Reconciles the cache with an edited configuration, disposing only the instances that are
+    /// now wrong, and returns the ids that were dropped.
+    /// </summary>
+    /// <remarks>
+    /// The alternative — <see cref="InvalidateAll"/> on every save — is what made saving an
+    /// unrelated setting tear down a running VPN tunnel and re-handshake it. Everything keyed by
+    /// outbound elsewhere (learned IPv6 capability, UDP tunnels) is invalidated from the returned
+    /// set, so those stay in step without also being thrown away wholesale.
+    /// </remarks>
+    public IReadOnlyCollection<Guid> ApplyOutbounds(IEnumerable<Outbound> outbounds, string? wireProxyPath)
+    {
+        if (outbounds is null) throw new ArgumentNullException(nameof(outbounds));
+
+        WireProxyPath = wireProxyPath;
+
+        var current = new Dictionary<Guid, Outbound>();
+        foreach (Outbound outbound in outbounds) current[outbound.Id] = outbound;
+
+        var invalidated = new List<Guid>();
+        foreach (var kv in _cache)
+        {
+            // An outbound that has disappeared from the configuration cannot be routed to any
+            // more, so its instance is only holding a subprocess or a socket open.
+            bool stale = !current.TryGetValue(kv.Key, out Outbound? outbound)
+                || !string.Equals(kv.Value.Signature, OutboundSignature.Of(outbound, wireProxyPath), StringComparison.Ordinal);
+            if (!stale) continue;
+
+            Invalidate(kv.Key);
+            invalidated.Add(kv.Key);
+        }
+        return invalidated;
     }
 
     /// <summary>
@@ -56,8 +104,8 @@ public sealed class OutboundSourceFactory : IDisposable
     /// </summary>
     public void SetIpv6Support(Guid outboundId, bool supported)
     {
-        if (_cache.TryGetValue(outboundId, out IProxySource? source))
-            ApplyIpv6Support(source, supported);
+        if (_cache.TryGetValue(outboundId, out CachedSource? cached))
+            ApplyIpv6Support(cached.Source, supported);
     }
 
     private static void ApplyIpv6Support(IProxySource source, bool supported)
@@ -75,12 +123,12 @@ public sealed class OutboundSourceFactory : IDisposable
     // Call after the user edits or removes an outbound.
     public void Invalidate(Guid outboundId)
     {
-        if (_cache.TryRemove(outboundId, out IProxySource? source)) Dispose(source);
+        if (_cache.TryRemove(outboundId, out CachedSource? cached)) Dispose(cached.Source);
     }
 
     public void InvalidateAll()
     {
-        foreach (var kv in _cache) Dispose(kv.Value);
+        foreach (var kv in _cache) Dispose(kv.Value.Source);
         _cache.Clear();
     }
 
@@ -237,4 +285,19 @@ public sealed class OutboundSourceFactory : IDisposable
     }
 
     public void Dispose() => InvalidateAll();
+
+    // The instance plus what it was built from, so a later configuration can be compared against
+    // it without rebuilding anything.
+    private sealed class CachedSource
+    {
+        public CachedSource(string signature, IProxySource source)
+        {
+            Signature = signature;
+            Source = source;
+        }
+
+        public string Signature { get; }
+
+        public IProxySource Source { get; }
+    }
 }
