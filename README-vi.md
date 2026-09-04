@@ -38,7 +38,7 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
 |---|---|
 | `libs/TqkLibrary.WinDivert` | submodule — lõi chuyển hướng gói tin theo tiến trình (5 project: core, `.Redirect`, `.SecureDns`, `.Inspection`, `.ProcessControl`) |
 | `libs/TqkLibrary.Proxy` | submodule — `IProxySource` cho HTTP/SOCKS4/SOCKS5/SSH/WireGuard |
-| `libs/TqkLibrary.VpnClient` | submodule — TCP/IP stack userspace và driver các giao thức VPN (OpenVPN, SSTP, L2TP/IPsec, IKEv2, SoftEther, …). Mới thêm cho đợt VPN tiếp theo, chưa project nào tham chiếu tới. |
+| `libs/TqkLibrary.VpnClient` | submodule — [stack TCP/IP userspace](docs/Glossary-vi.md#L73) và driver các giao thức VPN. Project `TqkLibrary.VpnClient.Tunnels` trong đó quay số sáu giao thức bên dưới và trả về đường hầm đã lên. |
 | `src/ProxyDivert.Core` | engine, model, service (không phụ thuộc WPF) |
 | `src/ProxyDivert.Wpf` | giao diện |
 | `src/ProxyDivert.Core.Tests` | unit test |
@@ -72,26 +72,91 @@ Cấu hình lưu ở `proxydivert.config.json` cạnh exe; mật khẩu proxy đ
 - Kết nối đã mở TRƯỚC khi tiến trình được gắn sẽ **đi thẳng** (không chuyển hướng) và ghi rõ trong log:
   chuyển hướng nửa chừng một kết nối đang chạy sẽ làm hỏng hẳn kết nối đó. Muốn không lọt gói nào
   thì dùng "Chạy ở trạng thái tạm dừng".
-- UDP chỉ đi qua proxy được với **SOCKS5**; đường ra khác thì UDP bị chặn chứ không rò ra ngoài.
-  QUIC (UDP/443) chặn mặc định để trình duyệt lùi về TCP.
+- UDP chỉ qua proxy được với **SOCKS5**, và chỉ qua VPN được khi VPN đó chạy trong chính tiến trình
+  này (tức là mọi loại trừ file `.conf` WireGuard chạy bằng wireproxy — xem mục dưới). Đường ra khác
+  thì UDP bị chặn chứ không rò ra ngoài. QUIC (UDP/443) chặn mặc định để trình duyệt lùi về TCP.
 - Game có anti-cheat kernel có thể coi việc chuyển hướng gói tin là can thiệp.
-- Đường ra **VPN (WireGuard)** cần `wireproxy.exe` — xem mục dưới. UDP không đi qua VPN được
-  (SOCKS5 của wireproxy chỉ có TCP) nên UDP qua đường ra VPN bị chặn chứ không rò.
+- **SoftEther** cần đúng khối [watermark](docs/Glossary-vi.md#L121) thật mới nói chuyện được với máy
+  chủ thật; khối đó là dữ liệu GPL nên repo này không kèm — thiếu nó máy chủ trả HTTP 403. Khai bằng
+  dòng `Watermark =` trong file `.vpn`.
+- Chưa đường ra VPN nào được kiểm chứng với máy chủ thật trên máy này.
 
-## Đường ra VPN (WireGuard)
+## Đường ra VPN
 
-Chọn loại đường ra **Vpn** rồi trỏ ô URL vào file `.conf` WireGuard — đúng file nhà cung cấp VPN đưa,
-không cần sửa gì. Đường hầm chạy ở **tầng ứng dụng** bằng [wireproxy](https://github.com/pufferffish/wireproxy):
-không tạo card mạng ảo, không đụng bảng route, nên **chỉ tiến trình bị chuyển hướng đi qua VPN**,
-phần còn lại của máy vẫn dùng mạng bình thường.
+Chọn loại đường ra **Vpn**. Dù là giao thức nào, đường hầm cũng chạy ở **tầng ứng dụng**: không tạo
+card mạng ảo, không đụng bảng route, nên **chỉ tiến trình bị chuyển hướng đi qua VPN**, phần còn lại
+của máy vẫn dùng mạng bình thường.
 
-Cần tải `wireproxy.exe` và để cạnh `ProxyDivert.exe` (hoặc trong PATH, hoặc trỏ đường dẫn ở tab
-**Cài đặt**). File `.conf` đã có sẵn mục `[Socks5]` thì được dùng nguyên trạng; file thường sẽ được
-sinh bản sao tạm có `[Socks5]` trên cổng loopback ngẫu nhiên **kèm mật khẩu ngẫu nhiên**, để tiến
-trình khác trên máy không dùng ké được đường hầm.
+Ô URL điền gì thì tuỳ giao thức, vì bản thân sáu giao thức không giống nhau: hai loại cấu hình bằng
+file nhà cung cấp đưa, bốn loại còn lại **không có định dạng file client chuẩn nào** nên phải quay số
+bằng địa chỉ máy chủ.
 
-Lưu ý: bản sao tạm đó nằm trong `%TEMP%` và **chứa private key dạng rõ** trong lúc wireproxy chạy
-(bị xoá khi dừng) — đúng như cách wireproxy vốn nhận cấu hình.
+| Ô URL | Giao thức | Ô khác nó dùng |
+|---|---|---|
+| `D:\vpn\wg0.conf` | WireGuard, chạy bằng `wireproxy.exe` | — |
+| `D:\vpn\jp.ovpn` | OpenVPN, chạy trong tiến trình này | Tài khoản, Mật khẩu (nếu profile đòi) |
+| `sstp://vpn.example.com:443` | SSTP | Tài khoản, Mật khẩu |
+| `l2tp://vpn.example.com` | L2TP/IPsec | Tài khoản, Mật khẩu, [Khoá chung](docs/Glossary-vi.md#L117) |
+| `ikev2://vpn.example.com` | IKEv2 | Khoá chung; Tài khoản/Mật khẩu chỉ khi dùng EAP |
+| `softether://vpn.example.com:443/HUB` | SoftEther SSL-VPN | Tài khoản, Mật khẩu |
+| `D:\vpn\office.vpn` | bất kỳ loại nào ở trên, khai trong file ini nhỏ | xem bên dưới |
+
+Cột **Giao thức VPN** để `Auto` là tool tự đoán từ ô URL — có scheme thì scheme nói thẳng ra giao
+thức, là file thì nhận theo đuôi và nội dung. Thứ duy nhất nó **không** đoán được là file `.conf`
+WireGuard nên chạy bằng engine nào; cột đó thật ra sinh ra vì lý do này, xem mục kế tiếp.
+
+Mật khẩu và khoá chung nằm ở ô riêng chứ không nhét vào URL, để chúng được mã hoá
+[DPAPI](docs/Glossary-vi.md#L77) như mọi mật khẩu khác thay vì nằm thô trong file cấu hình.
+
+### Hai engine, và khi nào dùng cái nào
+
+| | `wireproxy.exe` | Trong tiến trình này |
+|---|---|---|
+| Giao thức | file `.conf` WireGuard | OpenVPN, SSTP, L2TP/IPsec, IKEv2, SoftEther, `.conf` WireGuard |
+| File exe rời | bắt buộc | không cần |
+| UDP qua đường hầm | không (SOCKS5 của nó chỉ có TCP) | có |
+| IPv6 qua đường hầm | không | có, khi máy chủ cấp IPv6 global |
+| DNS | wireproxy tự hỏi trong đường hầm | hỏi trong đường hầm |
+
+File `.conf` WireGuard **mặc định vẫn đi wireproxy**, đúng như từ trước tới nay — cấu hình cũ của bạn
+không đổi hành vi một chút nào. Muốn chạy chính file đó trong tiến trình này thì đặt cột **Giao thức
+VPN** thành `WireGuard`: khi đó không cần `wireproxy.exe` nữa, và UDP đi qua được đường hầm.
+
+Với engine wireproxy, cần tải `wireproxy.exe` để cạnh `ProxyDivert.exe` (hoặc trong PATH, hoặc trỏ
+đường dẫn ở tab **Cài đặt**). File `.conf` đã có sẵn mục `[Socks5]` thì dùng nguyên trạng; file
+thường sẽ được sinh bản sao tạm có `[Socks5]` trên cổng loopback ngẫu nhiên **kèm mật khẩu ngẫu
+nhiên**, để tiến trình khác trên máy không dùng ké được đường hầm. Bản sao tạm đó nằm trong `%TEMP%`
+và **chứa private key dạng rõ** trong lúc wireproxy chạy (bị xoá khi dừng) — đúng như cách wireproxy
+vốn nhận cấu hình.
+
+### Tra tên miền nằm trong đường hầm
+
+VPN chở lưu lượng của bạn nhưng để việc tra tên miền đi ra resolver của nhà mạng thì coi như đã đưa
+nguyên danh sách những nơi bạn vào ([rò rỉ DNS](docs/Glossary-vi.md#L113)). Nên engine chạy trong
+tiến trình tự hỏi DNS **bên trong đường hầm**, qua socket UDP của stack, tới máy chủ DNS mà VPN cấp —
+không cấp thì 1.1.1.1 rồi 8.8.8.8, vẫn gửi trong đường hầm. Không bao giờ hỏi resolver của máy.
+
+### File `.vpn`
+
+Muốn giữ thông tin máy chủ trong file thay vì trên dòng đường ra thì trỏ ô URL vào một file ini nhỏ.
+Ô nào bạn điền ở dòng đường ra sẽ **thắng** giá trị trong file, vì ô đó được mã hoá còn file thì không.
+
+```ini
+[Vpn]
+Protocol  = l2tp          ; sstp | l2tp | ikev2 | softether | openvpn | wireguard
+Host      = vpn.example.com
+Port      = 443           ; chỉ SSTP và SoftEther
+Hub       = VPN           ; chỉ SoftEther
+User      = nam
+Pass      = ...
+Psk       = ...           ; l2tp và ikev2
+Watermark = D:\vpn\se.dat ; chỉ SoftEther — xem mục Giới hạn hiện tại
+Config    = jp.ovpn       ; openvpn/wireguard thì dùng dòng này thay cho Host; tương đối so với file .vpn
+```
+
+File này **không được** khai wireproxy: việc một đường ra có chở được UDP hay không phải trả lời từ ô
+URL, mỗi kết nối một lần, nên một lời khai nằm trong file mà đường đó không bao giờ đọc sẽ là lời nói
+dối mà bộ định tuyến tin theo. Muốn wireproxy thì trỏ thẳng ô URL vào file `.conf`.
 
 ### Đường hầm được giữ chạy liên tục
 
@@ -101,9 +166,14 @@ giây để một cấu hình sai không biến thành vòng lặp sinh tiến t
 bằng `PersistentKeepalive` — file nhà cung cấp thường không khai mục này nên tool tự điền 25 giây;
 file nào đã tự khai thì giữ nguyên.
 
+Driver chạy trong tiến trình thì [tự giám sát và tự kết nối lại](docs/Glossary-vi.md#L125) với backoff
+riêng của nó, nên tool cố ý đứng ngoài: đường hầm đang tự dựng lại thì chỉ được báo trạng thái chứ
+không bị đụng vào, chỉ khi driver bỏ cuộc hẳn mới bị thay. Dựng lại giữa chừng chỉ là hai lượt quay
+số cùng đua tới một máy chủ.
+
 Trạng thái hiện ngay trên tab **Đường ra**: chấm xanh là đang chạy, chấm vàng kèm lý do là đang kết
 nối hoặc kết nối lại. Bấm Lưu **không** làm rớt đường hầm — chỉ đường ra nào thật sự bị sửa mới dựng
-lại, và sửa chính file `.conf` cũng tính là sửa.
+lại, và sửa chính file cấu hình cũng tính là sửa.
 
 Ngoại lệ: file `.conf` do bạn tự viết (đã có sẵn `[Socks5]`) được giao cho wireproxy nguyên trạng,
 nên `PersistentKeepalive` trong đó là việc của bạn.
@@ -127,4 +197,12 @@ Hai tham số cho IPv6: `--ipv6 Redirect|Block|Ignore` (mặc định `Redirect`
 ```
 ProxyDivert.Cli --selfhost 18080 --pid 2372 --rule "*" --duration 40 --ipv6 Redirect
 ProxyDivert.Cli --selfhost 18080 --pid 2372 --rule "*" --outbound-ipv6 Disabled
+```
+
+`--vpn` nhận đúng thứ mà ô URL nhận, thông tin đăng nhập truyền bằng cờ — cách nhanh nhất để thử một
+đường ra VPN mà không đụng vào cấu hình đã lưu:
+
+```
+ProxyDivert.Cli --vpn sstp://219.100.37.1:443 --vpn-user vpn --vpn-pass vpn --pid 2372 --rule "*"
+ProxyDivert.Cli --vpn D:\vpn\wg0.conf --vpn-protocol WireGuard --pid 2372 --rule "*"
 ```

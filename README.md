@@ -38,7 +38,7 @@ and `WinDivert64.sys` copied next to it.
 |---|---|
 | `libs/TqkLibrary.WinDivert` | submodule — per-process packet redirection (5 packages: core, `.Redirect`, `.SecureDns`, `.Inspection`, `.ProcessControl`) |
 | `libs/TqkLibrary.Proxy` | submodule — `IProxySource` for HTTP/SOCKS4/SOCKS5/SSH/WireGuard |
-| `libs/TqkLibrary.VpnClient` | submodule — userspace TCP/IP stack and VPN protocol drivers (OpenVPN, SSTP, L2TP/IPsec, IKEv2, SoftEther, …). Added for the next VPN outbounds; nothing references it yet. |
+| `libs/TqkLibrary.VpnClient` | submodule — userspace TCP/IP stack and VPN protocol drivers. Its `TqkLibrary.VpnClient.Tunnels` project dials the six protocols below and hands back a live tunnel. |
 | `src/ProxyDivert.Core` | engine, models, services (no WPF dependency) |
 | `src/ProxyDivert.Wpf` | the window |
 | `src/ProxyDivert.Core.Tests` | unit tests |
@@ -76,27 +76,96 @@ with DPAPI, so only the Windows account that saved them can read them back.
 - A connection opened **before** its process was attached goes out **direct**, and says so in the log:
   redirecting the second half of a live connection would break that connection outright. Use "Launch
   suspended" if you want nothing to escape.
-- UDP only goes through a proxy with **SOCKS5**; other outbounds block UDP rather than leaking it.
-  QUIC (UDP/443) is blocked by default so browsers fall back to TCP.
+- UDP goes through a proxy only with **SOCKS5**, and through a VPN only when that VPN runs inside
+  this process (everything except a WireGuard `.conf` on wireproxy — see below). Every other
+  outbound blocks UDP rather than leaking it. QUIC (UDP/443) is blocked by default so browsers fall
+  back to TCP.
 - Games with a kernel anti-cheat may treat packet redirection as interference.
-- The **VPN (WireGuard)** outbound needs `wireproxy.exe` — see below. UDP cannot go through it
-  (wireproxy's SOCKS5 is TCP-only), so UDP over a VPN outbound is blocked rather than leaked.
+- **SoftEther** needs the genuine watermark blob to reach a real server, which is GPL data this
+  repository cannot ship — without it the server answers HTTP 403. Supply it with a `Watermark =`
+  line in a `.vpn` file.
+- No VPN outbound has been verified against a live server on this machine yet.
 
-## The VPN (WireGuard) outbound
+## The VPN outbound
 
-Pick the **Vpn** outbound kind and point the URL box at a WireGuard `.conf` — exactly the file your
-VPN provider gave you, unedited. The tunnel runs at the **application layer** through
-[wireproxy](https://github.com/pufferffish/wireproxy): no virtual adapter, no route table changes, so
-**only the redirected process goes through the VPN** while the rest of the machine keeps its normal
-network.
+Pick the **Vpn** outbound kind. Whatever the protocol, the tunnel runs at the **application layer**:
+no virtual adapter and no route table changes, so **only the redirected process goes through the
+VPN** while the rest of the machine keeps its normal network.
 
-Download `wireproxy.exe` and put it next to `ProxyDivert.exe`, or on PATH, or point the **Settings**
-tab at it. A `.conf` that already has a `[Socks5]` section is used as-is; an ordinary one gets a
-temporary copy with `[Socks5]` on a random loopback port **and a random password**, so no other
-process on the machine can help itself to the tunnel.
+What goes in the URL box depends on the protocol, because the protocols themselves differ — two of
+them are configured by a file the provider gives you, and the other four have no standard client
+file at all and are dialled with a server address instead.
 
-Note: that temporary copy lives in `%TEMP%` and **holds the private key in clear text** while
-wireproxy runs (it is deleted on stop) — which is simply how wireproxy takes its configuration.
+| URL box | Protocol | Other boxes it uses |
+|---|---|---|
+| `D:\vpn\wg0.conf` | WireGuard, run by `wireproxy.exe` | — |
+| `D:\vpn\jp.ovpn` | OpenVPN, in this process | Username, Password (when the profile asks) |
+| `sstp://vpn.example.com:443` | SSTP | Username, Password |
+| `l2tp://vpn.example.com` | L2TP/IPsec | Username, Password, Pre-shared key |
+| `ikev2://vpn.example.com` | IKEv2 | Pre-shared key; Username/Password only for EAP |
+| `softether://vpn.example.com:443/HUB` | SoftEther SSL-VPN | Username, Password |
+| `D:\vpn\office.vpn` | any of the above, from a small ini | see below |
+
+The **VPN protocol** column is `Auto` unless you say otherwise, and the guess is read off the URL —
+a scheme names the protocol outright, and a file is recognised by its extension and contents. The
+one thing it cannot guess is which of two engines should run a WireGuard `.conf`, so that is what
+the column is really for; see the next section.
+
+Passwords and pre-shared keys go in their own boxes rather than into the URL, so they are encrypted
+with DPAPI along with every other password here instead of sitting in the configuration file in the
+clear.
+
+### Two engines, and which one you get
+
+| | `wireproxy.exe` | In this process |
+|---|---|---|
+| Protocols | WireGuard `.conf` | OpenVPN, SSTP, L2TP/IPsec, IKEv2, SoftEther, WireGuard `.conf` |
+| External binary | required | none |
+| UDP through the tunnel | no (its SOCKS5 is TCP-only) | yes |
+| IPv6 through the tunnel | no | when the server assigns a global IPv6 |
+| DNS | resolved by wireproxy inside the tunnel | resolved inside the tunnel |
+
+A WireGuard `.conf` goes to **wireproxy by default**, which is what it has always done — an existing
+configuration behaves exactly as it did before the other protocols existed. To run the same file in
+this process instead, set the **VPN protocol** column to `WireGuard`; you then need no
+`wireproxy.exe`, and UDP goes through the tunnel.
+
+For the wireproxy engine, download `wireproxy.exe` and put it next to `ProxyDivert.exe`, or on PATH,
+or point the **Settings** tab at it. A `.conf` that already has a `[Socks5]` section is used as-is;
+an ordinary one gets a temporary copy with `[Socks5]` on a random loopback port **and a random
+password**, so no other process on the machine can help itself to the tunnel. That temporary copy
+lives in `%TEMP%` and **holds the private key in clear text** while wireproxy runs (it is deleted on
+stop) — which is simply how wireproxy takes its configuration.
+
+### Name lookups stay inside the tunnel
+
+A VPN that carries your traffic but lets the name lookups go out to your ISP's resolver has given
+away the list of everywhere you went. So the in-process engine resolves through the tunnel, over its
+own UDP socket, asking the DNS server the VPN assigned — or 1.1.1.1 and then 8.8.8.8 when it
+assigned none, still inside the tunnel. The machine's own resolver is never asked.
+
+### A `.vpn` file
+
+If you would rather keep a server in a file than in the outbound row, point the URL box at a small
+ini. Anything you also put in the outbound's own boxes wins over the file, because those are
+encrypted and the file is not.
+
+```ini
+[Vpn]
+Protocol  = l2tp          ; sstp | l2tp | ikev2 | softether | openvpn | wireguard
+Host      = vpn.example.com
+Port      = 443           ; SSTP and SoftEther only
+Hub       = VPN           ; SoftEther only
+User      = nam
+Pass      = ...
+Psk       = ...           ; l2tp and ikev2
+Watermark = D:\vpn\se.dat ; SoftEther only — see Current limits
+Config    = jp.ovpn       ; openvpn/wireguard instead of Host; relative to this file
+```
+
+It cannot ask for wireproxy: whether an outbound can carry UDP is decided from the URL alone, once
+per connection, and a claim buried in a file that is never read on that path would be a lie the
+router would act on. Point the URL box straight at the `.conf` for that.
 
 ### The tunnel is held up, not dialled per request
 
@@ -106,9 +175,14 @@ growing 1 → 2 → 5 → 10 → 30 seconds so a broken configuration cannot bec
 An idle WireGuard session is kept alive by `PersistentKeepalive` — provider files usually omit it, so
 the tool fills in 25 seconds; a file that sets its own value is left alone.
 
+The in-process drivers already supervise their own link and re-establish it with their own backoff,
+so the tool stays out of their way: a tunnel that is re-establishing is reported as such but left
+alone, and only a driver that has given up entirely gets replaced. Rebuilding one mid-repair would
+just be two dials racing each other to the same server.
+
 The state shows on the **Outbounds** tab: a green dot means up, an amber one means connecting or
 reconnecting and carries the reason. Pressing Save does **not** drop a tunnel — only outbounds that
-actually changed are rebuilt, and editing the `.conf` itself counts as a change.
+actually changed are rebuilt, and editing the configuration file itself counts as a change.
 
 One exception: a `.conf` you wrote yourself (one that already has `[Socks5]`) is handed to wireproxy
 untouched, so the `PersistentKeepalive` in it is your business.
@@ -134,4 +208,12 @@ Two of them are about IPv6: `--ipv6 Redirect|Block|Ignore` (default `Redirect`) 
 ```
 ProxyDivert.Cli --selfhost 18080 --pid 2372 --rule "*" --duration 40 --ipv6 Redirect
 ProxyDivert.Cli --selfhost 18080 --pid 2372 --rule "*" --outbound-ipv6 Disabled
+```
+
+`--vpn` takes the same thing the URL box does, with the credentials as flags — which is the quickest
+way to try a VPN outbound without touching the saved configuration:
+
+```
+ProxyDivert.Cli --vpn sstp://219.100.37.1:443 --vpn-user vpn --vpn-pass vpn --pid 2372 --rule "*"
+ProxyDivert.Cli --vpn D:\vpn\wg0.conf --vpn-protocol WireGuard --pid 2372 --rule "*"
 ```

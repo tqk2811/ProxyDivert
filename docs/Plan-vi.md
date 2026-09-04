@@ -129,7 +129,7 @@ ProxyDivert/
 ### Bước 0. Dựng khung repo (không có logic) — ĐÃ XONG 2026-09-03
 
 1. `git init`, `.gitignore`, `Directory.Build.rsp` (gitignore), README.
-2. Thêm 2 submodule WinDivert và Proxy vào `libs/` (`--recursive` vì Proxy có submodule lồng). VpnClient đã thêm 04/09/2026 (`6c5f415`, không có submodule lồng) — mới chỉ là submodule, chưa project nào tham chiếu.
+2. Thêm 2 submodule WinDivert và Proxy vào `libs/` (`--recursive` vì Proxy có submodule lồng). VpnClient đã thêm 04/09/2026 (`6c5f415`, không có submodule lồng); `ProxyDivert.Core` tham chiếu `TqkLibrary.VpnClient.Tunnels` + `.Sockets` từ 04/09/2026.
 3. Tạo solution, 3 project trong `src/`, ProjectReference tới 2 thư viện. Build Debug và Release phải xanh; kiểm chứng GitVersion không vỡ.
 4. Copy WinDivert native ra output; app.manifest requireAdministrator.
 
@@ -182,9 +182,24 @@ ProxyDivert/
 8. `OutboundSignature` + `OutboundSourceFactory.ApplyOutbounds` thay cho `InvalidateAll`: chỉ outbound thật sự đổi mới bị dựng lại, nên lưu cài đặt không còn làm rớt VPN. Chữ ký của outbound VPN gồm cả dấu thời gian file `.conf` (sửa file thì kết nối lại) và `WireProxyPath`, nhưng **không** gồm `Name` (đổi tên không phải lý do rớt đường hầm). Tiện thể nối `UdpProxyForwarder.InvalidateOutbound` — hàm này viết ra từ trước mà chưa ai gọi.
 9. Trạng thái hiện lên tab Outbounds: chấm xanh/vàng + tên + tình trạng và lý do hỏng, cập nhật trực tiếp từ luồng giám sát (marshal bằng `BeginInvoke`, không phải `Invoke` — luồng UI có thể đang nằm trong `Sync`).
 
-Còn lại cho các loại VPN khác (OpenVPN/SSTP/L2TP qua TqkLibrary.VpnClient): giữ nguyên hướng cũ — thêm submodule VpnClient, tách `VpnProxySource` + `VpnTarget`/`VpnTunnel` từ demo lên thư viện (resolve DNS trong tunnel), rồi cắm vào cùng chỗ `OutboundSourceFactory.CreateVpn` đang đứng.
-
 Chưa kiểm được bằng đường hầm thật: máy chưa có `wireproxy.exe`. Phần kiểm được — vòng giám sát, backoff, invalidate chọn lọc — đã có unit test và không cần quyền Administrator.
+
+**Năm giao thức còn lại qua TqkLibrary.VpnClient ĐÃ XONG (04/09/2026).** Phạm vi chốt: OpenVPN, SSTP, L2TP/IPsec, IKEv2, SoftEther, cộng WireGuard chạy native. Ba điều phát hiện lúc làm đã đổi thiết kế so với dự tính ban đầu:
+
+- **Sáu giao thức không đồng dạng.** OpenVPN và WireGuard nhận đường dẫn file; SSTP/L2TP/IKEv2/SoftEther nhận `(host, port, user, pass, psk, hub)` và **không có định dạng file client chuẩn nào**. Nên ô `Outbound.Url` nhận cả hai hình: có `://` thì là endpoint, không thì là đường dẫn file (`.ovpn`, `.conf`, hoặc file ini `.vpn` của riêng tool). Bí mật (mật khẩu, [khoá chung IPsec](Glossary-vi.md#L117)) nằm ở ô riêng để đi qua DPAPI, không nhét vào URL.
+- **Thư viện đã tự kết nối lại.** Mọi `*Connection` kế thừa `ReconnectingVpnConnection` — xem [Driver VPN tự kết nối lại](Glossary-vi.md#L125). Nên `IKeptTunnel.WaitUntilDownAsync` chỉ hoàn tất khi driver **bỏ cuộc hẳn**, chứ không phải mỗi lần rớt link.
+- **File `.conf` giữ nguyên chạy bằng wireproxy** làm mặc định; native chỉ chạy khi người dùng chọn tay ở cột Giao thức VPN. Cấu hình cũ không đổi hành vi.
+
+Đã làm:
+
+10. Tách `IKeptTunnel` (`IsRunning`/`Endpoint`/`StartAsync`/`WaitUntilDownAsync`) + `WireProxyKeptTunnel`; `KeptVpnTunnel` hết ép kiểu `WireGuardProxySource`. Nhịp 15 giây giờ chỉ để **cập nhật trạng thái** hiển thị, không tăng số lần thử lại.
+11. Trong submodule VpnClient: dựng project `TqkLibrary.VpnClient.Tunnels` (`VpnDialer` sáu hàm connect, `VpnTunnel` handle có `State`/`StateChanged`, `WireGuardConfFile` parser wg-quick), cổng từ `demo/Vpn2ProxyDemo/VpnTunnel.cs` — bỏ `Console.WriteLine`, tiêm `ILoggerFactory`, thêm `VpnTunnelOptions`. Chỉ ProjectReference sáu driver chứ không đụng façade (façade kéo 28 driver). Thêm `Connection` vào `OpenVpnVpnConnection`/`SoftEtherVpnConnection` để lấy được `State`.
+12. `ProxyDivert.Core/Vpn/VpnProfileReader` + `VpnProfile` + `Outbound.VpnProtocol`/`PreSharedKey`: nhận diện giao thức từ URL/đuôi file/nội dung, có ô ghi đè. `RunsOnWireProxy` là hàm **thuần, không I/O** vì `Outbound.SupportsUdp` gọi nó trên đường routing nóng.
+13. `Vpn/Client/VpnClientProxySource` (`IProxySource` + `IKeptTunnel`) + connect source + UDP associate source. Đây là engine **có UDP**: stack userspace tự chở datagram, khác hẳn wireproxy.
+14. `Vpn/Client/InTunnelResolver`: tự hỏi DNS A/AAAA qua socket UDP của đường hầm, cache theo TTL, không có DNS từ VPN thì dùng 1.1.1.1/8.8.8.8 **vẫn trong đường hầm**. Bản demo dùng `Dns.GetHostAddressesAsync` của máy thật nên [rò rỉ DNS](Glossary-vi.md#L113) — đây là chỗ phải sửa chứ không bê nguyên.
+15. `--vpn` của CLI nhận cùng thứ ô URL nhận, thêm `--vpn-user/--vpn-pass/--vpn-psk/--vpn-protocol`.
+
+Chưa kiểm chứng với máy chủ VPN thật. SoftEther còn cần khối [watermark](Glossary-vi.md#L121) thật mới qua được máy chủ thật.
 
 ### Bước 4. Redesign TqkLibrary.WinDivert — ĐÃ XONG 2026-09-03
 
