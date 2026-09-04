@@ -77,16 +77,21 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnDiagnosticLogPathChanged(string value)
         => _services.Config.DiagnosticLogPath = string.IsNullOrWhiteSpace(value) ? null : value;
 
+    // Appearance is the one pair of settings that takes effect the moment it is picked, so it is
+    // also written out at once: a theme that reverts on the next launch because Save was never
+    // pressed would look like the tool forgot rather than like a pending edit.
     partial void OnThemeChanged(ThemeMode value)
     {
         _services.Config.Theme = value.ToString();
         ThemeManager.Apply(value);
+        _services.Save();
     }
 
     partial void OnLanguageChanged(AppLanguage value)
     {
         _services.Config.Language = value.ToString();
         LocalizationManager.Apply(value);
+        _services.Save();
     }
 
     partial void OnStartWithWindowsChanged(bool value)

@@ -12,6 +12,22 @@
         <Border DockPanel.Dock="Top" Padding="10,8"
                 Background="{DynamicResource Brush.TitleBar.Background}"
                 BorderBrush="{DynamicResource Brush.Surface.BorderBrush}" BorderThickness="0,0,0,1">
+            <DockPanel>
+            <!-- Appearance switches sit on the right, out of the way of the engine controls but
+                 reachable from every tab — burying them in Settings would mean opening a tab to
+                 change how the window looks. -->
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <ComboBox Width="150" VerticalAlignment="Center"
+                          ItemsSource="{Binding Settings.Languages}"
+                          SelectedItem="{Binding Settings.Language}"
+                          ItemTemplate="{StaticResource LanguageItemTemplate}"
+                          ToolTip="{DynamicResource Str.Settings.Language}"/>
+                <Button Style="{StaticResource IconButton}" Margin="6,0,0,0" VerticalAlignment="Center"
+                        Command="{Binding ToggleThemeCommand}" ToolTip="{Binding ThemeTooltip}">
+                    <TextBlock Text="{Binding ThemeGlyph}" FontFamily="Segoe MDL2 Assets" FontSize="15"/>
+                </Button>
+            </StackPanel>
+
             <StackPanel Orientation="Horizontal">
                 <Button Content="{DynamicResource Str.App.Start}" Style="{StaticResource AccentButton}"
                         Command="{Binding StartCommand}" MinWidth="90"
@@ -45,6 +61,7 @@
                            Foreground="{DynamicResource Brush.Danger}"
                            Text="{Binding StatusMessage}"/>
             </StackPanel>
+            </DockPanel>
         </Border>
 
         <TabControl Margin="8" Background="Transparent" BorderThickness="0">

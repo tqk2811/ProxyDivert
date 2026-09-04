@@ -31,15 +31,18 @@ namespace ProxyDivert.Wpf.Themes
             HookSystemEvents(mode == ThemeMode.System);
         }
 
+        /// <summary>The next mode in the System -> Light -> Dark -> System round, without applying it.</summary>
+        public static ThemeMode Next(ThemeMode mode) => mode switch
+        {
+            ThemeMode.System => ThemeMode.Light,
+            ThemeMode.Light => ThemeMode.Dark,
+            _ => ThemeMode.System,
+        };
+
         /// <summary>Advances System -> Light -> Dark -> System and applies (does not persist).</summary>
         public static ThemeMode Cycle()
         {
-            ThemeMode next = CurrentMode switch
-            {
-                ThemeMode.System => ThemeMode.Light,
-                ThemeMode.Light => ThemeMode.Dark,
-                _ => ThemeMode.System,
-            };
+            ThemeMode next = Next(CurrentMode);
             Apply(next);
             return next;
         }
