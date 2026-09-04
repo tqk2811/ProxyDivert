@@ -129,7 +129,7 @@ ProxyDivert/
 ### Bước 0. Dựng khung repo (không có logic) — ĐÃ XONG 2026-09-03
 
 1. `git init`, `.gitignore`, `Directory.Build.rsp` (gitignore), README.
-2. Thêm 2 submodule WinDivert và Proxy vào `libs/` (`--recursive` vì Proxy có submodule lồng). VpnClient thêm ở giai đoạn 2.
+2. Thêm 2 submodule WinDivert và Proxy vào `libs/` (`--recursive` vì Proxy có submodule lồng). VpnClient đã thêm 04/09/2026 (`6c5f415`, không có submodule lồng) — mới chỉ là submodule, chưa project nào tham chiếu.
 3. Tạo solution, 3 project trong `src/`, ProjectReference tới 2 thư viện. Build Debug và Release phải xanh; kiểm chứng GitVersion không vỡ.
 4. Copy WinDivert native ra output; app.manifest requireAdministrator.
 
@@ -175,7 +175,16 @@ ProxyDivert/
 4. `Outbound.SupportsUdp` KHÔNG còn gồm Vpn — SOCKS5 của wireproxy chỉ có TCP, nên UDP qua đường ra VPN bị hạ xuống Block thay vì rò ra ngoài.
 5. `ProcessWatcher` từ chối attach chính tiến trình tool và `wireproxy.exe`: luật rộng kiểu `*.exe` mà tóm phải chúng thì mọi kết nối quay vòng lại relay.
 
-Còn lại cho các loại VPN khác (OpenVPN/SSTP/L2TP qua TqkLibrary.VpnClient): giữ nguyên hướng cũ — thêm submodule VpnClient, tách `VpnProxySource` + `VpnTarget`/`VpnTunnel` từ demo lên thư viện (resolve DNS trong tunnel), rồi cắm vào cùng chỗ `OutboundSourceFactory.CreateVpn` đang đứng. Trạng thái kết nối/reconnect hiện lên UI cũng chưa làm.
+**Duy trì kết nối ĐÃ XONG (04/09/2026).** Trước đó đường hầm dựng **lười**: `wireproxy` chỉ khởi động ở request đầu tiên, nên request đó gánh cả spawn tiến trình lẫn bắt tay WireGuard; tiến trình chết thì không ai biết cho tới request kế tiếp; và mỗi lần bấm Lưu, `ApplyConfig` gọi `InvalidateAll()` giết sạch mọi đường hầm kể cả outbound VPN không đổi gì. Đã sửa:
+
+6. `VpnConnectionKeeper` (+ `KeptVpnTunnel`) dựng mọi outbound VPN đang bật ngay khi engine chạy, chạy nền, không chặn `Start()`. Tiến trình chết được biết qua sự kiện `Exited` chứ không đợi request, cộng một nhịp kiểm 15 giây làm lưới đỡ; kết nối lại theo [backoff luỹ tiến](Glossary-vi.md#L109) 1→2→5→10→30 giây, đếm lại từ đầu nếu đường hầm đã đứng vững 60 giây.
+7. `WireGuardOptions.DefaultPersistentKeepalive` = 25 giây, `WireGuardConfigWriter` điền cho peer nào không tự khai — xem [PersistentKeepalive](Glossary-vi.md#L105). Đây là thứ giữ phiên WireGuard sống khi rỗi, không có nó thì "duy trì" chỉ là giữ tiến trình chứ không giữ đường hầm.
+8. `OutboundSignature` + `OutboundSourceFactory.ApplyOutbounds` thay cho `InvalidateAll`: chỉ outbound thật sự đổi mới bị dựng lại, nên lưu cài đặt không còn làm rớt VPN. Chữ ký của outbound VPN gồm cả dấu thời gian file `.conf` (sửa file thì kết nối lại) và `WireProxyPath`, nhưng **không** gồm `Name` (đổi tên không phải lý do rớt đường hầm). Tiện thể nối `UdpProxyForwarder.InvalidateOutbound` — hàm này viết ra từ trước mà chưa ai gọi.
+9. Trạng thái hiện lên tab Outbounds: chấm xanh/vàng + tên + tình trạng và lý do hỏng, cập nhật trực tiếp từ luồng giám sát (marshal bằng `BeginInvoke`, không phải `Invoke` — luồng UI có thể đang nằm trong `Sync`).
+
+Còn lại cho các loại VPN khác (OpenVPN/SSTP/L2TP qua TqkLibrary.VpnClient): giữ nguyên hướng cũ — thêm submodule VpnClient, tách `VpnProxySource` + `VpnTarget`/`VpnTunnel` từ demo lên thư viện (resolve DNS trong tunnel), rồi cắm vào cùng chỗ `OutboundSourceFactory.CreateVpn` đang đứng.
+
+Chưa kiểm được bằng đường hầm thật: máy chưa có `wireproxy.exe`. Phần kiểm được — vòng giám sát, backoff, invalidate chọn lọc — đã có unit test và không cần quyền Administrator.
 
 ### Bước 4. Redesign TqkLibrary.WinDivert — ĐÃ XONG 2026-09-03
 
