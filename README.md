@@ -1,25 +1,27 @@
 # ProxyDivert
 
-Tool WPF chuyển hướng gói tin của tiến trình được chọn sang proxy (HTTP / SOCKS4 / SOCKS5) theo luật
-domain hoặc IP; đích không khớp luật thì đi thẳng (direct). Giai đoạn sau cắm thêm VPN dưới dạng một
-loại đường ra.
+*Tiếng Việt: [README-vi.md](README-vi.md)*
 
-- Kế hoạch: [docs/Plan-vi.md](docs/Plan-vi.md)
-- Thuật ngữ: [docs/Glossary-vi.md](docs/Glossary-vi.md)
+A WPF tool that pushes a chosen process's traffic through a proxy (HTTP / SOCKS4 / SOCKS5) according
+to domain or IP rules; anything no rule matches goes out direct. VPN is available as another kind of
+outbound.
 
-## Yêu cầu
+- Plan: [docs/Plan-vi.md](docs/Plan-vi.md) (Vietnamese)
+- Glossary: [docs/Glossary-vi.md](docs/Glossary-vi.md) (Vietnamese)
 
-- Windows 10/11 **x64** (native WinDivert chỉ có bản win-x64).
-- .NET SDK 8.0 trở lên.
-- Chạy tool với quyền **Administrator** (WinDivert nạp driver kernel).
+## Requirements
 
-## Lấy mã nguồn
+- Windows 10/11 **x64** (the native WinDivert build is win-x64 only).
+- .NET SDK 8.0 or later.
+- Run the tool **as Administrator** — WinDivert loads a kernel driver.
+
+## Getting the source
 
 ```
 git clone --recursive https://github.com/tqk2811/ProxyDivert.git
 ```
 
-Đã clone sẵn thì: `git submodule update --init --recursive`.
+Already cloned without it: `git submodule update --init --recursive`.
 
 ## Build
 
@@ -27,72 +29,94 @@ git clone --recursive https://github.com/tqk2811/ProxyDivert.git
 dotnet build ProxyDivert.sln -c Debug
 ```
 
-Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.exe`
-(kèm `WinDivert.dll` + `WinDivert64.sys` copy sẵn cạnh exe).
+Output: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.exe`, with `WinDivert.dll`
+and `WinDivert64.sys` copied next to it.
 
-## Cấu trúc
+## Layout
 
-| Đường dẫn | Nội dung |
+| Path | What it is |
 |---|---|
-| `libs/TqkLibrary.WinDivert` | submodule — lõi chuyển hướng gói tin theo tiến trình (5 project: core, `.Redirect`, `.SecureDns`, `.Inspection`, `.ProcessControl`) |
-| `libs/TqkLibrary.Proxy` | submodule — `IProxySource` cho HTTP/SOCKS4/SOCKS5/SSH/WireGuard |
-| `src/ProxyDivert.Core` | engine, model, service (không phụ thuộc WPF) |
-| `src/ProxyDivert.Wpf` | giao diện |
-| `src/ProxyDivert.Core.Tests` | unit test |
+| `libs/TqkLibrary.WinDivert` | submodule — per-process packet redirection (5 packages: core, `.Redirect`, `.SecureDns`, `.Inspection`, `.ProcessControl`) |
+| `libs/TqkLibrary.Proxy` | submodule — `IProxySource` for HTTP/SOCKS4/SOCKS5/SSH/WireGuard |
+| `libs/TqkLibrary.VpnClient` | submodule — userspace TCP/IP stack and VPN protocol drivers (OpenVPN, SSTP, L2TP/IPsec, IKEv2, SoftEther, …). Added for the next VPN outbounds; nothing references it yet. |
+| `src/ProxyDivert.Core` | engine, models, services (no WPF dependency) |
+| `src/ProxyDivert.Wpf` | the window |
+| `src/ProxyDivert.Core.Tests` | unit tests |
 
-## Cách dùng nhanh
+## Quick start
 
-1. Chạy `ProxyDivert.exe` **bằng quyền Administrator**.
-2. Tab **Đường ra**: thêm proxy (`socks5://host:port`, `http://host:port`), bấm **Thử** để kiểm tra.
-3. Tab **Luật**: thêm luật cho bộ luật mặc định, ví dụ `Wildcard` + `*.google.com` → proxy vừa tạo.
-   Đích không khớp luật nào sẽ đi thẳng (đường ra mặc định).
-4. Tab **Tiến trình**: chọn tiến trình trong danh sách rồi bấm **Tạo luật từ dòng đang chọn**
-   (hoặc **Chạy ở trạng thái tạm dừng…** để không lọt kết nối nào lúc khởi động).
-5. Bấm **Chạy** trên thanh trên cùng. Tab **Kết nối** hiện từng kết nối kèm tên miền, đường ra và số byte.
+1. Run `ProxyDivert.exe` **as Administrator**.
+2. **Outbounds** tab: add a proxy (`socks5://host:port`, `http://host:port`) and press **Test**.
+3. **Rules** tab: add a rule to the default policy — say `Wildcard` + `*.google.com` → the proxy you
+   just made. Destinations matching no rule take the policy's default outbound (Direct).
+4. **Processes** tab: pick a process and press **Create a rule from the selected row**, or **Launch
+   suspended…** so not one connection escapes while the process starts.
+5. Press **Start** in the top bar. The **Connections** tab lists every connection with its host name,
+   outbound and byte counts.
 
-Cấu hình lưu ở `proxydivert.config.json` cạnh exe; mật khẩu proxy được mã hoá bằng DPAPI
-(chỉ tài khoản Windows đã lưu mới đọc lại được).
+Configuration lives in `proxydivert.config.json` beside the executable; proxy passwords are encrypted
+with DPAPI, so only the Windows account that saved them can read them back.
 
-## Giới hạn hiện tại
+## Current limits
 
-- IPv6 được chuyển hướng như IPv4 (mặc định `Redirect`, xem [Ipv6Mode](docs/Glossary-vi.md#L89) trong Cài đặt).
-  Chọn `Block` nếu muốn hành vi cũ — chặn để ứng dụng lùi về IPv4; `Ignore` thì IPv6 đi thẳng, **lọt ra ngoài proxy**.
-  Bộ phân tích gói không đi qua IPv6 extension header, nên gói IPv6 có extension header sẽ được cho đi thẳng
-  thay vì bị hiểu sai (hiếm gặp với traffic ứng dụng thông thường).
-- Đường ra không có tuyến IPv6 (VPN/proxy chỉ IPv4): đích **có tên miền** vẫn đi được — tool đưa tên cho đường ra
-  tự phân giải sang IPv4. Đích chỉ có **địa chỉ IPv6 trần** thì không còn gì để lùi, tool đóng kết nối ngay để ứng dụng
-  tự chuyển sang IPv4 ([Happy Eyeballs](docs/Glossary-vi.md#L81)). Mỗi đường ra có thiết lập
-  [Ipv6Support](docs/Glossary-vi.md#L89): `Auto` (thử một lần rồi tự nhớ), `Enabled`, `Disabled`.
-  SOCKS4 không có IPv6 trong giao thức nên luôn coi là không hỗ trợ.
-- DoH chỉ xử lý DNS/53 trên IPv4; DNS/53 IPv6 của tiến trình đích đi theo luật UDP thông thường.
-- Kết nối IPv6 đang mở sẵn lúc bật engine cũng rơi vào luật "kết nối đã mở trước" bên dưới.
-- Kết nối đã mở TRƯỚC khi tiến trình được gắn sẽ **đi thẳng** (không chuyển hướng) và ghi rõ trong log:
-  chuyển hướng nửa chừng một kết nối đang chạy sẽ làm hỏng hẳn kết nối đó. Muốn không lọt gói nào
-  thì dùng "Chạy ở trạng thái tạm dừng".
-- UDP chỉ đi qua proxy được với **SOCKS5**; đường ra khác thì UDP bị chặn chứ không rò ra ngoài.
-  QUIC (UDP/443) chặn mặc định để trình duyệt lùi về TCP.
-- Game có anti-cheat kernel có thể coi việc chuyển hướng gói tin là can thiệp.
-- Đường ra **VPN (WireGuard)** cần `wireproxy.exe` — xem mục dưới. UDP không đi qua VPN được
-  (SOCKS5 của wireproxy chỉ có TCP) nên UDP qua đường ra VPN bị chặn chứ không rò.
+- IPv6 is redirected like IPv4 (default `Redirect`, see [Ipv6Mode](docs/Glossary-vi.md#L89) in
+  Settings). `Block` gives the old behaviour — drop it so the application falls back to IPv4;
+  `Ignore` lets IPv6 go out **unproxied**. The packet parser does not walk IPv6 extension headers, so
+  an IPv6 packet carrying one is passed through rather than misread (rare in ordinary application
+  traffic).
+- An outbound with no IPv6 route (an IPv4-only VPN or proxy) still reaches a destination that has a
+  **host name**: the name is handed to the outbound, which resolves it to IPv4 itself. A **bare IPv6
+  literal** has nothing left to fall back to, so the connection is closed immediately and the
+  application retries over IPv4 ([Happy Eyeballs](docs/Glossary-vi.md#L81)). Each outbound carries an
+  [Ipv6Support](docs/Glossary-vi.md#L89) setting: `Auto` (try once, then remember), `Enabled`,
+  `Disabled`. SOCKS4 has no IPv6 in the protocol at all, so it is always treated as unsupported.
+- DoH only handles DNS/53 over IPv4; the target's IPv6 DNS/53 follows the ordinary UDP rules.
+- IPv6 connections already open when the engine starts fall under the "connections that started
+  first" rule below.
+- A connection opened **before** its process was attached goes out **direct**, and says so in the log:
+  redirecting the second half of a live connection would break that connection outright. Use "Launch
+  suspended" if you want nothing to escape.
+- UDP only goes through a proxy with **SOCKS5**; other outbounds block UDP rather than leaking it.
+  QUIC (UDP/443) is blocked by default so browsers fall back to TCP.
+- Games with a kernel anti-cheat may treat packet redirection as interference.
+- The **VPN (WireGuard)** outbound needs `wireproxy.exe` — see below. UDP cannot go through it
+  (wireproxy's SOCKS5 is TCP-only), so UDP over a VPN outbound is blocked rather than leaked.
 
-## Đường ra VPN (WireGuard)
+## The VPN (WireGuard) outbound
 
-Chọn loại đường ra **Vpn** rồi trỏ ô URL vào file `.conf` WireGuard — đúng file nhà cung cấp VPN đưa,
-không cần sửa gì. Đường hầm chạy ở **tầng ứng dụng** bằng [wireproxy](https://github.com/pufferffish/wireproxy):
-không tạo card mạng ảo, không đụng bảng route, nên **chỉ tiến trình bị chuyển hướng đi qua VPN**,
-phần còn lại của máy vẫn dùng mạng bình thường.
+Pick the **Vpn** outbound kind and point the URL box at a WireGuard `.conf` — exactly the file your
+VPN provider gave you, unedited. The tunnel runs at the **application layer** through
+[wireproxy](https://github.com/pufferffish/wireproxy): no virtual adapter, no route table changes, so
+**only the redirected process goes through the VPN** while the rest of the machine keeps its normal
+network.
 
-Cần tải `wireproxy.exe` và để cạnh `ProxyDivert.exe` (hoặc trong PATH, hoặc trỏ đường dẫn ở tab
-**Cài đặt**). File `.conf` đã có sẵn mục `[Socks5]` thì được dùng nguyên trạng; file thường sẽ được
-sinh bản sao tạm có `[Socks5]` trên cổng loopback ngẫu nhiên **kèm mật khẩu ngẫu nhiên**, để tiến
-trình khác trên máy không dùng ké được đường hầm.
+Download `wireproxy.exe` and put it next to `ProxyDivert.exe`, or on PATH, or point the **Settings**
+tab at it. A `.conf` that already has a `[Socks5]` section is used as-is; an ordinary one gets a
+temporary copy with `[Socks5]` on a random loopback port **and a random password**, so no other
+process on the machine can help itself to the tunnel.
 
-Lưu ý: bản sao tạm đó nằm trong `%TEMP%` và **chứa private key dạng rõ** trong lúc wireproxy chạy
-(bị xoá khi dừng) — đúng như cách wireproxy vốn nhận cấu hình.
+Note: that temporary copy lives in `%TEMP%` and **holds the private key in clear text** while
+wireproxy runs (it is deleted on stop) — which is simply how wireproxy takes its configuration.
 
-## Công cụ dòng lệnh (`ProxyDivert.Cli`)
+### The tunnel is held up, not dialled per request
 
-Bản console để thử engine mà không cần giao diện: mọi thứ truyền bằng argument, không đọc file cấu hình.
+The tunnel comes up the moment you press Start rather than when the first request needs it, and it is
+held until the engine stops: a dead `wireproxy` process is rebuilt immediately, with the retry delay
+growing 1 → 2 → 5 → 10 → 30 seconds so a broken configuration cannot become a process-spawning loop.
+An idle WireGuard session is kept alive by `PersistentKeepalive` — provider files usually omit it, so
+the tool fills in 25 seconds; a file that sets its own value is left alone.
+
+The state shows on the **Outbounds** tab: a green dot means up, an amber one means connecting or
+reconnecting and carries the reason. Pressing Save does **not** drop a tunnel — only outbounds that
+actually changed are rebuilt, and editing the `.conf` itself counts as a change.
+
+One exception: a `.conf` you wrote yourself (one that already has `[Socks5]`) is handed to wireproxy
+untouched, so the `PersistentKeepalive` in it is your business.
+
+## Command line (`ProxyDivert.Cli`)
+
+A console build for exercising the engine without the window: everything is passed as arguments, and
+no configuration file is read.
 
 ```
 ProxyDivert.Cli --selfhost 18080 --pid 2372 --matcher DomainSuffix --rule facebook.com --duration 40
@@ -100,11 +124,12 @@ ProxyDivert.Cli --proxy socks5://127.0.0.1:1080 --launch "C:\Windows\System32\cu
                 --launch-args "-4 https://example.com"
 ```
 
-`--selfhost <port>` dựng luôn một HTTP proxy trong chính tiến trình đó (đường ra là direct), nên có
-thể kiểm chứng cả đường proxy lẫn đường direct mà không cần proxy thật. `--help` liệt kê đủ tham số.
+`--selfhost <port>` stands up an HTTP proxy inside that same process (going out direct), so both the
+proxied path and the direct path can be checked without a real proxy anywhere. `--help` lists every
+argument.
 
-Hai tham số cho IPv6: `--ipv6 Redirect|Block|Ignore` (mặc định `Redirect`) và
-`--outbound-ipv6 Auto|Enabled|Disabled` để giả lập đường ra không có tuyến IPv6:
+Two of them are about IPv6: `--ipv6 Redirect|Block|Ignore` (default `Redirect`) and
+`--outbound-ipv6 Auto|Enabled|Disabled`, which fakes an outbound with no IPv6 route:
 
 ```
 ProxyDivert.Cli --selfhost 18080 --pid 2372 --rule "*" --duration 40 --ipv6 Redirect
