@@ -16,21 +16,26 @@ namespace ProxyDivert.Core.Vpn;
 // The supervision loop is the whole class: bring the tunnel up, watch it, and when it goes down
 // bring it back with a growing delay. It runs on its own task from the moment the engine starts,
 // which is the point — a request arriving later finds a tunnel that is already up instead of
-// paying for the subprocess launch and the WireGuard handshake itself.
+// paying for the handshake itself.
+//
+// What "the tunnel" is varies (a wireproxy subprocess, an in-process VpnClient driver), so the loop
+// only ever sees IKeptTunnel. That also settles who reconnects: a driver that heals itself is left
+// to get on with it, and this loop steps in only once the tunnel is finished for good.
 internal sealed class KeptVpnTunnel : IDisposable
 {
-    // 1s covers a wireproxy that lost a race with something; 30s is where it settles for a tunnel
-    // that is down for a real reason (no network, a dead VPN server), which is often enough to
-    // reconnect promptly without turning a broken config into a spawn loop.
+    // 1s covers a tunnel that lost a race with something; 30s is where it settles for one that is
+    // down for a real reason (no network, a dead VPN server), which is often enough to reconnect
+    // promptly without turning a broken config into a spawn loop.
     private static readonly TimeSpan[] BackoffSteps =
     {
         TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5),
         TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30),
     };
 
-    // The exit event is the fast path; this is the backstop for a process that stops being ours
-    // without the event arriving.
-    private static readonly TimeSpan HealthPollInterval = TimeSpan.FromSeconds(15);
+    // How often the reported state is refreshed while the tunnel is up. Only the status the user
+    // reads depends on this: a tunnel mending its own link shows as reconnecting without the
+    // supervisor counting it as a failure.
+    private static readonly TimeSpan StatusPollInterval = TimeSpan.FromSeconds(15);
 
     // A tunnel that stayed up this long and then dropped is a fresh incident, not a continuation
     // of a crash loop, so its retries start from the short delay again.
@@ -84,16 +89,16 @@ internal sealed class KeptVpnTunnel : IDisposable
             {
                 SetStatus(VpnConnectionState.Connecting, null, attempt);
 
-                WireGuardProxySource source = Resolve();
-                await source.StartAsync(ct).ConfigureAwait(false);
+                IKeptTunnel tunnel = Resolve();
+                await tunnel.StartAsync(ct).ConfigureAwait(false);
 
                 DateTime upSince = DateTime.UtcNow;
                 attempt = 0;
                 SetStatus(VpnConnectionState.Connected, null, 0);
                 _logger.LogInformation(
-                    "vpn {Outbound} is up, tunnel listening on {Endpoint}", _outbound.Name, source.Socks5Endpoint);
+                    "vpn {Outbound} is up, tunnel coming out at {Endpoint}", _outbound.Name, tunnel.Endpoint);
 
-                reason = await WaitUntilDownAsync(source, ct).ConfigureAwait(false);
+                reason = await WatchAsync(tunnel, ct).ConfigureAwait(false);
                 if (ct.IsCancellationRequested) break;
 
                 if (DateTime.UtcNow - upSince >= StableFor) attempt = 0;
@@ -106,7 +111,7 @@ internal sealed class KeptVpnTunnel : IDisposable
             {
                 reason = $"{ex.GetType().Name}: {ex.Message}";
                 // A source built from a config that does not work stays broken however often it is
-                // started, so it is thrown away: the retry builds a new one, and a .conf the user
+                // started, so it is thrown away: the retry builds a new one, and a config the user
                 // has meanwhile fixed is picked up without restarting the engine.
                 _factory.Invalidate(_outbound.Id);
             }
@@ -125,53 +130,48 @@ internal sealed class KeptVpnTunnel : IDisposable
         SetStatus(VpnConnectionState.Stopped, null, 0);
     }
 
-    // The factory hands back whatever the outbound describes; anything but a WireGuard tunnel here
+    // The factory hands back whatever the outbound describes; anything that cannot be held open
     // means the outbound changed kind under us, which the keeper handles by dropping this tunnel.
-    private WireGuardProxySource Resolve()
+    // wireproxy is adapted from this side because WireGuardProxySource lives in TqkLibrary.Proxy
+    // and knows nothing about ProxyDivert; the wrapper is stateless, so making one here is free.
+    private IKeptTunnel Resolve()
     {
         IProxySource source = _factory.GetOrCreate(_outbound);
-        return source as WireGuardProxySource
-            ?? throw new InvalidOperationException(
-                $"Outbound '{_outbound.Name}' is no longer a VPN, so there is no tunnel to keep.");
+        return source switch
+        {
+            IKeptTunnel kept => kept,
+            WireGuardProxySource wireProxy => new WireProxyKeptTunnel(wireProxy),
+            _ => throw new InvalidOperationException(
+                $"Outbound '{_outbound.Name}' is no longer a VPN, so there is no tunnel to keep."),
+        };
     }
 
     /// <summary>
-    /// Blocks until the tunnel stops being usable, and says why.
+    /// Blocks until the tunnel is finished for good, keeping the reported state fresh meanwhile,
+    /// and says why it ended.
     /// </summary>
-    private static async Task<string> WaitUntilDownAsync(WireGuardProxySource source, CancellationToken ct)
+    private async Task<string> WatchAsync(IKeptTunnel tunnel, CancellationToken ct)
     {
-        var down = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        void OnExited(object? sender, WireProxyExitedEventArgs e) => down.TrySetResult(Describe(e));
+        Task<string> down = tunnel.WaitUntilDownAsync(ct);
 
-        source.Exited += OnExited;
-        try
+        while (!ct.IsCancellationRequested)
         {
-            // Subscribing cannot catch an exit that already happened, so check once before waiting.
-            if (!source.IsRunning) return "the wireproxy process is gone";
+            Task delay = Task.Delay(StatusPollInterval, ct);
+            Task first = await Task.WhenAny(down, delay).ConfigureAwait(false);
 
-            while (!ct.IsCancellationRequested)
-            {
-                Task delay = Task.Delay(HealthPollInterval, ct);
-                Task first = await Task.WhenAny(down.Task, delay).ConfigureAwait(false);
+            if (ReferenceEquals(first, down)) return await down.ConfigureAwait(false);
+            if (delay.IsCanceled) break;
 
-                if (ReferenceEquals(first, down.Task)) return await down.Task.ConfigureAwait(false);
-                if (delay.IsCanceled) break;
-                if (!source.IsRunning) return "the wireproxy process is gone";
-            }
-            return "cancelled";
+            // Not a failure the supervisor acts on: a driver re-establishing its own link shows
+            // here as reconnecting and goes back to connected by itself, retry count untouched.
+            bool up = tunnel.IsRunning;
+            SetStatus(
+                up ? VpnConnectionState.Connected : VpnConnectionState.Reconnecting,
+                up ? null : "the tunnel is re-establishing itself",
+                Status.RetryCount);
         }
-        finally
-        {
-            source.Exited -= OnExited;
-        }
-    }
 
-    private static string Describe(WireProxyExitedEventArgs e)
-    {
-        string message = $"wireproxy exited with code {e.ExitCode}";
-        // stderr can be a whole startup transcript; the last line is the one that says what broke.
-        string[] lines = e.StandardError.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        return lines.Length == 0 ? message : $"{message}: {lines[lines.Length - 1].Trim()}";
+        return "cancelled";
     }
 
     private static TimeSpan DelayFor(int attempt)
