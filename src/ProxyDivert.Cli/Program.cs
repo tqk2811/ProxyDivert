@@ -11,6 +11,7 @@ using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Engine.Models;
 using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing.Enums;
+using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Routing.Models;
 using TqkLibrary.Proxy;
 using TqkLibrary.Proxy.Handlers;
@@ -95,9 +96,13 @@ else if (options.VpnConfig != null)
         Name = "vpn",
         Kind = OutboundKind.Vpn,
         Url = options.VpnConfig,
+        Username = options.VpnUser,
+        Password = options.VpnPass,
+        PreSharedKey = options.VpnPsk,
+        VpnProtocol = options.VpnProtocol,
         Ipv6Support = options.OutboundIpv6,
     };
-    Console.WriteLine($"WireGuard tunnel: {options.VpnConfig}");
+    Console.WriteLine($"VPN tunnel: {options.VpnConfig}");
 }
 else
 {

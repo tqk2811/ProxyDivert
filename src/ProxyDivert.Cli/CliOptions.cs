@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using ProxyDivert.Core.Routing.Enums;
+using ProxyDivert.Core.Vpn.Enums;
 using TqkLibrary.WinDivert.Redirect.Enums;
 
 namespace ProxyDivert.Cli;
@@ -18,10 +19,20 @@ public sealed class CliOptions
     // Route through an existing proxy instead ("socks5://127.0.0.1:1080").
     public string? ProxyUrl { get; private set; }
 
-    // Route through a WireGuard tunnel: path to the .conf, plus where wireproxy.exe is if it is
-    // not next to this exe or on PATH.
+    // Route through a VPN tunnel. The argument is what the Outbounds tab would take: a
+    // configuration file (.ovpn, .conf, .vpn) or the server itself ("sstp://vpn.example.com:443").
+    // WireProxyPath only matters for a WireGuard .conf, which still runs on wireproxy.
     public string? VpnConfig { get; private set; }
     public string? WireProxyPath { get; private set; }
+
+    // Credentials for the VPN protocols that take them rather than a file.
+    public string? VpnUser { get; private set; }
+    public string? VpnPass { get; private set; }
+    public string? VpnPsk { get; private set; }
+
+    // Overrides the protocol when the guess is wrong — or to run a WireGuard .conf in process
+    // instead of on wireproxy.
+    public VpnProtocol VpnProtocol { get; private set; } = VpnProtocol.Auto;
 
     // Launch this program suspended, attach, then resume it. The only way to be sure not one
     // connection escapes before the redirect is in place.
@@ -69,6 +80,10 @@ public sealed class CliOptions
                 case "--proxy": options.ProxyUrl = Next(arg); break;
                 case "--vpn": options.VpnConfig = Next(arg); break;
                 case "--wireproxy": options.WireProxyPath = Next(arg); break;
+                case "--vpn-user": options.VpnUser = Next(arg); break;
+                case "--vpn-pass": options.VpnPass = Next(arg); break;
+                case "--vpn-psk": options.VpnPsk = Next(arg); break;
+                case "--vpn-protocol": options.VpnProtocol = Enum.Parse<VpnProtocol>(Next(arg)!, ignoreCase: true); break;
                 case "--launch": options.LaunchExe = Next(arg); break;
                 case "--launch-args": options.LaunchArgs = Next(arg); break;
                 case "--pid": options.Pids.Add(uint.Parse(Next(arg)!, CultureInfo.InvariantCulture)); break;
@@ -90,7 +105,7 @@ public sealed class CliOptions
 
         int ways = (options.SelfHostPort != 0 ? 1 : 0) + (options.ProxyUrl != null ? 1 : 0) + (options.VpnConfig != null ? 1 : 0);
         if (ways == 0)
-            throw new FormatException("Give --selfhost <port>, --proxy <url> or --vpn <config.conf>.");
+            throw new FormatException("Give --selfhost <port>, --proxy <url> or --vpn <config|url>.");
         if (ways > 1)
             throw new FormatException("--selfhost, --proxy and --vpn are mutually exclusive.");
         if (options.LaunchExe == null && options.Pids.Count == 0 && options.ProcessPattern == null)
@@ -114,8 +129,15 @@ public sealed class CliOptions
         Outbound (pick one):
           --selfhost <port>     host an HTTP proxy in this process and route through it
           --proxy <url>         use an existing proxy (http://, socks4://, socks5://)
-          --vpn <config.conf>   route through a WireGuard tunnel (user space, via wireproxy)
-          --wireproxy <exe>     where wireproxy.exe is, when not on PATH
+          --vpn <config|url>    route through a VPN: a .ovpn/.conf/.vpn file, or a server such
+                                as sstp://host:443, l2tp://host, ikev2://host,
+                                softether://host:443/HUB
+          --wireproxy <exe>     where wireproxy.exe is, when not on PATH (a .conf only)
+          --vpn-user <name>     credentials for the VPNs dialled by address
+          --vpn-pass <pass>
+          --vpn-psk <key>       IPsec group pre-shared key (l2tp, ikev2)
+          --vpn-protocol <p>    Auto|WireGuardWireProxy|WireGuard|OpenVpn|Sstp|L2tpIpsec|Ikev2|
+                                SoftEther (default Auto; name it to run a .conf in process)
 
         What to redirect (at least one):
           --launch <exe>        start it suspended, attach, then resume
