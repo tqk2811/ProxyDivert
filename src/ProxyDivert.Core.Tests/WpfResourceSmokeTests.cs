@@ -56,6 +56,51 @@ public class WpfResourceSmokeTests
             Assert.NotNull(application.Resources["Str.App.Title"]);
             Assert.NotNull(application.Resources["Brush.Window.Background"]);
             Assert.NotNull(application.Resources["ByteSize"]);
+            Assert.NotNull(application.Resources["EnumItemTemplate"]);
+            Assert.NotNull(application.Resources["LanguageItemTemplate"]);
+            Assert.NotNull(application.Resources["EnumComboColumn"]);
+        });
+    }
+
+    // Every enum the window puts in a combo box is shown through its "Enum.<Type>.<Value>" key, and
+    // a missing key degrades quietly to the C# identifier — English text in a Vietnamese window,
+    // with nothing in the build or the log to say so. Adding a value to one of these enums without
+    // adding its two strings should fail here instead.
+    [Fact]
+    public void Every_enum_in_the_ui_has_text_in_both_languages()
+    {
+        RunOnStaThread(() =>
+        {
+            Application application = EnsureApplication();
+
+            Type[] shown =
+            {
+                typeof(ThemeMode),
+                typeof(ProxyDivert.Core.Configuration.Enums.DnsMode),
+                typeof(TqkLibrary.WinDivert.Redirect.Enums.Ipv6Mode),
+                typeof(ProxyDivert.Core.Routing.Enums.UdpMode),
+                typeof(ProxyDivert.Core.Routing.Enums.HostMatcherType),
+                typeof(ProxyDivert.Core.Routing.Enums.ProcessMatcherType),
+                typeof(ProxyDivert.Core.Routing.Enums.OutboundKind),
+                typeof(ProxyDivert.Core.Routing.Enums.Ipv6Support),
+                typeof(ProxyDivert.Core.Vpn.Enums.VpnProtocol),
+            };
+
+            foreach (AppLanguage language in new[] { AppLanguage.English, AppLanguage.Vietnamese })
+            {
+                LocalizationManager.Apply(language);
+
+                foreach (Type type in shown)
+                {
+                    foreach (object value in Enum.GetValues(type))
+                    {
+                        string key = $"Enum.{type.Name}.{value}";
+                        Assert.True(
+                            application.TryFindResource(key) is string,
+                            $"{key} is missing from the {language} strings.");
+                    }
+                }
+            }
         });
     }
 

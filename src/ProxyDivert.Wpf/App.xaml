@@ -1,7 +1,8 @@
 <Application x:Class="ProxyDivert.Wpf.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:conv="clr-namespace:ProxyDivert.Wpf.Converters">
+             xmlns:conv="clr-namespace:ProxyDivert.Wpf.Converters"
+             xmlns:loc="clr-namespace:ProxyDivert.Wpf.Localization">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -19,6 +20,43 @@
             <conv:ByteSizeConverter x:Key="ByteSize"/>
             <conv:DurationConverter x:Key="Duration"/>
             <conv:IsNullOrEmptyConverter x:Key="IsNullOrEmpty"/>
+            <conv:EnumLocalizeConverter x:Key="EnumText"/>
+            <conv:AppLanguageDisplayConverter x:Key="AppLanguageText"/>
+
+            <!-- Every list of enum values in the app shows its items through these. The templates
+                 are for a stand-alone ComboBox; the style is for a DataGridComboBoxColumn, which
+                 builds its own ComboBox and so can only be reached through ElementStyle /
+                 EditingElementStyle.
+
+                 The second binding is LocalizationScope.Version, which changes with the language
+                 and so re-runs the converter — a converter's output, unlike a DynamicResource, has
+                 nothing to re-read on its own. -->
+            <DataTemplate x:Key="EnumItemTemplate">
+                <TextBlock>
+                    <TextBlock.Text>
+                        <MultiBinding Converter="{StaticResource EnumText}" Mode="OneWay">
+                            <Binding/>
+                            <Binding Path="Version" Source="{x:Static loc:LocalizationScope.Instance}"/>
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+            </DataTemplate>
+
+            <DataTemplate x:Key="LanguageItemTemplate">
+                <TextBlock>
+                    <TextBlock.Text>
+                        <MultiBinding Converter="{StaticResource AppLanguageText}" Mode="OneWay">
+                            <Binding/>
+                            <Binding Path="Version" Source="{x:Static loc:LocalizationScope.Instance}"/>
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+            </DataTemplate>
+
+            <Style x:Key="EnumComboColumn" TargetType="ComboBox"
+                   BasedOn="{StaticResource {x:Type ComboBox}}">
+                <Setter Property="ItemTemplate" Value="{StaticResource EnumItemTemplate}"/>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -94,4 +94,59 @@
 
     <sys:String x:Key="Str.Warn.Admin">ProxyDivert phải chạy bằng quyền Administrator: WinDivert nạp driver kernel.</sys:String>
     <sys:String x:Key="Str.Warn.AntiCheat">Game có anti-cheat kernel có thể coi việc chuyển hướng gói tin hoặc tạm dừng tiến trình là hành vi can thiệp.</sys:String>
+
+    <sys:String x:Key="Str.Lang.System">Hệ thống</sys:String>
+    <sys:String x:Key="Str.Theme.Tooltip">Giao diện: {0} — bấm để đổi</sys:String>
+    <sys:String x:Key="Str.Rules.NewPolicy">Chính sách {0}</sys:String>
+
+    <!-- Giá trị enum, tra theo khoá Enum.<TênKiểu>.<GiáTrị> trong LocalizationManager.EnumText.
+         Thiếu những khoá này thì combo box hiện định danh C#, tức là tiếng Anh ở mọi ngôn ngữ. -->
+    <sys:String x:Key="Enum.ThemeMode.System">Theo hệ thống</sys:String>
+    <sys:String x:Key="Enum.ThemeMode.Light">Sáng</sys:String>
+    <sys:String x:Key="Enum.ThemeMode.Dark">Tối</sys:String>
+
+    <sys:String x:Key="Enum.DnsMode.SystemSniff">Đọc DNS của hệ thống</sys:String>
+    <sys:String x:Key="Enum.DnsMode.DnsOverHttps">DNS qua HTTPS</sys:String>
+
+    <sys:String x:Key="Enum.Ipv6Mode.Redirect">Chuyển hướng</sys:String>
+    <sys:String x:Key="Enum.Ipv6Mode.Block">Chặn</sys:String>
+    <sys:String x:Key="Enum.Ipv6Mode.Ignore">Bỏ qua</sys:String>
+
+    <sys:String x:Key="Enum.UdpMode.Direct">Đi thẳng</sys:String>
+    <sys:String x:Key="Enum.UdpMode.ThroughOutbound">Qua outbound</sys:String>
+    <sys:String x:Key="Enum.UdpMode.Block">Chặn</sys:String>
+
+    <sys:String x:Key="Enum.HostMatcherType.Wildcard">Ký tự đại diện</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Equals">Khớp đúng</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.DomainSuffix">Hậu tố tên miền</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.StartsWith">Bắt đầu bằng</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.EndsWith">Kết thúc bằng</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Contains">Có chứa</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Regex">Biểu thức chính quy</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.IpCidr">IP / CIDR</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Port">Cổng</sys:String>
+
+    <sys:String x:Key="Enum.ProcessMatcherType.ExeName">Tên tệp chạy</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.FullPath">Đường dẫn đầy đủ</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.Wildcard">Ký tự đại diện</sys:String>
+
+    <sys:String x:Key="Enum.OutboundKind.Direct">Đi thẳng</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.Block">Chặn</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.HttpProxy">HTTP proxy</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.Socks4">SOCKS4</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.Socks5">SOCKS5</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.Vpn">VPN</sys:String>
+
+    <sys:String x:Key="Enum.Ipv6Support.Auto">Tự động</sys:String>
+    <sys:String x:Key="Enum.Ipv6Support.Enabled">Bật</sys:String>
+    <sys:String x:Key="Enum.Ipv6Support.Disabled">Tắt</sys:String>
+
+    <sys:String x:Key="Enum.VpnProtocol.Auto">Tự động</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.WireGuardWireProxy">WireGuard (wireproxy)</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.WireGuard">WireGuard (trong tiến trình)</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.OpenVpn">OpenVPN</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.Sstp">SSTP</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.L2tpIpsec">L2TP/IPsec</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.Ikev2">IKEv2</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.SoftEther">SoftEther</sys:String>
 </ResourceDictionary>

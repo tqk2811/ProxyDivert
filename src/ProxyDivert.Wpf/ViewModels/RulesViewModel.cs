@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.Services;
 
 namespace ProxyDivert.Wpf.ViewModels;
@@ -66,7 +67,7 @@ public sealed partial class RulesViewModel : ObservableObject
         var policy = new RoutingPolicy
         {
             Id = Guid.NewGuid(),
-            Name = $"Policy {Policies.Count + 1}",
+            Name = LocalizationManager.Format("Str.Rules.NewPolicy", Policies.Count + 1),
         };
         _services.Config.Policies.Add(policy);
         Policies.Add(policy);

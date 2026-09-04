@@ -31,6 +31,8 @@
                                                 SelectedItemBinding="{Binding Matcher, UpdateSourceTrigger=PropertyChanged}"
                                                 ItemsSource="{Binding DataContext.Matchers,
                                                     RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                ElementStyle="{StaticResource EnumComboColumn}"
+                                                EditingElementStyle="{StaticResource EnumComboColumn}"
                                                 Width="110"/>
                         <DataGridTextColumn Header="{DynamicResource Str.App.Pattern}"
                                             Binding="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}" Width="*"/>

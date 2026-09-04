@@ -11,7 +11,8 @@
                                Margin="0,0,0,8"/>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock Text="{DynamicResource Str.Settings.DnsMode}" VerticalAlignment="Center" MinWidth="120"/>
-                        <ComboBox ItemsSource="{Binding DnsModes}" SelectedItem="{Binding DnsMode}" Width="200"/>
+                        <ComboBox ItemsSource="{Binding DnsModes}" SelectedItem="{Binding DnsMode}" Width="200"
+                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{DynamicResource Str.Settings.DohEndpoint}" VerticalAlignment="Center" MinWidth="120"/>
@@ -25,7 +26,8 @@
                 <StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{DynamicResource Str.Settings.Ipv6}" VerticalAlignment="Center" MinWidth="120"/>
-                        <ComboBox ItemsSource="{Binding Ipv6Modes}" SelectedItem="{Binding Ipv6}" Width="200"/>
+                        <ComboBox ItemsSource="{Binding Ipv6Modes}" SelectedItem="{Binding Ipv6}" Width="200"
+                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
                     </StackPanel>
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,4,0,10" TextWrapping="Wrap"
                                Text="{DynamicResource Str.Settings.Ipv6Hint}"/>
@@ -53,11 +55,15 @@
                                Margin="0,0,0,8"/>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock Text="{DynamicResource Str.Settings.Language}" VerticalAlignment="Center" MinWidth="120"/>
-                        <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" Width="200"/>
+                        <!-- Its own converter, not the enum one: a language is named in its own
+                             language, so the list stays readable whichever one is active. -->
+                        <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" Width="200"
+                                  ItemTemplate="{StaticResource LanguageItemTemplate}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock Text="{DynamicResource Str.Settings.Theme}" VerticalAlignment="Center" MinWidth="120"/>
-                        <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" Width="200"/>
+                        <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" Width="200"
+                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
                     </StackPanel>
                     <CheckBox Content="{DynamicResource Str.Settings.StartWithWindows}"
                               IsChecked="{Binding StartWithWindows}"/>

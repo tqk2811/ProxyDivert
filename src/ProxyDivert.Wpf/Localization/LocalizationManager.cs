@@ -30,6 +30,9 @@ namespace ProxyDivert.Wpf.Localization
         {
             CurrentLanguage = language;
             SwapDictionary(IsCurrentlyVietnamese());
+            // Bindings that go through a converter re-evaluate off this; the swap above only
+            // reaches the ones written as DynamicResource.
+            LocalizationScope.Instance.Bump();
             LanguageChanged?.Invoke();
         }
 

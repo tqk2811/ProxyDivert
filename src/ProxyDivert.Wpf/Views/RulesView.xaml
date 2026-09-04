@@ -49,6 +49,7 @@
 
                         <TextBlock Text="{DynamicResource Str.Rules.UdpMode}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                         <ComboBox ItemsSource="{Binding UdpModes}" SelectedItem="{Binding SelectedPolicy.UdpMode}"
+                                  ItemTemplate="{StaticResource EnumItemTemplate}"
                                   Width="150" Margin="8,0,0,0"/>
 
                         <CheckBox Content="{DynamicResource Str.Rules.BlockQuic}"
@@ -69,6 +70,8 @@
                                                 SelectedItemBinding="{Binding Matcher, UpdateSourceTrigger=PropertyChanged}"
                                                 ItemsSource="{Binding DataContext.Matchers,
                                                     RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                ElementStyle="{StaticResource EnumComboColumn}"
+                                                EditingElementStyle="{StaticResource EnumComboColumn}"
                                                 Width="120"/>
                         <DataGridTextColumn Header="{DynamicResource Str.App.Pattern}"
                                             Binding="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}" Width="*"/>

@@ -72,6 +72,8 @@
                                             SelectedItemBinding="{Binding Kind, UpdateSourceTrigger=PropertyChanged}"
                                             ItemsSource="{Binding DataContext.Kinds,
                                                 RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            ElementStyle="{StaticResource EnumComboColumn}"
+                                            EditingElementStyle="{StaticResource EnumComboColumn}"
                                             Width="110"/>
                     <DataGridTextColumn Header="{DynamicResource Str.Outbound.Url}"
                                         Binding="{Binding Url, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
@@ -89,11 +91,15 @@
                                             SelectedItemBinding="{Binding VpnProtocol, UpdateSourceTrigger=PropertyChanged}"
                                             ItemsSource="{Binding DataContext.VpnProtocols,
                                                 RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            ElementStyle="{StaticResource EnumComboColumn}"
+                                            EditingElementStyle="{StaticResource EnumComboColumn}"
                                             Width="150"/>
                     <DataGridComboBoxColumn Header="{DynamicResource Str.Outbound.Ipv6}"
                                             SelectedItemBinding="{Binding Ipv6Support, UpdateSourceTrigger=PropertyChanged}"
                                             ItemsSource="{Binding DataContext.Ipv6Supports,
                                                 RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            ElementStyle="{StaticResource EnumComboColumn}"
+                                            EditingElementStyle="{StaticResource EnumComboColumn}"
                                             Width="100"/>
                 </DataGrid.Columns>
             </DataGrid>

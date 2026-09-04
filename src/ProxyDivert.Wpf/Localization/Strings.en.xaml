@@ -94,4 +94,59 @@
 
     <sys:String x:Key="Str.Warn.Admin">ProxyDivert must run as Administrator: WinDivert loads a kernel driver.</sys:String>
     <sys:String x:Key="Str.Warn.AntiCheat">Games with kernel anti-cheat may treat packet redirection or process suspension as tampering.</sys:String>
+
+    <sys:String x:Key="Str.Lang.System">System</sys:String>
+    <sys:String x:Key="Str.Theme.Tooltip">Theme: {0} — click to change</sys:String>
+    <sys:String x:Key="Str.Rules.NewPolicy">Policy {0}</sys:String>
+
+    <!-- Enum values, looked up as Enum.<TypeName>.<Value> by LocalizationManager.EnumText. Without
+         these a combo box would show the C# identifier, which is English whatever the language is. -->
+    <sys:String x:Key="Enum.ThemeMode.System">Follow the system</sys:String>
+    <sys:String x:Key="Enum.ThemeMode.Light">Light</sys:String>
+    <sys:String x:Key="Enum.ThemeMode.Dark">Dark</sys:String>
+
+    <sys:String x:Key="Enum.DnsMode.SystemSniff">Read the system DNS</sys:String>
+    <sys:String x:Key="Enum.DnsMode.DnsOverHttps">DNS over HTTPS</sys:String>
+
+    <sys:String x:Key="Enum.Ipv6Mode.Redirect">Redirect</sys:String>
+    <sys:String x:Key="Enum.Ipv6Mode.Block">Block</sys:String>
+    <sys:String x:Key="Enum.Ipv6Mode.Ignore">Ignore</sys:String>
+
+    <sys:String x:Key="Enum.UdpMode.Direct">Direct</sys:String>
+    <sys:String x:Key="Enum.UdpMode.ThroughOutbound">Through the outbound</sys:String>
+    <sys:String x:Key="Enum.UdpMode.Block">Block</sys:String>
+
+    <sys:String x:Key="Enum.HostMatcherType.Wildcard">Wildcard</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Equals">Exact</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.DomainSuffix">Domain suffix</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.StartsWith">Starts with</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.EndsWith">Ends with</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Contains">Contains</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Regex">Regular expression</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.IpCidr">IP / CIDR</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Port">Port</sys:String>
+
+    <sys:String x:Key="Enum.ProcessMatcherType.ExeName">Executable name</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.FullPath">Full path</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.Wildcard">Wildcard</sys:String>
+
+    <sys:String x:Key="Enum.OutboundKind.Direct">Direct</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.Block">Block</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.HttpProxy">HTTP proxy</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.Socks4">SOCKS4</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.Socks5">SOCKS5</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.Vpn">VPN</sys:String>
+
+    <sys:String x:Key="Enum.Ipv6Support.Auto">Auto</sys:String>
+    <sys:String x:Key="Enum.Ipv6Support.Enabled">Enabled</sys:String>
+    <sys:String x:Key="Enum.Ipv6Support.Disabled">Disabled</sys:String>
+
+    <sys:String x:Key="Enum.VpnProtocol.Auto">Auto</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.WireGuardWireProxy">WireGuard (wireproxy)</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.WireGuard">WireGuard (in process)</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.OpenVpn">OpenVPN</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.Sstp">SSTP</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.L2tpIpsec">L2TP/IPsec</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.Ikev2">IKEv2</sys:String>
+    <sys:String x:Key="Enum.VpnProtocol.SoftEther">SoftEther</sys:String>
 </ResourceDictionary>
