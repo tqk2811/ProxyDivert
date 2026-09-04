@@ -4,3 +4,6 @@
 [submodule "libs/TqkLibrary.Proxy"]
 	path = libs/TqkLibrary.Proxy
 	url = https://github.com/tqk2811/TqkLibrary.Proxy.git
+[submodule "libs/TqkLibrary.VpnClient"]
+	path = libs/TqkLibrary.VpnClient
+	url = https://github.com/tqk2811/TqkLibrary.VpnClient.git
