@@ -10,6 +10,7 @@ using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Wpf.Services;
 using TqkLibrary.WinDivert.ProcessControl;
+using TqkLibrary.WinDivert.ProcessControl.Interfaces;
 using TqkLibrary.WinDivert.ProcessControl.Models;
 
 namespace ProxyDivert.Wpf.ViewModels;
@@ -61,7 +62,7 @@ public sealed partial class ProcessesViewModel : ObservableObject
         var attached = new HashSet<uint>(_services.Engine.TrackedProcesses.Select(p => p.ProcessId));
 
         RunningProcesses.Clear();
-        foreach (ProcessInfo process in ProcessFinder.ListAll())
+        foreach (ProcessInfo process in new ProcessFinder().ListAll())
         {
             if (!string.IsNullOrWhiteSpace(ProcessFilter)
                 && process.Name.IndexOf(ProcessFilter, StringComparison.OrdinalIgnoreCase) < 0)
@@ -138,10 +139,10 @@ public sealed partial class ProcessesViewModel : ObservableObject
         };
         if (dialog.ShowDialog() != true) return;
 
-        SuspendedProcessLauncher.SuspendedProcess? suspended = null;
+        ISuspendedProcess? suspended = null;
         try
         {
-            suspended = SuspendedProcessLauncher.Launch(dialog.FileName, args: null);
+            suspended = new SuspendedProcessLauncher().Launch(dialog.FileName, args: null);
 
             // A rule must exist for the engine to adopt it, so create one for this exact program.
             RoutingPolicy? policy = Policies.FirstOrDefault();

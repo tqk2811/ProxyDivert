@@ -4,8 +4,9 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using TqkLibrary.Proxy.Interfaces;
-using TqkLibrary.WinDivert.Logging;
+using Microsoft.Extensions.Logging;
 using TqkLibrary.WinDivert.Redirect;
+using TqkLibrary.WinDivert.Redirect.Interfaces;
 
 namespace ProxyDivert.Core.Engine;
 
@@ -19,16 +20,16 @@ namespace ProxyDivert.Core.Engine;
 // of the relay's two loopback listeners.
 public sealed class UdpProxyForwarder : IDisposable
 {
-    private readonly ProcessRedirector _redirector;
-    private readonly RedirectLogger _log;
+    private readonly IProcessRedirector _redirector;
+    private readonly ILogger<UdpProxyForwarder> _logger;
     private readonly CancellationTokenSource _cts;
     private readonly ConcurrentDictionary<TunnelKey, PortTunnel> _tunnels = new ConcurrentDictionary<TunnelKey, PortTunnel>();
     private volatile bool _disposed;
 
-    public UdpProxyForwarder(ProcessRedirector redirector, RedirectLogger? logger, CancellationToken cancellationToken)
+    public UdpProxyForwarder(IProcessRedirector redirector, ILogger<UdpProxyForwarder> logger, CancellationToken cancellationToken)
     {
         _redirector = redirector ?? throw new ArgumentNullException(nameof(redirector));
-        _log = logger ?? RedirectLogger.Null;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     }
 
@@ -62,7 +63,7 @@ public sealed class UdpProxyForwarder : IDisposable
         }
         catch (Exception ex)
         {
-            _log.Log("UDP", $"inject reply to :{clientPort} from {from} failed: {ex.GetType().Name}: {ex.Message}");
+            _logger.LogWarning(ex, "injecting a reply to :{ClientPort} from {From} failed", clientPort, from);
         }
     }
 
@@ -127,11 +128,11 @@ public sealed class UdpProxyForwarder : IDisposable
                 await tunnel.AssociateAsync(ct).ConfigureAwait(false);
                 _tunnel = tunnel;
                 _receiveLoop = Task.Run(() => ReceiveLoopAsync(ct));
-                _owner._log.Log("UDP", $"associate :{_key.ClientPort} -> relay={tunnel.RelayEndPoint}");
+                _owner._logger.LogDebug("UDP associate for :{ClientPort} is up, relay={Relay}", _key.ClientPort, tunnel.RelayEndPoint);
             }
             catch (Exception ex)
             {
-                _owner._log.Log("UDP", $"associate :{_key.ClientPort} FAILED: {ex.GetType().Name}: {ex.Message}");
+                _owner._logger.LogWarning(ex, "UDP associate for :{ClientPort} failed", _key.ClientPort);
             }
         }
 
@@ -148,7 +149,7 @@ public sealed class UdpProxyForwarder : IDisposable
             }
             catch (Exception ex)
             {
-                _owner._log.Log("UDP", $"send :{_key.ClientPort} -> {destination} failed: {ex.GetType().Name}: {ex.Message}");
+                _owner._logger.LogWarning(ex, "sending :{ClientPort} -> {Destination} failed", _key.ClientPort, destination);
                 return false;
             }
         }
@@ -167,7 +168,7 @@ public sealed class UdpProxyForwarder : IDisposable
                 catch (ObjectDisposedException) { return; }
                 catch (Exception ex)
                 {
-                    _owner._log.Log("UDP", $"receive :{_key.ClientPort} tunnel error: {ex.GetType().Name}: {ex.Message}");
+                    _owner._logger.LogWarning(ex, "the receive side of the tunnel for :{ClientPort} failed", _key.ClientPort);
                     return;
                 }
 

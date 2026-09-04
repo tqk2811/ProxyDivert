@@ -1,36 +1,60 @@
 using System;
+using Microsoft.Extensions.DependencyInjection;
 using ProxyDivert.Core.Configuration;
 using ProxyDivert.Core.Configuration.Models;
+using ProxyDivert.Core.DependencyInjection;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Logging;
 
 namespace ProxyDivert.Wpf.Services;
 
-// Composition root: the few long-lived objects the whole window shares, created once and disposed
-// on shutdown. Deliberately not a DI container — the graph is four objects deep and a container
-// would hide more than it saves.
+/// <summary>
+/// Composition root: builds the container the window runs on and hands the view models the few
+/// long-lived objects they share.
+/// </summary>
+/// <remarks>
+/// The container exists because the libraries below ask for one — they register their services
+/// through AddWinDivert*, and hand-wiring that graph would mean this class knowing about every
+/// factory in them. It stays a thin facade so a view model still asks for
+/// <see cref="Engine"/> rather than resolving services itself.
+/// </remarks>
 public sealed class AppServices : IDisposable
 {
+    private readonly ServiceProvider _provider;
+
     public ConfigStore ConfigStore { get; }
 
-    // The live configuration. ViewModels edit this instance and call SaveAndApply when the user is
-    // done, so an edit is never half-applied to the engine.
+    /// <summary>
+    /// The live configuration. View models edit this instance and call <see cref="SaveAndApply"/>
+    /// when the user is done, so an edit is never half-applied to the engine.
+    /// </summary>
     public AppConfig Config { get; private set; }
 
     public RedirectEngine Engine { get; }
 
-    // Log pane storage. Re-bound to the engine's logger every time the engine starts, because a
-    // fresh RedirectLogger is created per run.
-    public InMemoryLogStore Logs { get; private set; }
+    /// <summary>
+    /// Every log line, from the packet path up. Unlike before, this lives as long as the
+    /// application rather than as long as one engine run, so the pane keeps what happened before
+    /// the last Start.
+    /// </summary>
+    public InMemoryLogStore Logs { get; }
 
-    private InMemoryLogStore? _boundStore;
+    private readonly AppLoggerProvider _loggerProvider;
 
     public AppServices(string? configPath = null)
     {
+        // The config decides where the trace file goes, so it has to be read before the container
+        // that carries the logging is built.
         ConfigStore = new ConfigStore(configPath);
         Config = ConfigStore.Load();
-        Engine = new RedirectEngine();
-        Logs = new InMemoryLogStore();
+
+        _provider = new ServiceCollection()
+            .AddProxyDivert(Config.DiagnosticLogPath)
+            .BuildServiceProvider();
+
+        Logs = _provider.GetRequiredService<InMemoryLogStore>();
+        _loggerProvider = _provider.GetRequiredService<AppLoggerProvider>();
+        Engine = _provider.GetRequiredService<RedirectEngine>();
     }
 
     public void Save() => ConfigStore.Save(Config);
@@ -39,43 +63,19 @@ public sealed class AppServices : IDisposable
     public void SaveAndApply()
     {
         Save();
+        // The log path is the one setting the engine does not own, because logging is set up before
+        // the engine exists. Applying it here is what makes it take effect without a restart.
+        _loggerProvider.SetFilePath(Config.DiagnosticLogPath);
         if (Engine.IsRunning) Engine.ApplyConfig(Config);
     }
 
-    public void StartEngine()
-    {
-        Engine.Start(Config);
-        // The engine builds its logger in Start(), so the pane can only attach afterwards.
-        AttachLogStore();
-    }
+    public void StartEngine() => Engine.Start(Config);
 
-    public void StopEngine()
-    {
-        Engine.Stop();
-        DetachLogStore();
-    }
-
-    private void AttachLogStore()
-    {
-        DetachLogStore();
-        _boundStore = new InMemoryLogStore(Engine.Logger);
-        Logs = _boundStore;
-        LogStoreChanged?.Invoke(Logs);
-    }
-
-    private void DetachLogStore()
-    {
-        _boundStore?.Dispose();
-        _boundStore = null;
-    }
-
-    /// <summary>Raised when a new engine run replaces the log store the UI is bound to.</summary>
-    public event Action<InMemoryLogStore>? LogStoreChanged;
+    public void StopEngine() => Engine.Stop();
 
     public void Dispose()
     {
         Engine.Dispose();
-        DetachLogStore();
-        Logs.Dispose();
+        _provider.Dispose();
     }
 }

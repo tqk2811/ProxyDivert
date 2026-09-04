@@ -15,8 +15,12 @@ using ProxyDivert.Core.Routing.Models;
 using TqkLibrary.Proxy;
 using TqkLibrary.Proxy.Handlers;
 using TqkLibrary.Proxy.ProxySources;
-using TqkLibrary.WinDivert.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using ProxyDivert.Core.DependencyInjection;
+using ProxyDivert.Core.Logging;
 using TqkLibrary.WinDivert.ProcessControl;
+using TqkLibrary.WinDivert.ProcessControl.Interfaces;
 using TqkLibrary.WinDivert.ProcessControl.Models;
 
 // Console harness for the redirect engine: no window, no config file, everything from arguments.
@@ -154,7 +158,13 @@ Console.WriteLine($"UDP: {options.UdpMode}, QUIC blocked: {options.BlockQuic}, I
 
 // ---- engine ---------------------------------------------------------------------------------
 
-using var engine = new RedirectEngine();
+// One container, wired exactly like the window's: the libraries register their own services and
+// this application supplies the only thing they ask for, somewhere to put log lines.
+using ServiceProvider services = new ServiceCollection()
+    .AddProxyDivert(config.DiagnosticLogPath, options.Verbose ? LogLevel.Debug : LogLevel.Information)
+    .BuildServiceProvider();
+
+RedirectEngine engine = services.GetRequiredService<RedirectEngine>();
 
 engine.ProcessAttached += p => Console.WriteLine($"  [proc +] {Describe(p)}");
 engine.ProcessDetached += p => Console.WriteLine($"  [proc -] {Describe(p)}");
@@ -177,16 +187,20 @@ catch (Exception ex)
     return 1;
 }
 
-if (options.Verbose) engine.Logger.EntryWritten += entry => Console.WriteLine($"    {entry}");
+// Verbose means "show me what the engine is doing" — the same lines the trace file gets.
+if (options.Verbose)
+    services.GetRequiredService<InMemoryLogStore>().EntryAdded += entry => Console.WriteLine($"    {entry}");
 
 // ---- what to redirect -------------------------------------------------------------------------
 
-SuspendedProcessLauncher.SuspendedProcess? launched = null;
+ISuspendedProcessLauncher launcher = services.GetRequiredService<ISuspendedProcessLauncher>();
+IProcessFinder processFinder = services.GetRequiredService<IProcessFinder>();
+ISuspendedProcess? launched = null;
 try
 {
     foreach (uint pid in options.Pids)
     {
-        ProcessInfo? info = ProcessFinder.FindById(pid);
+        ProcessInfo? info = processFinder.FindById(pid);
         if (info is null)
         {
             Console.Error.WriteLine($"No process with id {pid}.");
@@ -197,7 +211,7 @@ try
 
     if (options.LaunchExe != null)
     {
-        launched = SuspendedProcessLauncher.Launch(options.LaunchExe, options.LaunchArgs);
+        launched = launcher.Launch(options.LaunchExe, options.LaunchArgs);
         Console.WriteLine($"Launched suspended: pid={launched.Pid} \"{options.LaunchExe}\" {options.LaunchArgs}");
         // Attach while it is still frozen — that is the whole point of launching suspended.
         engine.AttachProcessId(launched.Pid, policy.Id, includeChildren: true);

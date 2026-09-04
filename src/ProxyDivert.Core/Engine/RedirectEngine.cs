@@ -16,10 +16,11 @@ using ProxyDivert.Core.Routing;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using TqkLibrary.Proxy.Interfaces;
-using TqkLibrary.WinDivert.Inspection.Extensions;
-using TqkLibrary.WinDivert.Logging;
-using TqkLibrary.WinDivert.ProcessControl;
+using TqkLibrary.WinDivert.Flow.Models;
+using TqkLibrary.WinDivert.Inspection.Interfaces;
+using TqkLibrary.WinDivert.ProcessControl.Interfaces;
 using TqkLibrary.WinDivert.Redirect;
+using TqkLibrary.WinDivert.Redirect.Interfaces;
 using TqkLibrary.WinDivert.Redirect.Enums;
 using TqkLibrary.WinDivert.Redirect.Models;
 
@@ -42,28 +43,29 @@ public sealed class RedirectEngine : IDisposable
     // fall back to reverse DNS or to plain IP routing.
     private static readonly TimeSpan HostPeekTimeout = TimeSpan.FromSeconds(3);
 
-    private readonly ILoggerFactory? _loggerFactory;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly ILogger<RedirectEngine> _logger;
+    private readonly IProcessRedirectorFactory _redirectorFactory;
+    private readonly IProcessTreeMonitorFactory _treeMonitorFactory;
+    private readonly IHostNameInspector _hostNameInspector;
     private readonly object _stateLock = new object();
     // What we have learned about which outbounds can actually reach IPv6. Lives across Start/Stop
     // because it describes the proxies, not the run.
     private readonly OutboundIpv6Capability _ipv6Capability = new OutboundIpv6Capability();
 
-    private RedirectLogger _log = RedirectLogger.Null;
     private AppConfig _config = AppConfig.CreateDefault();
     private RoutingPolicyResolver _resolver;
     private OutboundSourceFactory? _outboundFactory;
     private ProcessWatcher? _watcher;
-    private ProcessRedirector? _redirector;
+    private IProcessRedirector? _redirector;
+    private IConnectionHostNameResolver? _hostNames;
     private UdpProxyForwarder? _udpForwarder;
     private CancellationTokenSource? _cts;
-    private readonly Dictionary<uint, ProcessTreeMonitor> _treeMonitors = new Dictionary<uint, ProcessTreeMonitor>();
+    private readonly Dictionary<uint, IProcessTreeMonitor> _treeMonitors = new Dictionary<uint, IProcessTreeMonitor>();
 
     public ConnectionTracker Connections { get; } = new ConnectionTracker();
 
     public bool IsRunning { get; private set; }
-
-    /// <summary>Diagnostic stream of the running engine. Null until Start().</summary>
-    public RedirectLogger Logger => _log;
 
     /// <summary>Processes currently under redirection.</summary>
     public IReadOnlyCollection<TrackedProcess> TrackedProcesses
@@ -72,9 +74,17 @@ public sealed class RedirectEngine : IDisposable
     public event Action<TrackedProcess>? ProcessAttached;
     public event Action<TrackedProcess>? ProcessDetached;
 
-    public RedirectEngine(ILoggerFactory? loggerFactory = null)
+    public RedirectEngine(
+        IProcessRedirectorFactory redirectorFactory,
+        IProcessTreeMonitorFactory treeMonitorFactory,
+        IHostNameInspector hostNameInspector,
+        ILoggerFactory loggerFactory)
     {
-        _loggerFactory = loggerFactory;
+        _redirectorFactory = redirectorFactory ?? throw new ArgumentNullException(nameof(redirectorFactory));
+        _treeMonitorFactory = treeMonitorFactory ?? throw new ArgumentNullException(nameof(treeMonitorFactory));
+        _hostNameInspector = hostNameInspector ?? throw new ArgumentNullException(nameof(hostNameInspector));
+        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        _logger = loggerFactory.CreateLogger<RedirectEngine>();
         _resolver = BuildResolver(_config, new Dictionary<uint, Guid>());
     }
 
@@ -87,7 +97,7 @@ public sealed class RedirectEngine : IDisposable
             if (IsRunning) throw new InvalidOperationException("Engine already running");
 
             _config = config;
-            _log = new RedirectLogger(_loggerFactory, config.DiagnosticLogPath);
+
             _cts = new CancellationTokenSource();
             _outboundFactory = new OutboundSourceFactory(_loggerFactory, config.WireProxyPath);
             _resolver = BuildResolver(config, new Dictionary<uint, Guid>());
@@ -97,7 +107,7 @@ public sealed class RedirectEngine : IDisposable
                 // Start with an empty scope: pids arrive from the process watcher.
                 ProcessId = 0,
                 Protocols = RedirectProtocol.All,
-                Logger = _log,
+
                 Ipv6Mode = config.Ipv6,
                 EnableDnsSniff = true,
                 EnableSecureDns = config.Dns.Mode == DnsMode.DnsOverHttps,
@@ -106,17 +116,21 @@ public sealed class RedirectEngine : IDisposable
                 UdpDatagramHandler = HandleUdpDatagram,
             };
 
-            _redirector = new ProcessRedirector(options);
+            _redirector = _redirectorFactory.Create(options);
             _redirector.Start();
-            _udpForwarder = new UdpProxyForwarder(_redirector, _log, _cts.Token);
+            _hostNames = new ConnectionHostNameResolver(_hostNameInspector, _redirector.ReverseDns);
+            _udpForwarder = new UdpProxyForwarder(_redirector, _loggerFactory.CreateLogger<UdpProxyForwarder>(), _cts.Token);
 
-            _watcher = new ProcessWatcher(_log);
+            _watcher = new ProcessWatcher(_loggerFactory.CreateLogger<ProcessWatcher>());
             _watcher.ProcessAttached += OnProcessAttached;
             _watcher.ProcessDetached += OnProcessDetached;
             _watcher.Start(config.ProcessRules);
 
             IsRunning = true;
-            _log.Log("ENG", $"Engine started, relay tcp={_redirector.TcpRelayPort} udp={_redirector.UdpRelayPort} tcpV6={_redirector.TcpRelayPortV6} udpV6={_redirector.UdpRelayPortV6} ipv6={config.Ipv6}");
+            _logger.LogInformation(
+                "engine started; relay tcp={Tcp} udp={Udp} tcpV6={TcpV6} udpV6={UdpV6}, ipv6={Ipv6Mode}",
+                _redirector.TcpRelayPort, _redirector.UdpRelayPort,
+                _redirector.TcpRelayPortV6, _redirector.UdpRelayPortV6, config.Ipv6);
         }
     }
 
@@ -139,7 +153,7 @@ public sealed class RedirectEngine : IDisposable
             _ipv6Capability.ResetAll();
             _watcher?.ApplyRules(config.ProcessRules);
             RebuildResolver();
-            _log.Log("ENG", "Configuration applied");
+            _logger.LogInformation("configuration applied");
         }
     }
 
@@ -196,9 +210,7 @@ public sealed class RedirectEngine : IDisposable
             _outboundFactory?.Dispose();
             _outboundFactory = null;
 
-            _log.Log("ENG", "Engine stopped");
-            _log.Dispose();
-            _log = RedirectLogger.Null;
+            _logger.LogInformation("engine stopped");
 
             _cts?.Dispose();
             _cts = null;
@@ -221,7 +233,7 @@ public sealed class RedirectEngine : IDisposable
         }
         catch (Exception ex)
         {
-            _log.Log("ENG", $"attach pid={process.ProcessId} failed: {ex.GetType().Name}: {ex.Message}");
+            _logger.LogWarning(ex, "attaching pid={Pid} failed", process.ProcessId);
         }
         ProcessAttached?.Invoke(process);
     }
@@ -236,7 +248,7 @@ public sealed class RedirectEngine : IDisposable
         }
         catch (Exception ex)
         {
-            _log.Log("ENG", $"detach pid={process.ProcessId} failed: {ex.GetType().Name}: {ex.Message}");
+            _logger.LogWarning(ex, "detaching pid={Pid} failed", process.ProcessId);
         }
         ProcessDetached?.Invoke(process);
     }
@@ -246,7 +258,7 @@ public sealed class RedirectEngine : IDisposable
         lock (_treeMonitors)
         {
             if (_treeMonitors.ContainsKey(rootPid)) return;
-            var monitor = new ProcessTreeMonitor(rootPid, logger: _log);
+            IProcessTreeMonitor monitor = _treeMonitorFactory.Create(rootPid);
             monitor.ChildSpawned += (childPid, parentPid) => _watcher?.AttachChild(childPid, parentPid);
             monitor.Start();
             _treeMonitors[rootPid] = monitor;
@@ -257,7 +269,7 @@ public sealed class RedirectEngine : IDisposable
     {
         lock (_treeMonitors)
         {
-            if (!_treeMonitors.TryGetValue(rootPid, out ProcessTreeMonitor? monitor)) return;
+            if (!_treeMonitors.TryGetValue(rootPid, out IProcessTreeMonitor? monitor)) return;
             _treeMonitors.Remove(rootPid);
             monitor.Dispose();
         }
@@ -290,9 +302,9 @@ public sealed class RedirectEngine : IDisposable
         try
         {
             // Name first: SNI / Host header, then whatever DNS taught us about this IP.
-            string? host = await connection
-                .TryPeekHostNameAsync(_redirector?.ReverseDns, HostPeekTimeout, ct)
-                .ConfigureAwait(false);
+            string? host = _hostNames is null
+                ? null
+                : await _hostNames.TryResolveAsync(connection, HostPeekTimeout, ct).ConfigureAwait(false);
             info.Host = host;
 
             var target = new RouteTarget(
@@ -306,7 +318,7 @@ public sealed class RedirectEngine : IDisposable
             info.RouteReason = decision.Reason;
             Connections.Update(info);
 
-            _log.Log("ENG", $"tcp pid={connection.ProcessId} {target} -> {decision}");
+            _logger.LogInformation("tcp pid={Pid} {Target} -> {Decision}", connection.ProcessId, target, decision);
 
             if (decision.Outbound.Kind == OutboundKind.Block)
             {
@@ -323,7 +335,7 @@ public sealed class RedirectEngine : IDisposable
         catch (Exception ex)
         {
             info.Error = $"{ex.GetType().Name}: {ex.Message}";
-            _log.Log("ENG", $"tcp pid={connection.ProcessId} -> {connection.OriginalDestination} failed: {info.Error}");
+            _logger.LogWarning(ex, "tcp pid={Pid} -> {Destination} failed", connection.ProcessId, connection.OriginalDestination);
         }
         finally
         {
@@ -352,9 +364,10 @@ public sealed class RedirectEngine : IDisposable
         if (isIpv6 && !byName && !_ipv6Capability.AllowsIpv6(outbound))
         {
             info.Error = "outbound has no IPv6 route and the connection carries no host name";
-            _log.Log("ENG",
-                $"tcp pid={connection.ProcessId} -> {destination} REFUSED: {outbound.Name} has no IPv6 route " +
-                "and there is no host name to resolve to IPv4; the application should retry over IPv4");
+            _logger.LogInformation(
+                "tcp pid={Pid} -> {Destination} refused: {Outbound} has no IPv6 route and the connection "
+                + "carries no host name to resolve to IPv4, so the application should retry over IPv4",
+                connection.ProcessId, destination, outbound.Name);
             return;
         }
 
@@ -403,10 +416,10 @@ public sealed class RedirectEngine : IDisposable
         if (!_ipv6Capability.RecordIpv6Failure(outbound)) return;
 
         _outboundFactory?.SetIpv6Support(outbound.Id, false);
-        _log.Log("ENG",
-            $"outbound '{outbound.Name}' marked IPv4-only: {destination} failed with " +
-            $"{ex.GetType().Name}: {ex.Message}. Later IPv6 destinations go out over IPv4 " +
-            "(by name where one is known); set Ipv6Support=Enabled to override.");
+        _logger.LogInformation(ex,
+            "outbound {Outbound} marked IPv4-only after {Destination} failed. Later IPv6 destinations go "
+            + "out over IPv4, by name where one is known; set Ipv6Support=Enabled to override",
+            outbound.Name, destination);
     }
 
     // ---- UDP --------------------------------------------------------------------------------
@@ -443,9 +456,9 @@ public sealed class RedirectEngine : IDisposable
                     // it out direct would expose the real address.
                     if (isIpv6 && !_ipv6Capability.AllowsIpv6(decision.Outbound))
                     {
-                        _log.Log("ENG",
-                            $"udp pid={datagram.ProcessId} -> {datagram.OriginalDestination} dropped " +
-                            $"({decision.Outbound.Name} has no IPv6 route)");
+                        _logger.LogDebug(
+                            "udp pid={Pid} -> {Destination} dropped: {Outbound} has no IPv6 route",
+                            datagram.ProcessId, datagram.OriginalDestination, decision.Outbound.Name);
                         return null;
                     }
 
@@ -457,14 +470,14 @@ public sealed class RedirectEngine : IDisposable
                         datagram.Payload,
                         isIpv6);
                     if (!queued)
-                        _log.Log("ENG", $"udp pid={datagram.ProcessId} -> {datagram.OriginalDestination} dropped (tunnel not ready)");
+                        _logger.LogDebug("udp pid={Pid} -> {Destination} dropped, the tunnel is not ready yet", datagram.ProcessId, datagram.OriginalDestination);
                     return null;
                 }
             }
         }
         catch (Exception ex)
         {
-            _log.Log("ENG", $"udp pid={datagram.ProcessId} routing failed, dropping: {ex.GetType().Name}: {ex.Message}");
+            _logger.LogWarning(ex, "udp pid={Pid} routing failed, dropping the datagram", datagram.ProcessId);
             return null;
         }
     }

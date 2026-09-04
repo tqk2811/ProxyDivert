@@ -60,7 +60,7 @@ public class PeekableStreamTests
 
         int available = await stream.PeekAsync(1024, CancellationToken.None);
 
-        Assert.True(HttpHostParser.TryReadHost(stream.PeekBuffer, available, out string host));
+        Assert.True(new HttpHostParser().TryReadHostName(stream.PeekBuffer, available, out string host));
         Assert.Equal("www.example.com", host);
     }
 

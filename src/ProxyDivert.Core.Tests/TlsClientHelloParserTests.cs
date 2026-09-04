@@ -10,12 +10,16 @@ namespace ProxyDivert.Core.Tests;
 // against a hand-built ClientHello rather than trusting a live capture.
 public class TlsClientHelloParserTests
 {
+    // The parsers are ordinary objects now, so a test holds its own instead of reaching for statics.
+    private static readonly TlsClientHelloParser Tls = new TlsClientHelloParser();
+    private static readonly HttpHostParser Http = new HttpHostParser();
+
     [Fact]
     public void Reads_the_server_name_from_a_client_hello()
     {
         byte[] hello = BuildClientHello("www.example.com");
 
-        Assert.True(TlsClientHelloParser.TryReadServerName(hello, hello.Length, out string name));
+        Assert.True(Tls.TryReadHostName(hello, hello.Length, out string name));
         Assert.Equal("www.example.com", name);
     }
 
@@ -24,7 +28,7 @@ public class TlsClientHelloParserTests
     {
         byte[] hello = BuildClientHello("cdn.example.org", extensionsBefore: 3);
 
-        Assert.True(TlsClientHelloParser.TryReadServerName(hello, hello.Length, out string name));
+        Assert.True(Tls.TryReadHostName(hello, hello.Length, out string name));
         Assert.Equal("cdn.example.org", name);
     }
 
@@ -33,7 +37,7 @@ public class TlsClientHelloParserTests
     {
         byte[] hello = BuildClientHello(serverName: null);
 
-        Assert.False(TlsClientHelloParser.TryReadServerName(hello, hello.Length, out _));
+        Assert.False(Tls.TryReadHostName(hello, hello.Length, out _));
     }
 
     [Fact]
@@ -41,8 +45,8 @@ public class TlsClientHelloParserTests
     {
         byte[] request = Encoding.ASCII.GetBytes("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n");
 
-        Assert.False(TlsClientHelloParser.LooksLikeTls(request, request.Length));
-        Assert.False(TlsClientHelloParser.TryReadServerName(request, request.Length, out _));
+        Assert.False(Tls.CanParse(request, request.Length));
+        Assert.False(Tls.TryReadHostName(request, request.Length, out _));
     }
 
     [Fact]
@@ -52,7 +56,7 @@ public class TlsClientHelloParserTests
 
         // Every prefix of a valid hello must be handled: a real first flight can be split.
         for (int length = 1; length < hello.Length; length++)
-            TlsClientHelloParser.TryReadServerName(hello, length, out _);
+            Tls.TryReadHostName(hello, length, out _);
     }
 
     [Fact]
@@ -65,7 +69,7 @@ public class TlsClientHelloParserTests
             random.NextBytes(buffer);
             buffer[0] = 0x16;   // force the TLS pre-check to pass so the parser body runs
             buffer[1] = 0x03;
-            TlsClientHelloParser.TryReadServerName(buffer, buffer.Length, out _);
+            Tls.TryReadHostName(buffer, buffer.Length, out _);
         }
     }
 

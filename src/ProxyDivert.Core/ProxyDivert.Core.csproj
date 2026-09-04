@@ -8,7 +8,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\libs\TqkLibrary.WinDivert\src\TqkLibrary.WinDivert\TqkLibrary.WinDivert.csproj" />
+		<ProjectReference Include="..\..\libs\TqkLibrary.WinDivert\src\TqkLibrary.WinDivert.Redirect\TqkLibrary.WinDivert.Redirect.csproj" />
+		<ProjectReference Include="..\..\libs\TqkLibrary.WinDivert\src\TqkLibrary.WinDivert.ProcessControl\TqkLibrary.WinDivert.ProcessControl.csproj" />
 		<ProjectReference Include="..\..\libs\TqkLibrary.Proxy\src\TqkLibrary.Proxy\TqkLibrary.Proxy.csproj" />
 		<!-- VPN outbound: wireproxy runs the WireGuard tunnel in user space and exposes it as SOCKS5,
 		     so no TUN adapter and no route-table surgery. -->
@@ -16,6 +17,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
 		<PackageReference Include="System.Management" />
 		<PackageReference Include="System.Security.Cryptography.ProtectedData" />

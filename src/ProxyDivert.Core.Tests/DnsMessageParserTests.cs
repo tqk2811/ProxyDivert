@@ -11,6 +11,8 @@ namespace ProxyDivert.Core.Tests;
 
 public class DnsMessageParserTests
 {
+    private static readonly DnsMessageParser Parser = new DnsMessageParser();
+
     [Fact]
     public void Parses_a_single_a_record()
     {
@@ -19,7 +21,7 @@ public class DnsMessageParserTests
             Answer("example.com", TypeA, IPAddress.Parse("93.184.216.34"), ttl: 300),
         });
 
-        IReadOnlyList<DnsAddressRecord> records = DnsMessageParser.ParseAddressAnswers(response, 0, response.Length);
+        IReadOnlyList<DnsAddressRecord> records = Parser.ParseAddressAnswers(response, 0, response.Length);
 
         DnsAddressRecord record = Assert.Single(records);
         Assert.Equal("example.com", record.QuestionName);
@@ -37,7 +39,7 @@ public class DnsMessageParserTests
             Answer("cdn.provider.net", TypeA, IPAddress.Parse("1.2.3.4"), ttl: 60),
         });
 
-        IReadOnlyList<DnsAddressRecord> records = DnsMessageParser.ParseAddressAnswers(response, 0, response.Length);
+        IReadOnlyList<DnsAddressRecord> records = Parser.ParseAddressAnswers(response, 0, response.Length);
 
         DnsAddressRecord record = Assert.Single(records);
         // A rule saying "*.example.com goes through the proxy" must still match here.
@@ -53,7 +55,7 @@ public class DnsMessageParserTests
             Answer("example.com", TypeAaaa, IPAddress.Parse("2606:2800:220:1:248:1893:25c8:1946"), ttl: 120),
         });
 
-        DnsAddressRecord record = Assert.Single(DnsMessageParser.ParseAddressAnswers(response, 0, response.Length));
+        DnsAddressRecord record = Assert.Single(Parser.ParseAddressAnswers(response, 0, response.Length));
         Assert.Equal(IPAddress.Parse("2606:2800:220:1:248:1893:25c8:1946"), record.Address);
     }
 
@@ -62,7 +64,7 @@ public class DnsMessageParserTests
     {
         byte[] query = BuildResponse("example.com", Array.Empty<AnswerSpec>(), isResponse: false);
 
-        Assert.Empty(DnsMessageParser.ParseAddressAnswers(query, 0, query.Length));
+        Assert.Empty(Parser.ParseAddressAnswers(query, 0, query.Length));
     }
 
     [Fact]
@@ -73,7 +75,7 @@ public class DnsMessageParserTests
             Answer("nope.example.com", TypeA, IPAddress.Parse("1.1.1.1"), ttl: 60),
         }, rcode: 3);   // NXDOMAIN
 
-        Assert.Empty(DnsMessageParser.ParseAddressAnswers(response, 0, response.Length));
+        Assert.Empty(Parser.ParseAddressAnswers(response, 0, response.Length));
     }
 
     [Fact]
@@ -84,7 +86,7 @@ public class DnsMessageParserTests
             Answer("example.com", TypeA, IPAddress.Parse("93.184.216.34"), ttl: 300),
         });
         for (int length = 1; length < response.Length; length++)
-            DnsMessageParser.ParseAddressAnswers(response, 0, length);
+            Parser.ParseAddressAnswers(response, 0, length);
 
         var random = new Random(7);
         byte[] noise = new byte[256];
@@ -93,7 +95,7 @@ public class DnsMessageParserTests
             random.NextBytes(noise);
             noise[2] |= 0x80;      // set QR so the response check passes and the body is parsed
             noise[3] &= 0xF0;      // rcode = 0
-            DnsMessageParser.ParseAddressAnswers(noise, 0, noise.Length);
+            Parser.ParseAddressAnswers(noise, 0, noise.Length);
         }
     }
 
@@ -109,7 +111,7 @@ public class DnsMessageParserTests
         int loopOffset = message.Count;
         message.AddRange(new byte[] { (byte)(0xC0 | (loopOffset >> 8)), (byte)loopOffset });
 
-        DnsMessageParser.ParseAddressAnswers(message.ToArray(), 0, message.Count);
+        Parser.ParseAddressAnswers(message.ToArray(), 0, message.Count);
     }
 
     // ---- wire-format helpers -----------------------------------------------------------------

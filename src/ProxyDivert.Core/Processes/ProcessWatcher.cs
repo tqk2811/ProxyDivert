@@ -7,8 +7,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing.Models;
-using TqkLibrary.WinDivert.Logging;
+using Microsoft.Extensions.Logging;
 using TqkLibrary.WinDivert.ProcessControl;
+using TqkLibrary.WinDivert.ProcessControl.Interfaces;
 using TqkLibrary.WinDivert.ProcessControl.Models;
 
 namespace ProxyDivert.Core.Processes;
@@ -31,7 +32,8 @@ public sealed class ProcessWatcher : IDisposable
     // started by hand is caught before the page loads; slow enough not to burn a core.
     private const int PollIntervalMs = 750;
 
-    private readonly RedirectLogger _log;
+    private readonly ILogger<ProcessWatcher> _logger;
+    private readonly IProcessFinder _processFinder;
     private readonly ConcurrentDictionary<uint, TrackedProcess> _tracked = new ConcurrentDictionary<uint, TrackedProcess>();
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
     private readonly object _rulesLock = new object();
@@ -51,9 +53,10 @@ public sealed class ProcessWatcher : IDisposable
     /// <summary>True while process discovery runs on WMI events; false while it is polling.</summary>
     public bool IsUsingWmi { get; private set; }
 
-    public ProcessWatcher(RedirectLogger? logger = null)
+    public ProcessWatcher(ILogger<ProcessWatcher> logger, IProcessFinder? processFinder = null)
     {
-        _log = logger ?? RedirectLogger.Null;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _processFinder = processFinder ?? new ProcessFinder();
     }
 
     public IReadOnlyCollection<TrackedProcess> Tracked => _tracked.Values.ToList();
@@ -77,7 +80,7 @@ public sealed class ProcessWatcher : IDisposable
         {
             IsUsingWmi = false;
             _pollTask = Task.Run(() => PollLoop(_cts.Token));
-            _log.Log("PRC", $"WMI unavailable — polling every {PollIntervalMs}ms instead");
+            _logger.LogWarning("WMI is unavailable, polling every {IntervalMs}ms instead — attaching to a new process will be slower", PollIntervalMs);
         }
     }
 
@@ -99,11 +102,11 @@ public sealed class ProcessWatcher : IDisposable
         IReadOnlyList<ProcessInfo> processes;
         try
         {
-            processes = ProcessFinder.ListAll();
+            processes = _processFinder.ListAll();
         }
         catch (Exception ex)
         {
-            _log.Log("PRC", $"Process enumeration failed: {ex.GetType().Name}: {ex.Message}");
+            _logger.LogWarning(ex, "process enumeration failed");
             return;
         }
 
@@ -121,12 +124,12 @@ public sealed class ProcessWatcher : IDisposable
         if (processId == 0) return null;
         if (_tracked.TryGetValue(processId, out TrackedProcess? existing)) return existing;
 
-        ProcessInfo? info = ProcessFinder.FindById(processId);
+        ProcessInfo? info = _processFinder.FindById(processId);
         // Even asked for by hand: redirecting this process or the VPN helper loops the traffic
         // back into the relay and nothing works again until the tool is killed.
         if (IsSelfOrHelper(processId, info?.Name ?? string.Empty))
         {
-            _log.Log("PRC", $"refusing to attach pid={processId} ({info?.Name}) — it carries the redirected traffic itself");
+            _logger.LogWarning("refusing to attach pid={Pid} ({Name}) — it carries the redirected traffic itself, so redirecting it would loop", processId, info?.Name);
             return null;
         }
         var tracked = new TrackedProcess(
@@ -140,7 +143,7 @@ public sealed class ProcessWatcher : IDisposable
             includeChildren: includeChildren);
 
         if (!_tracked.TryAdd(processId, tracked)) return _tracked[processId];
-        _log.Log("PRC", $"attach pid={processId} name={tracked.Name} (explicit) policy={policyId}");
+        _logger.LogInformation("attached pid={Pid} name={Name} explicitly, policy={Policy}", processId, tracked.Name, policyId);
         ProcessAttached?.Invoke(tracked);
         return tracked;
     }
@@ -152,7 +155,7 @@ public sealed class ProcessWatcher : IDisposable
         if (!_tracked.TryGetValue(parentPid, out TrackedProcess? parent)) return;
         if (!parent.IncludeChildren) return;
 
-        ProcessInfo? info = ProcessFinder.FindById(childPid);
+        ProcessInfo? info = _processFinder.FindById(childPid);
         var child = new TrackedProcess(
             childPid,
             info?.Name ?? $"pid {childPid}",
@@ -162,7 +165,7 @@ public sealed class ProcessWatcher : IDisposable
             parentProcessId: parentPid);
 
         if (!_tracked.TryAdd(childPid, child)) return;
-        _log.Log("PRC", $"attach child pid={childPid} parent={parentPid} policy={parent.PolicyId}");
+        _logger.LogInformation("attached child pid={Pid} of parent={ParentPid}, policy={Policy}", childPid, parentPid, parent.PolicyId);
         ProcessAttached?.Invoke(child);
     }
 
@@ -177,7 +180,7 @@ public sealed class ProcessWatcher : IDisposable
         var tracked = new TrackedProcess(pid, name, path, rule, rule.PolicyId, parentPid);
         if (!_tracked.TryAdd(pid, tracked)) return false;
 
-        _log.Log("PRC", $"attach pid={pid} name={name} rule={rule} policy={rule.PolicyId}");
+        _logger.LogInformation("attached pid={Pid} name={Name} by rule {Rule}, policy={Policy}", pid, name, rule, rule.PolicyId);
         ProcessAttached?.Invoke(tracked);
         return true;
     }
@@ -213,7 +216,7 @@ public sealed class ProcessWatcher : IDisposable
     private void Detach(uint pid, string reason)
     {
         if (!_tracked.TryRemove(pid, out TrackedProcess? tracked)) return;
-        _log.Log("PRC", $"detach pid={pid} name={tracked.Name} ({reason})");
+        _logger.LogInformation("detached pid={Pid} name={Name} ({Reason})", pid, tracked.Name, reason);
         ProcessDetached?.Invoke(tracked);
     }
 
@@ -270,12 +273,12 @@ public sealed class ProcessWatcher : IDisposable
             _stopWatcher.Start();
 
             IsUsingWmi = true;
-            _log.Log("PRC", "Process watching via WMI process traces");
+            _logger.LogDebug("watching processes through WMI process traces");
             return true;
         }
         catch (Exception ex)
         {
-            _log.Log("PRC", $"WMI watcher failed: {ex.GetType().Name}: {ex.Message}");
+            _logger.LogWarning(ex, "the WMI watcher failed to start");
             DisposeWmi();
             return false;
         }
@@ -290,7 +293,7 @@ public sealed class ProcessWatcher : IDisposable
             string name = e.NewEvent.Properties["ProcessName"].Value?.ToString() ?? string.Empty;
 
             // The trace gives no path; look it up, tolerating a process that has already exited.
-            string? path = ProcessFinder.FindById(pid)?.ExecutablePath;
+            string? path = _processFinder.FindById(pid)?.ExecutablePath;
 
             if (!TryAttach(pid, name, path, parentPid))
             {
@@ -300,7 +303,7 @@ public sealed class ProcessWatcher : IDisposable
         }
         catch (Exception ex)
         {
-            _log.Log("PRC", $"WMI start event failed: {ex.GetType().Name}: {ex.Message}");
+            _logger.LogWarning(ex, "handling a WMI process-start event failed");
         }
     }
 
@@ -313,7 +316,7 @@ public sealed class ProcessWatcher : IDisposable
         }
         catch (Exception ex)
         {
-            _log.Log("PRC", $"WMI stop event failed: {ex.GetType().Name}: {ex.Message}");
+            _logger.LogWarning(ex, "handling a WMI process-stop event failed");
         }
     }
 
@@ -324,7 +327,7 @@ public sealed class ProcessWatcher : IDisposable
             try { ScanOnce(); }
             catch (Exception ex)
             {
-                _log.Log("PRC", $"Poll scan failed: {ex.GetType().Name}: {ex.Message}");
+                _logger.LogWarning(ex, "a polling scan failed");
             }
 
             try { await Task.Delay(PollIntervalMs, ct).ConfigureAwait(false); }
