@@ -121,6 +121,8 @@
     <sys:String x:Key="Str.Settings.EventBacklog">Quét bù khi trễ</sys:String>
     <sys:String x:Key="Str.Settings.Milliseconds">ms</sys:String>
     <sys:String x:Key="Str.Settings.EventBacklogHint">Chỉ ảnh hưởng tới bộ lọc có soi argument. Windows báo tiến trình mới lần lượt từng cái, mà đọc một command line tốn khoảng 210ms, nên một chương trình mở ba chục tiến trình cùng lúc sẽ bị dồn hàng. Khi một sự kiện tới tay đã cũ quá mức này, công cụ đọc command line của cả máy trong một truy vấn thay vì từng cái. Đặt nhỏ thì bù sớm hơn; 0 là tắt, luôn đọc từng tiến trình.</sys:String>
+    <sys:String x:Key="Str.Settings.AutoSaveLog">Tự động lưu log ra file</sys:String>
+    <sys:String x:Key="Str.Settings.AutoSaveLogHint">Mỗi lần chạy ghi ra một file riêng Logs\yyyyMMdd-HHmmss.log cạnh chương trình, bắt đầu ngay khi tích ô này.</sys:String>
     <sys:String x:Key="Str.Settings.LogPath">File nhật ký chi tiết</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Giao diện</sys:String>
     <sys:String x:Key="Str.Settings.Language">Ngôn ngữ</sys:String>

@@ -121,6 +121,8 @@
     <sys:String x:Key="Str.Settings.EventBacklog">Catch up after</sys:String>
     <sys:String x:Key="Str.Settings.Milliseconds">ms</sys:String>
     <sys:String x:Key="Str.Settings.EventBacklogHint">Only matters for filters that look at arguments. Windows reports new processes one at a time, and reading one command line costs about 210ms, so a program that starts thirty processes at once queues up. When an event arrives this far behind, every command line on the machine is read in a single query instead. Lower catches up sooner; 0 turns it off and reads one process at a time.</sys:String>
+    <sys:String x:Key="Str.Settings.AutoSaveLog">Save the log to a file automatically</sys:String>
+    <sys:String x:Key="Str.Settings.AutoSaveLogHint">Each run writes its own Logs\yyyyMMdd-HHmmss.log next to the program, starting the moment this is ticked.</sys:String>
     <sys:String x:Key="Str.Settings.LogPath">Diagnostic log file</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Appearance</sys:String>
     <sys:String x:Key="Str.Settings.Language">Language</sys:String>

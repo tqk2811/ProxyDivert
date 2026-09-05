@@ -48,11 +48,22 @@
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
                                Text="{DynamicResource Str.Settings.EventBacklogHint}"/>
 
-                    <StackPanel Orientation="Horizontal">
+                    <CheckBox Content="{DynamicResource Str.Settings.AutoSaveLog}"
+                              IsChecked="{Binding AutoSaveLog}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.AutoSaveLogHint}"/>
+
+                    <!-- The manual path stays for pinning the trace somewhere fixed, and goes grey
+                         while auto-save owns it rather than silently losing to it. -->
+                    <StackPanel Orientation="Horizontal"
+                                IsEnabled="{Binding AutoSaveLog, Converter={StaticResource InverseBool}}">
                         <TextBlock Text="{DynamicResource Str.Settings.LogPath}" VerticalAlignment="Center" MinWidth="120"/>
                         <TextBox Text="{Binding DiagnosticLogPath, UpdateSourceTrigger=PropertyChanged}" Width="320"/>
                         <Button Content="…" Command="{Binding BrowseLogPathCommand}" Margin="8,0,0,0" MinWidth="36"/>
                     </StackPanel>
+
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="{Binding CurrentLogPath}"/>
                 </StackPanel>
             </Border>
 

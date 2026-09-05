@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Microsoft.Extensions.DependencyInjection;
 using ProxyDivert.Core.Configuration;
 using ProxyDivert.Core.Configuration.Models;
@@ -41,15 +42,34 @@ public sealed class AppServices : IDisposable
 
     private readonly AppLoggerProvider _loggerProvider;
 
+    // The file THIS run auto-logs to, or null when auto-save is off. Computed once and kept,
+    // because the name carries a timestamp: recomputing it on every Save would scatter a run's
+    // trace across a new file per keystroke.
+    private string? _autoLogPath;
+
+    /// <summary>
+    /// Where the trace actually goes: this run's timestamped file when auto-save is on, otherwise
+    /// the path the user pinned, otherwise nowhere.
+    /// </summary>
+    public string? EffectiveLogPath
+        => _autoLogPath ?? (string.IsNullOrWhiteSpace(Config.DiagnosticLogPath) ? null : Config.DiagnosticLogPath);
+
+    /// <summary>A fresh <c>Logs\yyyyMMdd-HHmmss.log</c> beside the executable.</summary>
+    public static string BuildAutoLogPath()
+        => Path.Combine(
+            AppContext.BaseDirectory, "Logs",
+            FormattableString.Invariant($"{DateTime.Now:yyyyMMdd-HHmmss}.log"));
+
     public AppServices(string? configPath = null)
     {
         // The config decides where the trace file goes, so it has to be read before the container
         // that carries the logging is built.
         ConfigStore = new ConfigStore(configPath);
         Config = ConfigStore.Load();
+        if (Config.AutoSaveLog) _autoLogPath = BuildAutoLogPath();
 
         _provider = new ServiceCollection()
-            .AddProxyDivert(Config.DiagnosticLogPath)
+            .AddProxyDivert(EffectiveLogPath)
             .BuildServiceProvider();
 
         Logs = _provider.GetRequiredService<InMemoryLogStore>();
@@ -59,13 +79,27 @@ public sealed class AppServices : IDisposable
 
     public void Save() => ConfigStore.Save(Config);
 
+    /// <summary>
+    /// Turns the per-run trace file on or off, and starts writing at once rather than at the next
+    /// Save — the switch is flicked precisely because the next few seconds are the interesting
+    /// ones. Turning it on again later opens a NEW file, so two attempts at reproducing something
+    /// do not overwrite each other.
+    /// </summary>
+    public void SetAutoSaveLog(bool enabled)
+    {
+        Config.AutoSaveLog = enabled;
+        _autoLogPath = enabled ? BuildAutoLogPath() : null;
+        Save();
+        _loggerProvider.SetFilePath(EffectiveLogPath);
+    }
+
     // Persist and push to the running engine in one step — the two must not drift apart.
     public void SaveAndApply()
     {
         Save();
         // The log path is the one setting the engine does not own, because logging is set up before
         // the engine exists. Applying it here is what makes it take effect without a restart.
-        _loggerProvider.SetFilePath(Config.DiagnosticLogPath);
+        _loggerProvider.SetFilePath(EffectiveLogPath);
         if (Engine.IsRunning) Engine.ApplyConfig(Config);
     }
 

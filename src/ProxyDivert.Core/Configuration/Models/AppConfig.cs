@@ -22,6 +22,12 @@ public sealed class AppConfig
     // log pane still works).
     public string? DiagnosticLogPath { get; set; }
 
+    // Keep a trace file without having to name one: each run writes to its own timestamped file
+    // under Logs\ next to the executable. A fresh file per run is the point — a bug reported an
+    // hour ago is still on disk instead of having been truncated by the next start — and it takes
+    // precedence over DiagnosticLogPath, which stays for pinning the trace to a fixed place.
+    public bool AutoSaveLog { get; set; }
+
     // What happens to the target's IPv6 traffic: Redirect (default) sends it through the relay and
     // the routing rules exactly like IPv4; Block drops it so the application falls back to IPv4;
     // Ignore lets it leave untouched (it then bypasses the proxy — diagnostics only).

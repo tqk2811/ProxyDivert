@@ -36,6 +36,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _ipv6 = services.Config.Ipv6;
         _wireProxyPath = services.Config.WireProxyPath ?? string.Empty;
         _diagnosticLogPath = services.Config.DiagnosticLogPath ?? string.Empty;
+        _autoSaveLog = services.Config.AutoSaveLog;
         _processEventBacklogMs = services.Config.ProcessEventBacklogMs;
         _theme = ThemeManager.Parse(services.Config.Theme);
         _language = LocalizationManager.Parse(services.Config.Language);
@@ -56,6 +57,12 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private string _diagnosticLogPath;
+
+    [ObservableProperty]
+    private bool _autoSaveLog;
+
+    /// <summary>Where this run's trace is being written, for the view to show under the switch.</summary>
+    public string CurrentLogPath => _services.EffectiveLogPath ?? string.Empty;
 
     [ObservableProperty]
     private int _processEventBacklogMs;
@@ -79,7 +86,18 @@ public sealed partial class SettingsViewModel : ObservableObject
         => _services.Config.WireProxyPath = string.IsNullOrWhiteSpace(value) ? null : value;
 
     partial void OnDiagnosticLogPathChanged(string value)
-        => _services.Config.DiagnosticLogPath = string.IsNullOrWhiteSpace(value) ? null : value;
+    {
+        _services.Config.DiagnosticLogPath = string.IsNullOrWhiteSpace(value) ? null : value;
+        OnPropertyChanged(nameof(CurrentLogPath));
+    }
+
+    // Applied the moment it is ticked, like the appearance settings and for the same reason: a
+    // switch whose whole purpose is to capture what happens next is useless if it waits for Save.
+    partial void OnAutoSaveLogChanged(bool value)
+    {
+        _services.SetAutoSaveLog(value);
+        OnPropertyChanged(nameof(CurrentLogPath));
+    }
 
     // A negative value has no meaning — 0 already says "never catch up" — so it is clamped rather
     // than stored, which keeps a typo in the box from reaching the engine.
