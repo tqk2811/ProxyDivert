@@ -834,7 +834,11 @@
         <Setter Property="CanUserDeleteRows" Value="False"/>
         <Setter Property="IsReadOnly" Value="True"/>
         <Setter Property="SelectionMode" Value="Extended"/>
-        <Setter Property="RowHeight" Value="30"/>
+        <!-- A minimum, not a height: RowHeight is fixed, so a cell holding anything taller than a
+             line of text — the process rule's picker and text box, both 28px plus their margin —
+             gets cut off at the bottom with nothing to say why. A row of plain text still lands on
+             30 either way. -->
+        <Setter Property="MinRowHeight" Value="30"/>
         <Setter Property="ColumnHeaderHeight" Value="30"/>
         <Setter Property="EnableRowVirtualization" Value="True"/>
         <Setter Property="VerticalGridLinesBrush" Value="Transparent"/>

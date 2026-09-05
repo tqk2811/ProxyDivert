@@ -124,6 +124,77 @@ public class DataGridColumnBindingTests
         Assert.Equal(2, boxes.Count);
     }
 
+    // DataGrid.RowHeight is a fixed height, not a minimum, so a cell holding a control taller than
+    // a line of text is simply cut off at the bottom — the grid reports no error and the row looks
+    // deliberate. The rule row holds two 28px pickers and two 28px text boxes, so this checks the
+    // row is actually tall enough to show what is in it.
+    [Fact]
+    public void A_rule_row_is_tall_enough_for_the_controls_in_it()
+    {
+        var tooTall = new List<string>();
+
+        RunOnStaThread(() =>
+        {
+            EnsureApplication();
+
+            var stub = new ViewModelStub();
+            stub.Rules.Add(new ProxyDivert.Core.Routing.Models.ProcessRule
+            {
+                Id = Guid.NewGuid(),
+                Matcher = ProxyDivert.Core.Routing.Enums.ProcessMatcherType.ExeName,
+                Pattern = "chrome.exe",
+                PolicyId = Guid.NewGuid(),
+            });
+
+            var view = new ProcessesView { DataContext = stub };
+            var window = new Window { Width = 1400, Height = 900, Content = view };
+            window.Show();
+            view.UpdateLayout();
+
+            DataGrid grid = FindVisuals<DataGrid>(view).First();
+            DataGridRow row = FindVisuals<DataGridRow>(grid).First();
+
+            // The control's own height is not what overflows — the margins between it and the cell
+            // are. Walking up and adding them is what says whether the cell can hold it.
+            foreach (DataGridCell cell in FindVisuals<DataGridCell>(row))
+                foreach (Control control in FindVisuals<ComboBox>(cell).Cast<Control>().Concat(FindVisuals<TextBox>(cell)))
+                {
+                    double needed = RequiredHeight(control) + MarginsUpTo(control, cell);
+                    if (needed > cell.ActualHeight)
+                        tooTall.Add($"cell '{cell.Column.Header}' is {cell.ActualHeight}px for content needing {needed}px");
+                }
+
+            window.Close();
+        });
+
+        Assert.True(tooTall.Count == 0,
+            "These rule-row cells are shorter than what they hold, so it is cut off at the bottom:"
+            + Environment.NewLine + string.Join(Environment.NewLine, tooTall));
+    }
+
+    // What the control actually needs, which DesiredSize alone does not tell you: measured inside a
+    // row of fixed height it comes back already clipped to that height, so a control asking for 28
+    // in a 26px slot reports 26 and the overflow reads as a perfect fit. An explicit Height is not
+    // negotiable, so it wins where the style sets one.
+    private static double RequiredHeight(FrameworkElement element)
+        => double.IsNaN(element.Height)
+            ? element.DesiredSize.Height
+            : Math.Max(element.DesiredSize.Height, element.Height);
+
+    // Vertical margin between an element and an ancestor, the ancestor's own padding aside.
+    private static double MarginsUpTo(FrameworkElement element, DependencyObject ancestor)
+    {
+        double total = 0;
+        DependencyObject? current = element;
+        while (current != null && !ReferenceEquals(current, ancestor))
+        {
+            if (current is FrameworkElement framework)
+                total += framework.Margin.Top + framework.Margin.Bottom;
+            current = VisualTreeHelper.GetParent(current);
+        }
+        return total;
+    }
+
     // A column never receives the invalidation a dictionary swap sends, so "{DynamicResource ...}"
     // on a Header resolves once and then keeps whichever language was active when the grid was
     // first built. Every other label in the window follows the switch and the headers do not —
