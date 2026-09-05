@@ -1,11 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models.Conditions;
 
 namespace ProxyDivert.Core.Routing.Models;
 
-// One named filter: "processes that look like THIS are redirected using THAT policy."
+// One named filter: "processes that look like THIS are redirected using THOSE policies."
 //
 // Three parts, in the order the editor shows them: a name, a tree of conditions, and what to do
 // with whatever matches. The name exists because a condition tree is no longer something you can
@@ -27,31 +28,25 @@ public sealed class ProcessRule
     // multi-process browser.
     public bool IncludeChildren { get; set; } = true;
 
-    public required Guid PolicyId { get; set; }
+    /// <summary>
+    /// The policies applied to whatever this filter catches, in priority order: the rules of the
+    /// first policy are tried before those of the second, and the first rule that matches decides
+    /// the connection, and it leaves through that policy's outbound. A connection no policy claims
+    /// goes Direct. The first policy is also the one whose UDP mode and Block QUIC apply, those
+    /// being settings a connection cannot pick per rule.
+    /// </summary>
+    /// <remarks>
+    /// A list rather than one policy because a policy is a rule set, and rule sets are worth
+    /// combining: "company hosts" plus "streaming" is two lists everywhere else, not a third list
+    /// that has to be kept in step with both.
+    /// </remarks>
+    public List<Guid> PolicyIds { get; set; } = new List<Guid>();
+
+    /// <summary>The policy whose own settings apply, or <see cref="Guid.Empty"/> when there is none.</summary>
+    [JsonIgnore]
+    public Guid PrimaryPolicyId => PolicyIds.Count > 0 ? PolicyIds[0] : Guid.Empty;
 
     public bool IsEnabled { get; set; } = true;
-
-    // ==== config v2 and older ====
-    //
-    // Back then a filter was exactly two conditions ANDed together, each a fixed slot on the rule
-    // itself. ConfigStore turns them into a tree on load and then clears them, so they are never
-    // written back (null properties are omitted).
-    //
-    // They keep their old JSON names so old files still bind, but not their old C# names: anything
-    // still reaching for rule.Matcher is code that would silently stop working, and it should fail
-    // to build instead.
-
-    [JsonPropertyName("Matcher")]
-    public ProcessMatcherType? LegacyMatcher { get; set; }
-
-    [JsonPropertyName("Pattern")]
-    public string? LegacyPattern { get; set; }
-
-    [JsonPropertyName("ArgumentMatcher")]
-    public ArgumentMatcherType? LegacyArgumentMatcher { get; set; }
-
-    [JsonPropertyName("ArgumentPattern")]
-    public string? LegacyArgumentPattern { get; set; }
 
     public override string ToString()
         => string.IsNullOrWhiteSpace(Name) ? $"filter {Id:D}" : Name;

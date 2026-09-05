@@ -73,9 +73,9 @@ public sealed class ProcessWatcher : IDisposable
     public bool TryGetTracked(uint processId, out TrackedProcess? process)
         => _tracked.TryGetValue(processId, out process);
 
-    // The pid -> policy map the routing resolver needs.
-    public IReadOnlyDictionary<uint, Guid> BuildPolicyMap()
-        => _tracked.ToDictionary(kv => kv.Key, kv => kv.Value.PolicyId);
+    // The pid -> policies map the routing resolver needs. The list is in priority order.
+    public IReadOnlyDictionary<uint, IReadOnlyList<Guid>> BuildPolicyMap()
+        => _tracked.ToDictionary(kv => kv.Key, kv => kv.Value.PolicyIds);
 
     public void Start(IReadOnlyList<ProcessRule> rules)
     {
@@ -154,7 +154,7 @@ public sealed class ProcessWatcher : IDisposable
             info?.Name ?? $"pid {processId}",
             info?.ExecutablePath,
             matchedRule: null,
-            policyId: policyId,
+            policyIds: new[] { policyId },
             parentProcessId: 0,
             isExplicit: true,
             includeChildren: includeChildren);
@@ -178,11 +178,11 @@ public sealed class ProcessWatcher : IDisposable
             info?.Name ?? $"pid {childPid}",
             info?.ExecutablePath,
             matchedRule: null,               // inherited, not matched
-            policyId: parent.PolicyId,
+            policyIds: parent.PolicyIds,
             parentProcessId: parentPid);
 
         if (!_tracked.TryAdd(childPid, child)) return;
-        _logger.LogInformation("attached child pid={Pid} of parent={ParentPid}, policy={Policy}", childPid, parentPid, parent.PolicyId);
+        _logger.LogInformation("attached child pid={Pid} of parent={ParentPid}, policies={Policies}", childPid, parentPid, string.Join(", ", parent.PolicyIds));
         ProcessAttached?.Invoke(child);
     }
 
@@ -194,10 +194,10 @@ public sealed class ProcessWatcher : IDisposable
         ProcessRule? rule = FindMatchingRule(name, path, commandLine);
         if (rule == null) return false;
 
-        var tracked = new TrackedProcess(pid, name, path, rule, rule.PolicyId, parentPid);
+        var tracked = new TrackedProcess(pid, name, path, rule, rule.PolicyIds, parentPid);
         if (!_tracked.TryAdd(pid, tracked)) return false;
 
-        _logger.LogInformation("attached pid={Pid} name={Name} by rule {Rule}, policy={Policy}", pid, name, rule, rule.PolicyId);
+        _logger.LogInformation("attached pid={Pid} name={Name} by rule {Rule}, policies={Policies}", pid, name, rule, string.Join(", ", rule.PolicyIds));
         ProcessAttached?.Invoke(tracked);
         return true;
     }
@@ -273,10 +273,10 @@ public sealed class ProcessWatcher : IDisposable
 
             ProcessRule? rule = FindMatchingRule(tracked.Name, tracked.ExecutablePath, commandLine);
             if (rule == null) Detach(kv.Key, "no longer matches any rule");
-            else if (rule.PolicyId != tracked.PolicyId)
+            else if (!rule.PolicyIds.SequenceEqual(tracked.PolicyIds))
             {
                 // The policy changed: re-attach so the engine reads the new assignment.
-                Detach(kv.Key, "policy changed");
+                Detach(kv.Key, "policies changed");
                 TryAttach(tracked.ProcessId, tracked.Name, tracked.ExecutablePath, tracked.ParentProcessId, commandLine);
             }
         }

@@ -42,6 +42,9 @@
     <sys:String x:Key="Str.Process.IncludeChildrenLong">Bám theo cả tiến trình con nó sinh ra</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Cả tiến trình con</sys:String>
     <sys:String x:Key="Str.Process.Policy">Bộ luật</sys:String>
+    <sys:String x:Key="Str.Process.Policies">Các bộ luật</sys:String>
+    <sys:String x:Key="Str.Process.PolicyOrderHint">Rule được xét từ bộ luật trên xuống, khớp cái nào trước thì cái đó quyết định. Bộ luật đứng đầu cũng quyết định kết nối đi đâu khi không rule nào khớp, và hai thiết lập UDP với QUIC.</sys:String>
+    <sys:String x:Key="Str.Process.NoPolicy">chưa có bộ luật</sys:String>
     <sys:String x:Key="Str.Process.Pid">PID</sys:String>
     <sys:String x:Key="Str.Process.Path">Đường dẫn</sys:String>
     <sys:String x:Key="Str.Process.AddFromSelection">Tạo luật từ dòng đang chọn</sys:String>
@@ -89,13 +92,13 @@
     <sys:String x:Key="Str.Vpn.Attempt">lần thử</sys:String>
 
     <sys:String x:Key="Str.Rules.Policies">Bộ luật</sys:String>
+    <sys:String x:Key="Str.Rules.RenameHint">Bấm đúp vào một bộ luật để đổi tên.</sys:String>
     <sys:String x:Key="Str.Rules.Rules">Luật (khớp đầu tiên thắng)</sys:String>
-    <sys:String x:Key="Str.Rules.Outbound">Đường ra</sys:String>
-    <sys:String x:Key="Str.Rules.Default">Đường ra mặc định</sys:String>
+    <sys:String x:Key="Str.Rules.Default">Đường ra</sys:String>
     <sys:String x:Key="Str.Rules.Not">Phủ định</sys:String>
     <sys:String x:Key="Str.Rules.UdpMode">UDP</sys:String>
     <sys:String x:Key="Str.Rules.BlockQuic">Chặn QUIC (UDP/443)</sys:String>
-    <sys:String x:Key="Str.Rules.BlockQuicHint">Chặn QUIC để trình duyệt lùi về TCP — thứ mà proxy thật sự chở được.</sys:String>
+    <sys:String x:Key="Str.Rules.BlockQuicHint">Thứ gì khớp các luật này thì đi qua đường ra của bộ luật; thứ không khớp rơi xuống bộ luật kế tiếp trong bộ lọc, không bộ luật nào nhận thì đi thẳng. Chặn QUIC để trình duyệt lùi về TCP — thứ mà proxy thật sự chở được.</sys:String>
 
     <sys:String x:Key="Str.Conn.Process">Tiến trình</sys:String>
     <sys:String x:Key="Str.Conn.Host">Tên miền</sys:String>

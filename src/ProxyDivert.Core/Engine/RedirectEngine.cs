@@ -97,7 +97,7 @@ public sealed class RedirectEngine : IDisposable
         _hostNameInspector = hostNameInspector ?? throw new ArgumentNullException(nameof(hostNameInspector));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<RedirectEngine>();
-        _resolver = BuildResolver(_config, new Dictionary<uint, Guid>());
+        _resolver = BuildResolver(_config, new Dictionary<uint, IReadOnlyList<Guid>>());
     }
 
     public void Start(AppConfig config)
@@ -112,7 +112,7 @@ public sealed class RedirectEngine : IDisposable
 
             _cts = new CancellationTokenSource();
             _outboundFactory = new OutboundSourceFactory(_loggerFactory, config.WireProxyPath);
-            _resolver = BuildResolver(config, new Dictionary<uint, Guid>());
+            _resolver = BuildResolver(config, new Dictionary<uint, IReadOnlyList<Guid>>());
 
             var options = new RedirectOptions
             {
@@ -320,11 +320,13 @@ public sealed class RedirectEngine : IDisposable
 
     private void RebuildResolver()
     {
-        IReadOnlyDictionary<uint, Guid> policyMap = _watcher?.BuildPolicyMap() ?? new Dictionary<uint, Guid>();
+        IReadOnlyDictionary<uint, IReadOnlyList<Guid>> policyMap
+            = _watcher?.BuildPolicyMap() ?? new Dictionary<uint, IReadOnlyList<Guid>>();
         _resolver = BuildResolver(_config, policyMap);
     }
 
-    private static RoutingPolicyResolver BuildResolver(AppConfig config, IReadOnlyDictionary<uint, Guid> policyMap)
+    private static RoutingPolicyResolver BuildResolver(
+        AppConfig config, IReadOnlyDictionary<uint, IReadOnlyList<Guid>> policyMap)
         => new RoutingPolicyResolver(config.Policies, config.Outbounds, policyMap);
 
     private static Uri ParseDohEndpoint(string? raw)

@@ -21,7 +21,7 @@ public class ProcessRuleMatcherTests
         Id = Guid.NewGuid(),
         Name = "test",
         Condition = Group(ConditionOperator.All, conditions),
-        PolicyId = Guid.NewGuid(),
+        PolicyIds = { Guid.NewGuid() },
     };
 
     private static ConditionGroup Group(ConditionOperator op, params ProcessCondition[] children)
@@ -310,7 +310,7 @@ public class ProcessRuleMatcherTests
     [Fact]
     public void A_filter_with_no_condition_at_all_matches_nothing()
     {
-        var rule = new ProcessRule { Id = Guid.NewGuid(), Name = "empty", PolicyId = Guid.NewGuid() };
+        var rule = new ProcessRule { Id = Guid.NewGuid(), Name = "empty" };
 
         Assert.False(ProcessRuleMatcher.IsMatch(rule, "chrome", @"C:\chrome.exe"));
         Assert.False(ProcessRuleMatcher.NeedsCommandLine(rule));
@@ -331,7 +331,7 @@ public class ProcessRuleMatcherTests
             Id = Guid.NewGuid(),
             Name = "deep",
             Condition = current,
-            PolicyId = Guid.NewGuid(),
+            PolicyIds = { Guid.NewGuid() },
         };
 
         Assert.False(ProcessRuleMatcher.IsMatch(rule, "chrome", null));

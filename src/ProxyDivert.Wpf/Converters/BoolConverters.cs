@@ -45,3 +45,15 @@ public sealed class IsNullOrEmptyConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+// True when the two bound values are the same object. What it is for: a row template asking "am I
+// the one being renamed?" — the answer lives on the view model as one reference, not as a flag on
+// every row, so the row has to compare itself against it.
+public sealed class SameObjectConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+        => values.Length == 2 && ReferenceEquals(values[0], values[1]);
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}

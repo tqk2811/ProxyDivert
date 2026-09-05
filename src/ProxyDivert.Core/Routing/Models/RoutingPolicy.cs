@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using ProxyDivert.Core.Routing.Enums;
 
 namespace ProxyDivert.Core.Routing.Models;
 
-// An ordered rule list plus the fallbacks used when no rule matches. A process rule points at one
-// of these, which is what makes per-process routing possible.
+// A named list of destinations and the one way out they share: "these hosts go through that
+// outbound". A process filter names several of these in priority order, which is what makes
+// per-process routing possible.
 public sealed class RoutingPolicy
 {
     public required Guid Id { get; set; }
@@ -14,8 +16,17 @@ public sealed class RoutingPolicy
 
     public List<RoutingRule> Rules { get; set; } = new List<RoutingRule>();
 
-    // Where a connection goes when no rule matches. Defaults to Direct.
-    public Guid DefaultOutboundId { get; set; } = Outbound.DirectId;
+    /// <summary>
+    /// Where a connection matching one of these rules goes. One per policy rather than one per
+    /// rule: a rule says which destinations belong here, and everything that belongs here leaves
+    /// the same way — two ways out means two policies, which the filter can list in the order it
+    /// wants them tried.
+    /// </summary>
+    /// <remarks>
+    /// Traffic no policy claims goes Direct, so a policy has nothing to say about what it did not
+    /// match — the filter simply moves on to the next policy in its list.
+    /// </remarks>
+    public Guid OutboundId { get; set; } = Outbound.DirectId;
 
     public UdpMode UdpMode { get; set; } = UdpMode.Direct;
 

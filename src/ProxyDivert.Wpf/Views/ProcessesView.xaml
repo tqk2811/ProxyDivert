@@ -65,11 +65,24 @@
                         </DataGridTemplateColumn>
                         <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.Process.IncludeChildren}"
                                                 Binding="{Binding IncludeChildren, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
-                        <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.Process.Policy}"
-                                                SelectedValueBinding="{Binding PolicyId, UpdateSourceTrigger=PropertyChanged}"
-                                                SelectedValuePath="Id" DisplayMemberPath="Name"
-                                                ItemsSource="{Binding Data.Policies, Source={StaticResource Vm}}"
-                                                Width="150"/>
+                        <!-- The policies this filter applies, in the order their rules are tried.
+                             Read-only here and arranged in the editor: the order is the meaning,
+                             and a drop-down cannot say it. -->
+                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Policies}" Width="180">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock VerticalAlignment="Center" TextWrapping="Wrap">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{StaticResource PolicyNames}" Mode="OneWay">
+                                                <Binding Path="PolicyIds"/>
+                                                <Binding Path="Data.Policies" Source="{StaticResource Vm}"/>
+                                                <Binding Path="Version" Source="{x:Static loc:LocalizationScope.Instance}"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>

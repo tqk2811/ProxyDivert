@@ -251,16 +251,75 @@
                 </ScrollViewer>
             </Border>
 
-            <!-- ==== what happens to whatever matches ==== -->
+            <!-- ==== what happens to whatever matches ====
+                 Tick as many policies as you like: their rules are tried from the top down, and the
+                 first rule that matches the connection decides it. The order is the point, so it is
+                 arranged here rather than inferred from anything. -->
             <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,10,0,0">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{DynamicResource Str.Cond.Action}" VerticalAlignment="Center"
-                               Width="110"/>
-                    <ComboBox Width="220" ItemsSource="{Binding Policies}"
-                              SelectedItem="{Binding SelectedPolicy}" DisplayMemberPath="Name"/>
-                    <CheckBox Margin="16,0,0,0" VerticalAlignment="Center"
-                              Content="{DynamicResource Str.Process.IncludeChildrenLong}"
-                              IsChecked="{Binding IncludeChildren}"/>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{DynamicResource Str.Cond.Action}" VerticalAlignment="Center"
+                                   Width="110"/>
+                        <TextBlock VerticalAlignment="Center" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" Text="{Binding PolicySummary}"/>
+                        <CheckBox Margin="16,0,0,0" VerticalAlignment="Center"
+                                  Content="{DynamicResource Str.Process.IncludeChildrenLong}"
+                                  IsChecked="{Binding IncludeChildren}"/>
+                    </StackPanel>
+
+                    <Border Margin="110,6,0,0" CornerRadius="6" Padding="4"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource Brush.Surface.BorderBrush}">
+                        <ScrollViewer MaxHeight="132" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Policies}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="26"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Only the ticked rows are numbered: an order among
+                                                 rows nothing uses would be noise. -->
+                                            <TextBlock VerticalAlignment="Center" FontSize="11"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{DynamicResource Brush.Accent}"
+                                                       Text="{Binding Rank}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Rank}" Value="0">
+                                                                <Setter Property="Visibility" Value="Hidden"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+
+                                            <CheckBox Grid.Column="1" VerticalAlignment="Center"
+                                                      Content="{Binding Name}"
+                                                      IsChecked="{Binding IsSelected}"/>
+
+                                            <Button Grid.Column="2" Content="▲" Width="26" Padding="0"
+                                                    Command="{Binding DataContext.MovePolicyUpCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Grid.Column="3" Content="▼" Width="26" Padding="0" Margin="4,0,0,0"
+                                                    Command="{Binding DataContext.MovePolicyDownCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource Subtle}" Margin="110,4,0,0" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Process.PolicyOrderHint}"/>
                 </StackPanel>
             </Border>
 

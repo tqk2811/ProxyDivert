@@ -47,8 +47,11 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
 
 1. Chạy `ProxyDivert.exe` **bằng quyền Administrator**.
 2. Tab **Đường ra**: thêm proxy (`socks5://host:port`, `http://host:port`), bấm **Thử** để kiểm tra.
-3. Tab **Luật**: thêm luật cho bộ luật mặc định, ví dụ `Wildcard` + `*.google.com` → proxy vừa tạo.
-   Đích không khớp luật nào sẽ đi thẳng (đường ra mặc định).
+3. Tab **Luật**: một bộ luật là danh sách đích có tên, cộng với **một** đường ra dùng chung. Thêm
+   luật — ví dụ `Wildcard` + `*.google.com` — rồi chọn **Đường ra** ở dưới; mọi thứ khớp các luật đó
+   sẽ đi lối này. Thứ không khớp rơi xuống bộ luật kế tiếp mà bộ lọc chỉ định, không bộ luật nào
+   nhận thì đi thẳng. Thêm bao nhiêu bộ luật tuỳ ý, bấm đúp vào một cái để đổi tên ngay tại chỗ —
+   mất focus hoặc Enter là xong, Escape thì huỷ.
 4. Tab **Tiến trình**: bấm **Thêm**, cửa sổ bộ lọc mở ra. Một bộ lọc gồm tên, các điều kiện, và
    hành động áp dụng cho thứ khớp được. Mỗi dòng điều kiện chọn soi cái gì (**Tiến trình** hay
    **Argument**), so khớp kiểu nào (tên tệp chạy, đường dẫn đầy đủ, ký tự đại diện, bắt đầu bằng,
@@ -59,8 +62,11 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
    **KHÔNG** trên mỗi dòng hoặc mỗi nhóm để đảo ngược, **+ Nhóm** để lồng thêm một lớp ngoặc, còn
    tích hai dòng rồi bấm **Gộp nhóm** thì đóng ngoặc cho chúng sau khi đã viết xong. Câu ở trên cùng
    nói bộ lọc hiện đang có nghĩa gì, và **Thử với** chạy nó trên một tiến trình đang chạy rồi tô màu
-   đúng dòng đã quyết định. `java.exe VÀ (minecraft HOẶC forge)` viết ra như vậy. Hoặc bấm **Chạy ở
-   trạng thái tạm dừng…** để không lọt kết nối nào lúc khởi động.
+   đúng dòng đã quyết định. `java.exe VÀ (minecraft HOẶC forge)` viết ra như vậy. Dưới phần điều
+   kiện, tích các bộ luật mà bộ lọc áp dụng: luật được xét từ bộ luật trên xuống, khớp cái nào
+   trước thì cái đó quyết định, nên dùng ▲▼ để sắp thứ tự ưu tiên. Bộ luật đứng đầu cũng là cái
+   quyết định chế độ UDP và Block QUIC. Hoặc bấm **Chạy ở trạng thái tạm
+   dừng…** để không lọt kết nối nào lúc khởi động.
 5. Gạt công tắc trên thanh tiêu đề. Nửa dưới tab **Tiến trình** khi đó hiện dạng cây mọi tiến trình
    engine đang thực sự áp dụng, tiến trình con nhận theo **Cả tiến trình con** nằm lồng dưới tiến
    trình đã sinh ra nó. Tab **Kết nối** hiện từng kết nối kèm tên miền, đường ra và số byte.

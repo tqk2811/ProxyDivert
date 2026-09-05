@@ -22,8 +22,8 @@ public sealed class RouteDecision
     }
 
     public string Reason => MatchedRule != null
-        ? $"rule {MatchedRule.Matcher}:{MatchedRule.Pattern}"
-        : $"policy default ({Policy.Name})";
+        ? $"{Policy.Name}: {MatchedRule.Matcher}:{MatchedRule.Pattern}"
+        : "no policy matched";
 
     public override string ToString() => $"{Outbound.Name} <- {Reason}";
 }

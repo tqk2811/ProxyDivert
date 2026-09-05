@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ProxyDivert.Core.Routing.Models;
 
 namespace ProxyDivert.Core.Processes.Models;
@@ -19,21 +20,28 @@ public sealed class TrackedProcess
     // rule list claims it in the first place.
     public bool IsExplicit { get; }
 
-    public Guid PolicyId { get; }
+    /// <summary>
+    /// The policies this process is routed by, in priority order — the filter's list, or the
+    /// parent's for an adopted child. Empty only for a process the caller named directly without
+    /// naming a policy.
+    /// </summary>
+    public IReadOnlyList<Guid> PolicyIds { get; }
+
     public uint ParentProcessId { get; }
     public DateTime AttachedUtc { get; } = DateTime.UtcNow;
 
     private readonly bool _includeChildrenOverride;
 
     public TrackedProcess(
-        uint processId, string name, string? executablePath, ProcessRule? matchedRule, Guid policyId,
+        uint processId, string name, string? executablePath, ProcessRule? matchedRule,
+        IReadOnlyList<Guid> policyIds,
         uint parentProcessId = 0, bool isExplicit = false, bool includeChildren = false)
     {
         ProcessId = processId;
         Name = name;
         ExecutablePath = executablePath;
         MatchedRule = matchedRule;
-        PolicyId = policyId;
+        PolicyIds = policyIds ?? Array.Empty<Guid>();
         ParentProcessId = parentProcessId;
         IsExplicit = isExplicit;
         _includeChildrenOverride = includeChildren;

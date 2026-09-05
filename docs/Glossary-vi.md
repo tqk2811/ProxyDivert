@@ -142,6 +142,26 @@ Lớp WPF cho phép thay thanh tiêu đề hệ thống bằng nội dung của 
 
 Cột của `DataGrid` (`DataGridComboBoxColumn`, `DataGridTextColumn`...) không phải con visual cũng không phải con logical của lưới, nên binding đặt trên chính thuộc tính của cột không có tổ tiên nào để đi ngược lên: `RelativeSource AncestorType=UserControl` không bao giờ phân giải, `ItemsSource` lặng lẽ ở lại `null` và danh sách xổ xuống rỗng — build không báo, log không báo. `BindingProxy` là một `Freezable` đặt trong `Resources` của phần tử: WPF cấp cho nó ngữ cảnh kế thừa của phần tử đó, gồm cả `DataContext`, nên cột lấy được view model qua `{Binding Data.Xxx, Source={StaticResource Vm}}` mà không cần cây nào cả.
 
+## Bộ luật (policy) và thứ tự ưu tiên
+
+Một **bộ luật** (`RoutingPolicy`) là danh sách đích có tên, cộng với **một** đường ra dùng chung (`OutboundId`) và hai thiết lập UDP / Block QUIC. Nó là khung trái của tab Rules; lưới bên phải là luật của bộ luật đang chọn. Luật (`RoutingRule`) chỉ nói "đích này thuộc về bộ luật này" — nó **không** có đường ra riêng, vì hai đường ra khác nhau nghĩa là hai bộ luật khác nhau, mà bộ lọc thì xếp được chúng theo thứ tự nó muốn.
+
+Một **bộ lọc tiến trình** giữ một **danh sách** bộ luật theo thứ tự ưu tiên (`ProcessRule.PolicyIds`). Lúc định tuyến, luật được duyệt hết bộ luật thứ nhất (theo `Order` của chính nó) rồi mới sang bộ luật thứ hai; khớp cái nào trước thì kết nối đi theo đường ra của **bộ luật chứa luật đó**. Cố ý KHÔNG trộn rồi sắp lại theo `Order` chung: hai bộ luật viết riêng có `Order` trùng nhau, trộn lại thì thứ tự do con số tình cờ nhỏ hơn quyết định chứ không do người dùng.
+
+Không bộ luật nào khớp = không ai nhận kết nối đó ⇒ **đi thẳng**. Không còn khái niệm "đường ra mặc định" nữa; muốn bắt hết thì thêm một bộ luật có luật `*` và đặt nó cuối danh sách.
+
+Hai thiết lập UDP và Block QUIC lấy theo **bộ luật đứng đầu**, vì một kết nối không thể chọn chúng theo từng luật.
+
+## Edit mode của DataGrid và IsReadOnly
+
+`DataGrid` chỉ cho gõ vào một ô khi ô đó **vào edit mode**: lưới đổi phần tử hiển thị (một `TextBlock`) lấy phần tử soạn thảo (một `TextBox`) rồi ghi ngược về nguồn lúc commit. `IsReadOnly=True` chặn đúng bước đó, nên mọi `DataGridTextColumn` và `DataGridCheckBoxColumn` đứng im — không có con trỏ, không có gì báo là bị khoá.
+
+Riêng `DataGridComboBoxColumn` **không** đi qua đường đó: phần tử hiển thị của nó đã là một `ComboBox` thật, chọn phát nào ghi thẳng vào nguồn phát ấy. Vì thế một lưới read-only trông như hỏng lỗ chỗ — combo vẫn đổi được, ô chữ thì không — chứ không trông như bảng chỉ đọc.
+
+Muốn khoá riêng một **hàng** (vd Direct/Block) thì đừng đặt `IsEnabled=False` cho cả `DataGridRow`: khi những hàng đó là toàn bộ nội dung lúc mới cài, cả lưới trông như bị tắt. Cách dùng ở đây gồm ba mảnh — huỷ sự kiện `BeginningEdit` trong code-behind (chặn ô chữ và checkbox), `DataGrid.CellStyle` làm mờ chữ để báo hàng đó không phải của mình, và style riêng cho `ComboBox` của cột combo vì nó không đi qua edit mode. Lưu ý `DataGridCell` trong theme có setter `Foreground` riêng, nên đặt màu ở `RowStyle` không tới được chữ.
+
+`IsReadOnly` là **hành vi**, không phải hình thức, nên nó không được đặt trong style implicit của theme (style không có `x:Key`, áp cho mọi `DataGrid` trong ứng dụng). Trong ProxyDivert: Outbounds/Rules/Processes cho sửa, Connections tự khai `IsReadOnly="True"` tại chỗ vì nó là bảng theo dõi.
+
 ## Kiểu so khớp của luật tiến trình
 
 Một điều kiện gồm ba phần: combo **đối tượng** (soi cái gì), combo **kiểu so khớp**, và ô giá trị. Combo đối tượng quyết định combo so khớp hiển thị bộ nào — vì hai bộ thật sự khác nhau, command line không phải đường dẫn. Bộ kiểu lấy theo mẫu ProxyRouterWpf (`ProxySourceGroupFilterType`), bỏ hai kiểu chỉ dành cho nguồn proxy là `CidrIp` và `TotalBytes`.

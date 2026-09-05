@@ -77,7 +77,7 @@ public sealed partial class ProcessesViewModel : ObservableObject
         Dictionary<uint, AppliedProcessNode> nodes = tracked.ToDictionary(
             p => p.ProcessId,
             p => new AppliedProcessNode(
-                p, policyNames.TryGetValue(p.PolicyId, out string? name) ? name : "—"));
+                p, PolicyNames(p, policyNames)));
 
         foreach (TrackedProcess process in tracked)
         {
@@ -96,6 +96,19 @@ public sealed partial class ProcessesViewModel : ObservableObject
                 AppliedProcesses.Add(node);
             }
         }
+    }
+
+    // What the redirected-process list shows in its policy column. A process is routed by the whole
+    // list its filter named, in order, so the column says so — the first one alone would hide where
+    // half the rules came from.
+    private static string PolicyNames(TrackedProcess process, IReadOnlyDictionary<Guid, string> names)
+    {
+        var found = process.PolicyIds
+            .Select(id => names.TryGetValue(id, out string? name) ? name : null)
+            .Where(name => name != null)
+            .ToList();
+
+        return found.Count > 0 ? string.Join(" → ", found) : "—";
     }
 
     // Adding opens the editor straight away rather than dropping a blank row into the list. A
@@ -148,9 +161,18 @@ public sealed partial class ProcessesViewModel : ObservableObject
 
         // A ProcessRule is plain data with nothing to raise a change, so the row is put back into
         // the collection to make the grid rebuild it. Cheaper than making the whole model
-        // observable for one column that only changes behind a dialog.
+        // observable for two columns that only change behind a dialog.
+        //
+        // Out and back in, not assigned over itself: the same reference in and out is not a change
+        // as far as WPF is concerned, so the container stays and the cell keeps showing the filter
+        // as it was before the edit.
         int index = Rules.IndexOf(rule);
-        if (index >= 0) Rules[index] = rule;
+        if (index >= 0)
+        {
+            Rules.RemoveAt(index);
+            Rules.Insert(index, rule);
+        }
+
         SelectedRule = rule;
 
         _services.SaveAndApply();
@@ -190,7 +212,7 @@ public sealed partial class ProcessesViewModel : ObservableObject
             Id = Guid.NewGuid(),
             Name = name,
             Condition = condition,
-            PolicyId = policy.Id,
+            PolicyIds = { policy.Id },
         };
 
     private void Add(ProcessRule rule)

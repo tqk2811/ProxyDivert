@@ -95,9 +95,9 @@ public sealed partial class OutboundsViewModel : ObservableObject
         else row.Update(status);
     }
 
-    // True for the two built-ins, which the UI keeps read-only.
-    public static bool IsBuiltIn(Outbound outbound)
-        => outbound.Id == Outbound.DirectId || outbound.Id == Outbound.BlockId;
+    // True for the two built-ins, which the UI keeps read-only. The grid asks the row itself, so
+    // the answer lives on the outbound and this only forwards it.
+    public static bool IsBuiltIn(Outbound outbound) => outbound.IsBuiltIn;
 
     [RelayCommand]
     private void Add()
@@ -124,15 +124,11 @@ public sealed partial class OutboundsViewModel : ObservableObject
         _services.Config.Outbounds.Remove(Selected);
         Outbounds.Remove(Selected);
 
-        // Rules pointing at a deleted outbound would silently fall through to the policy default,
-        // which is usually Direct — i.e. traffic the user meant to proxy would go out in the clear.
-        // Repoint them at Block so the mistake is visible instead.
-        foreach (RoutingPolicy policy in _services.Config.Policies)
-        {
-            foreach (RoutingRule rule in policy.Rules.Where(r => r.OutboundId == removedId))
-                rule.OutboundId = Outbound.BlockId;
-            if (policy.DefaultOutboundId == removedId) policy.DefaultOutboundId = Outbound.DirectId;
-        }
+        // A policy pointing at a deleted outbound would send its traffic nowhere, and "nowhere"
+        // must not quietly become Direct — that is the user's address on the wire. Repointed at
+        // Block so the mistake is visible from the first connection instead.
+        foreach (RoutingPolicy policy in _services.Config.Policies.Where(p => p.OutboundId == removedId))
+            policy.OutboundId = Outbound.BlockId;
 
         Selected = null;
         _services.SaveAndApply();

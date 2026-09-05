@@ -35,6 +35,14 @@ public sealed partial class RulesViewModel : ObservableObject
     [ObservableProperty]
     private RoutingRule? _selectedRule;
 
+    /// <summary>The row being renamed right now, or null. That row draws a box instead of text.</summary>
+    [ObservableProperty]
+    private RoutingPolicy? _renamingPolicy;
+
+    /// <summary>What is in the rename box. Only means anything while <see cref="RenamingPolicy"/> is set.</summary>
+    [ObservableProperty]
+    private string _policyName = string.Empty;
+
     public RulesViewModel(AppServices services)
     {
         _services = services;
@@ -60,6 +68,60 @@ public sealed partial class RulesViewModel : ObservableObject
         if (value is null) return;
         foreach (RoutingRule rule in value.Rules.OrderBy(r => r.Order)) Rules.Add(rule);
     }
+
+    // ==== renaming a policy, in place in the list ====
+    //
+    // The name is the only thing about a policy said in words, and it is what every process filter
+    // shows to say where its traffic goes, so "Policy 2" forever makes the filter list unreadable.
+    // Double-clicking the row turns it into a box; the edit lands when the box loses focus or on
+    // Enter, and Escape drops it.
+
+    /// <summary>Starts renaming one row. The list draws a box in place of that row's text.</summary>
+    [RelayCommand]
+    public void BeginRename(RoutingPolicy? policy)
+    {
+        if (policy is null) return;
+
+        PolicyName = policy.Name;
+        RenamingPolicy = policy;
+    }
+
+    /// <summary>
+    /// Takes what was typed. A blank name is dropped rather than stored — a row with no text is a
+    /// row nobody can point at, and every filter that names this policy would show a gap.
+    /// </summary>
+    [RelayCommand]
+    public void CommitRename()
+    {
+        RoutingPolicy? policy = RenamingPolicy;
+        if (policy is null) return;
+
+        RenamingPolicy = null;
+
+        string name = (PolicyName ?? string.Empty).Trim();
+        if (name.Length == 0 || name == policy.Name) return;
+
+        policy.Name = name;
+
+        // A RoutingPolicy is plain data with nothing to raise a change, so the list has to be told.
+        // Assigning the row back over itself does NOT do it: same reference in and out, so WPF sees
+        // no change, keeps the container it already has, and the row goes on showing the old name
+        // until the tab is rebuilt. The row has to actually leave the collection for its container
+        // to be thrown away and its bindings read again.
+        int index = Policies.IndexOf(policy);
+        if (index >= 0)
+        {
+            Policies.RemoveAt(index);
+            Policies.Insert(index, policy);
+        }
+
+        SelectedPolicy = policy;
+
+        _services.SaveAndApply();
+    }
+
+    [RelayCommand]
+    public void CancelRename() => RenamingPolicy = null;
 
     [RelayCommand]
     private void AddPolicy()
@@ -88,9 +150,16 @@ public sealed partial class RulesViewModel : ObservableObject
         _services.Config.Policies.Remove(policy);
         Policies.Remove(policy);
 
+        // A filter can name several policies. The deleted one is taken out of each list, and a
+        // filter left with an empty list gets the fallback: catching processes and then having no
+        // rules at all would send them out direct, which is the one outcome that must not happen
+        // by accident.
         RoutingPolicy fallback = Policies[0];
-        foreach (ProcessRule rule in _services.Config.ProcessRules.Where(r => r.PolicyId == policy.Id))
-            rule.PolicyId = fallback.Id;
+        foreach (ProcessRule rule in _services.Config.ProcessRules.Where(r => r.PolicyIds.Contains(policy.Id)))
+        {
+            rule.PolicyIds.Remove(policy.Id);
+            if (rule.PolicyIds.Count == 0) rule.PolicyIds.Add(fallback.Id);
+        }
 
         SelectedPolicy = fallback;
         _services.SaveAndApply();
@@ -107,9 +176,6 @@ public sealed partial class RulesViewModel : ObservableObject
             Id = Guid.NewGuid(),
             Matcher = HostMatcherType.Wildcard,
             Pattern = "*.example.com",
-            OutboundId = _services.Config.Outbounds
-                .FirstOrDefault(o => o.Kind != OutboundKind.Direct && o.Kind != OutboundKind.Block)?.Id
-                ?? Outbound.DirectId,
             Order = policy.Rules.Count == 0 ? 0 : policy.Rules.Max(r => r.Order) + 1,
         };
         policy.Rules.Add(rule);

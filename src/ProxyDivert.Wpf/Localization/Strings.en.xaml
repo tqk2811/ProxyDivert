@@ -42,6 +42,9 @@
     <sys:String x:Key="Str.Process.IncludeChildrenLong">Follow the processes it starts</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Children</sys:String>
     <sys:String x:Key="Str.Process.Policy">Policy</sys:String>
+    <sys:String x:Key="Str.Process.Policies">Policies</sys:String>
+    <sys:String x:Key="Str.Process.PolicyOrderHint">Rules are tried from the top policy down, and the first one that matches decides. The top policy also decides where a connection goes when nothing matches, and the UDP and QUIC settings.</sys:String>
+    <sys:String x:Key="Str.Process.NoPolicy">no policy</sys:String>
     <sys:String x:Key="Str.Process.Pid">PID</sys:String>
     <sys:String x:Key="Str.Process.Path">Path</sys:String>
     <sys:String x:Key="Str.Process.AddFromSelection">Add rule from selection</sys:String>
@@ -89,13 +92,13 @@
     <sys:String x:Key="Str.Vpn.Attempt">attempt</sys:String>
 
     <sys:String x:Key="Str.Rules.Policies">Policies</sys:String>
+    <sys:String x:Key="Str.Rules.RenameHint">Double-click a policy to rename it.</sys:String>
     <sys:String x:Key="Str.Rules.Rules">Rules (first match wins)</sys:String>
-    <sys:String x:Key="Str.Rules.Outbound">Outbound</sys:String>
-    <sys:String x:Key="Str.Rules.Default">Default outbound</sys:String>
+    <sys:String x:Key="Str.Rules.Default">Outbound</sys:String>
     <sys:String x:Key="Str.Rules.Not">Not</sys:String>
     <sys:String x:Key="Str.Rules.UdpMode">UDP</sys:String>
     <sys:String x:Key="Str.Rules.BlockQuic">Block QUIC (UDP/443)</sys:String>
-    <sys:String x:Key="Str.Rules.BlockQuicHint">Blocking QUIC makes browsers fall back to TCP, which the proxy can actually carry.</sys:String>
+    <sys:String x:Key="Str.Rules.BlockQuicHint">Whatever these rules match goes out through this policy's outbound; anything they do not match falls to the next policy the filter names, and to Direct if none of them claims it. Blocking QUIC makes browsers fall back to TCP, which the proxy can actually carry.</sys:String>
 
     <sys:String x:Key="Str.Conn.Process">Process</sys:String>
     <sys:String x:Key="Str.Conn.Host">Host</sys:String>

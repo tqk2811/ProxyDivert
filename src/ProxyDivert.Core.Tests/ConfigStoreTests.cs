@@ -40,14 +40,13 @@ public class ConfigStoreTests : IDisposable
             Id = Guid.NewGuid(),
             Matcher = HostMatcherType.Wildcard,
             Pattern = "*.google.com",
-            OutboundId = Outbound.BlockId,
             Order = 5,
         });
         config.ProcessRules.Add(new ProcessRule
         {
             Id = Guid.NewGuid(),
             Name = "Chrome",
-            PolicyId = policyId,
+            PolicyIds = { policyId },
             Condition = new ConditionGroup
             {
                 Operator = ConditionOperator.All,
@@ -85,111 +84,6 @@ public class ConfigStoreTests : IDisposable
         var arguments = Assert.IsType<CommandLineCondition>(group.Children[1]);
         Assert.Equal("--profile-directory", arguments.Pattern);
         Assert.True(arguments.Negate);
-    }
-
-    // The upgrade that has to be exact. A filter written by the two-slot version decides which
-    // processes leave the machine through the proxy; one that comes back meaning something else is
-    // a program quietly running direct, and the user finds out by leaking their address.
-    [Fact]
-    public void A_v2_process_rule_becomes_the_same_filter_as_a_condition_tree()
-    {
-        File.WriteAllText(ConfigPath, """
-            {
-              "Version": 2,
-              "Outbounds": [],
-              "Policies": [],
-              "ProcessRules": [
-                {
-                  "Id": "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
-                  "Matcher": "ExeName",
-                  "Pattern": "java.exe",
-                  "ArgumentMatcher": "Contains",
-                  "ArgumentPattern": "minecraft",
-                  "IncludeChildren": true,
-                  "PolicyId": "6f9619ff-8b86-d011-b42d-00cf4fc964aa",
-                  "IsEnabled": true
-                }
-              ]
-            }
-            """);
-
-        AppConfig config = new ConfigStore(ConfigPath).Load();
-        ProcessRule filter = Assert.Single(config.ProcessRules);
-
-        // The two slots were ANDed, so they become one "match all" group of two conditions.
-        var group = Assert.IsType<ConditionGroup>(filter.Condition);
-        Assert.Equal(ConditionOperator.All, group.Operator);
-        Assert.Equal(ProcessMatcherType.ExeName, Assert.IsType<ProcessNameCondition>(group.Children[0]).Matcher);
-        Assert.Equal("java.exe", Assert.IsType<ProcessNameCondition>(group.Children[0]).Pattern);
-        Assert.Equal("minecraft", Assert.IsType<CommandLineCondition>(group.Children[1]).Pattern);
-
-        // Filters had no name, so the row keeps saying what the user recognised it by.
-        Assert.Equal("java.exe", filter.Name);
-
-        // And it still decides exactly what it decided before.
-        Assert.True(ProcessRuleMatcher.IsMatch(filter, "java", null, "java.exe -Dminecraft"));
-        Assert.False(ProcessRuleMatcher.IsMatch(filter, "java", null, "java.exe -Declipse"));
-        Assert.False(ProcessRuleMatcher.IsMatch(filter, "python", null, "python.exe -Dminecraft"));
-    }
-
-    // An empty argument slot was never consulted, so it must not come back as a row in the tree —
-    // a filter nobody touched should not open looking half-edited.
-    [Fact]
-    public void A_v2_rule_with_no_argument_slot_upgrades_to_a_single_condition()
-    {
-        File.WriteAllText(ConfigPath, """
-            {
-              "Version": 2,
-              "Outbounds": [],
-              "Policies": [],
-              "ProcessRules": [
-                {
-                  "Id": "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
-                  "Matcher": "FullPath",
-                  "Pattern": "C:\\Games\\client.exe",
-                  "PolicyId": "6f9619ff-8b86-d011-b42d-00cf4fc964aa",
-                  "IsEnabled": true
-                }
-              ]
-            }
-            """);
-
-        AppConfig config = new ConfigStore(ConfigPath).Load();
-        var group = Assert.IsType<ConditionGroup>(Assert.Single(config.ProcessRules).Condition);
-
-        Assert.Single(group.Children);
-        Assert.Equal(ProcessMatcherType.FullPath, Assert.IsType<ProcessNameCondition>(group.Children[0]).Matcher);
-    }
-
-    // The old slots must not survive alongside the tree: two copies of one condition, only one of
-    // which anything reads, is the shape a later "why is this filter ignoring me" comes from.
-    [Fact]
-    public void The_old_two_slot_fields_are_gone_from_the_file_after_a_save()
-    {
-        File.WriteAllText(ConfigPath, """
-            {
-              "Version": 2,
-              "Outbounds": [],
-              "Policies": [],
-              "ProcessRules": [
-                {
-                  "Id": "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
-                  "Matcher": "ExeName",
-                  "Pattern": "java.exe",
-                  "ArgumentPattern": "minecraft",
-                  "PolicyId": "6f9619ff-8b86-d011-b42d-00cf4fc964aa"
-                }
-              ]
-            }
-            """);
-
-        var store = new ConfigStore(ConfigPath);
-        store.Save(store.Load());
-
-        string json = File.ReadAllText(ConfigPath);
-        Assert.DoesNotContain("\"ArgumentPattern\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"kind\": \"commandLine\"", json, StringComparison.Ordinal);
-        Assert.Equal(AppConfig.CurrentVersion, new ConfigStore(ConfigPath).Load().Version);
     }
 
     [Fact]
@@ -251,32 +145,41 @@ public class ConfigStoreTests : IDisposable
         Assert.True(File.Exists(ConfigPath + ".bak"));
     }
 
+    // For a while the outbound grid let a click land on the type picker of a row that was never
+    // meant to take one — the grid was read-only, which stops text cells but not combo columns —
+    // so Direct could be saved as an HTTP proxy with no URL. Everything routed to Direct then goes
+    // to a proxy that is not there. The interface no longer allows it; a file already written that
+    // way has to come back usable.
     [Fact]
-    public void A_v1_file_that_blocked_ipv6_keeps_blocking_it()
+    public void A_built_in_outbound_that_was_edited_into_something_else_comes_back_as_itself()
     {
-        File.WriteAllText(ConfigPath, """
-            { "Version": 1, "BlockIpv6": true, "Outbounds": [], "Policies": [], "ProcessRules": [] }
+        File.WriteAllText(ConfigPath, $$"""
+            {
+              "Outbounds": [
+                {
+                  "Id": "{{Outbound.DirectId}}", "Name": "Direct", "Kind": "HttpProxy",
+                  "Url": "http://127.0.0.1:8080", "Username": "u", "Password": "p",
+                  "IsEnabled": false
+                },
+                { "Id": "{{Outbound.BlockId}}", "Name": "Block", "Kind": "Socks5" }
+              ],
+              "Policies": [], "ProcessRules": []
+            }
             """);
 
         AppConfig config = new ConfigStore(ConfigPath).Load();
 
-        Assert.Equal(Ipv6Mode.Block, config.Ipv6);
-        Assert.Equal(AppConfig.CurrentVersion, config.Version);
-        Assert.Null(config.BlockIpv6);
-    }
+        Outbound direct = config.Outbounds.Single(o => o.Id == Outbound.DirectId);
+        Assert.Equal(OutboundKind.Direct, direct.Kind);
+        Assert.Null(direct.Url);
+        Assert.Null(direct.Username);
+        Assert.Null(direct.Password);
+        Assert.True(direct.IsEnabled);
 
-    [Fact]
-    public void A_v1_file_that_let_ipv6_through_now_redirects_it()
-    {
-        // "Don't block" used to mean the target's IPv6 escaped the proxy — the only thing the code
-        // could do then. Redirecting it is what that setting was actually asking for.
-        File.WriteAllText(ConfigPath, """
-            { "Version": 1, "BlockIpv6": false, "Outbounds": [], "Policies": [], "ProcessRules": [] }
-            """);
+        Assert.Equal(OutboundKind.Block, config.Outbounds.Single(o => o.Id == Outbound.BlockId).Kind);
 
-        AppConfig config = new ConfigStore(ConfigPath).Load();
-
-        Assert.Equal(Ipv6Mode.Redirect, config.Ipv6);
+        // The name is the one thing that is the user's to change: rules point at these by id.
+        Assert.Equal("Direct", direct.Name);
     }
 
     [Fact]

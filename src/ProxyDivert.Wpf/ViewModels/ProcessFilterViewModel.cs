@@ -36,8 +36,7 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
         _name = rule.Name;
         _includeChildren = rule.IncludeChildren;
 
-        foreach (RoutingPolicy policy in policies) Policies.Add(policy);
-        _selectedPolicy = Policies.FirstOrDefault(p => p.Id == rule.PolicyId) ?? Policies.FirstOrDefault();
+        BuildPolicyList(rule, policies);
 
         Root = new ConditionGroupViewModel(RootGroupOf(rule));
         Root.Changed += OnTreeChanged;
@@ -49,7 +48,18 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
     /// <summary>The outermost group. Everything the editor shows hangs off this.</summary>
     public ConditionGroupViewModel Root { get; }
 
-    public ObservableCollection<RoutingPolicy> Policies { get; } = new ObservableCollection<RoutingPolicy>();
+    /// <summary>
+    /// Every policy there is, ticked or not, in the order that decides priority: the rules of a
+    /// ticked policy are tried before those of every ticked policy below it.
+    /// </summary>
+    /// <remarks>
+    /// One list rather than "available" and "chosen" side by side. A policy keeps its place when it
+    /// is unticked, so trying one out and putting it back does not cost the arrangement, and the
+    /// order is a property of the whole list rather than of a second one that has to be kept in
+    /// step. The rank number is only drawn next to the ticked rows, which is where order means
+    /// anything.
+    /// </remarks>
+    public ObservableCollection<PolicyChoice> Policies { get; } = new ObservableCollection<PolicyChoice>();
 
     public ObservableCollection<RunningProcess> TestProcesses { get; } = new ObservableCollection<RunningProcess>();
 
@@ -59,8 +69,9 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
     [ObservableProperty]
     private bool _includeChildren;
 
+    /// <summary>The policies the user ticked, in priority order, read back as one line.</summary>
     [ObservableProperty]
-    private RoutingPolicy? _selectedPolicy;
+    private string _policySummary = string.Empty;
 
     /// <summary>The whole filter read back as one sentence. Rebuilt on every edit.</summary>
     [ObservableProperty]
@@ -81,7 +92,87 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
         rule.Name = string.IsNullOrWhiteSpace(Name) ? DefaultName() : Name.Trim();
         rule.Condition = Root.ToModel();
         rule.IncludeChildren = IncludeChildren;
-        if (SelectedPolicy != null) rule.PolicyId = SelectedPolicy.Id;
+        rule.PolicyIds = ChosenPolicyIds();
+    }
+
+    // Ticking nothing would leave the filter catching processes and then having no rules to route
+    // them by — they would fall through to the untracked default, which is Direct. That is the one
+    // outcome a redirector must not produce by accident, so the first policy stands in.
+    private List<Guid> ChosenPolicyIds()
+    {
+        List<Guid> chosen = Policies.Where(p => p.IsSelected).Select(p => p.Policy.Id).ToList();
+        if (chosen.Count == 0 && Policies.Count > 0) chosen.Add(Policies[0].Policy.Id);
+        return chosen;
+    }
+
+    // The rule's own list first, in its own order — that is the priority the user arranged — then
+    // everything else, so the whole set is there to be ticked without a second list to go to.
+    private void BuildPolicyList(ProcessRule rule, IEnumerable<RoutingPolicy> policies)
+    {
+        List<RoutingPolicy> all = policies.ToList();
+
+        foreach (Guid id in rule.PolicyIds)
+        {
+            RoutingPolicy? policy = all.FirstOrDefault(p => p.Id == id);
+            if (policy != null) Policies.Add(new PolicyChoice(policy) { IsSelected = true });
+        }
+
+        foreach (RoutingPolicy policy in all)
+            if (!Policies.Any(c => c.Policy.Id == policy.Id))
+                Policies.Add(new PolicyChoice(policy));
+
+        foreach (PolicyChoice choice in Policies)
+            choice.PropertyChanged += (_, _) => RenumberPolicies();
+
+        RenumberPolicies();
+    }
+
+    [RelayCommand]
+    private void MovePolicyUp(PolicyChoice? choice) => MovePolicy(choice, -1);
+
+    [RelayCommand]
+    private void MovePolicyDown(PolicyChoice? choice) => MovePolicy(choice, +1);
+
+    private void MovePolicy(PolicyChoice? choice, int delta)
+    {
+        if (choice is null) return;
+
+        int index = Policies.IndexOf(choice);
+        int target = index + delta;
+        if (index < 0 || target < 0 || target >= Policies.Count) return;
+
+        Policies.Move(index, target);
+        RenumberPolicies();
+    }
+
+    // The number shown against a ticked row, and the sentence under the list. Both are derived from
+    // the list, so they are recomputed rather than maintained.
+    private void RenumberPolicies()
+    {
+        int rank = 0;
+        foreach (PolicyChoice choice in Policies)
+            choice.Rank = choice.IsSelected ? ++rank : 0;
+
+        PolicySummary = string.Join(
+            " → ",
+            Policies.Where(c => c.IsSelected).Select(c => c.Policy.Name));
+    }
+
+    /// <summary>One policy in the list: whether this filter uses it, and where in the order.</summary>
+    public sealed partial class PolicyChoice : ObservableObject
+    {
+        public PolicyChoice(RoutingPolicy policy) => Policy = policy;
+
+        public RoutingPolicy Policy { get; }
+
+        public string Name => Policy.Name;
+
+        [ObservableProperty]
+        private bool _isSelected;
+
+        /// <summary>1 for the first policy tried, 2 for the next; 0 while the row is not ticked.</summary>
+        [ObservableProperty]
+        private int _rank;
     }
 
     /// <summary>

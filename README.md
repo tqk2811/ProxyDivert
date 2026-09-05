@@ -47,8 +47,12 @@ and `WinDivert64.sys` copied next to it.
 
 1. Run `ProxyDivert.exe` **as Administrator**.
 2. **Outbounds** tab: add a proxy (`socks5://host:port`, `http://host:port`) and press **Test**.
-3. **Rules** tab: add a rule to the default policy — say `Wildcard` + `*.google.com` → the proxy you
-   just made. Destinations matching no rule take the policy's default outbound (Direct).
+3. **Rules** tab: a policy is a named list of destinations and the one way out they share. Add a
+   rule — say `Wildcard` + `*.google.com` — and pick the **Outbound** under the list; that is where
+   everything the rules match goes. Anything they do not match falls to the next policy the filter
+   names, and to Direct if none of them claims it. Add as many policies as you like, and
+   double-click one to rename it in place — the name lands when the box loses focus or on Enter,
+   and Escape drops it.
 4. **Processes** tab: press **Add** and a filter window opens. A filter is a name, a set of
    conditions, and what to do with whatever matches. Each condition row picks what to look at
    (**Process** or **Argument**), how to compare it (executable name, full path, wildcard, starts
@@ -60,8 +64,11 @@ and `WinDivert64.sys` copied next to it.
    and ticking two rows and pressing **Group ticked** wraps them in one after the fact. The
    sentence above the rows says what the filter currently means, and **Try it with** runs it
    against a process that is running right now and colours the row that decided. That is how
-   `java.exe AND (minecraft OR forge)` gets written. Or press **Launch suspended…** so not one
-   connection escapes while the process starts.
+   `java.exe AND (minecraft OR forge)` gets written. Under the conditions, tick the policies the
+   filter applies: their rules are tried from the top policy down and the first rule that matches
+   decides, so use ▲▼ to say which comes first. The top policy is also the one whose UDP mode and
+   Block QUIC apply. Or press **Launch suspended…** so not one connection escapes while the process
+   starts.
 5. Throw the switch in the title bar. The lower half of the **Processes** tab then shows, as a tree,
    every process the engine is actually holding, with anything adopted through **Children** nested
    under the process that spawned it. The **Connections** tab lists every connection with its host

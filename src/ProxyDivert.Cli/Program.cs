@@ -125,7 +125,7 @@ var policy = new RoutingPolicy
 {
     Id = Guid.NewGuid(),
     Name = "cli",
-    DefaultOutboundId = Outbound.DirectId,
+    OutboundId = outbound.Id,
     UdpMode = options.UdpMode,
     BlockQuic = options.BlockQuic,
 };
@@ -134,7 +134,6 @@ policy.Rules.Add(new RoutingRule
     Id = Guid.NewGuid(),
     Matcher = options.RuleMatcher,
     Pattern = options.RulePattern,
-    OutboundId = outbound.Id,
     Order = 0,
 });
 
@@ -166,7 +165,7 @@ if (options.ProcessPattern != null)
                 },
             },
         },
-        PolicyId = policy.Id,
+        PolicyIds = { policy.Id },
         IncludeChildren = true,
     });
 }

@@ -9,11 +9,6 @@ namespace ProxyDivert.Core.Configuration.Models;
 // passwords are encrypted before they get there (see ConfigStore).
 public sealed class AppConfig
 {
-    // Bumped when a change needs a migration step on load (see ConfigStore.Migrate).
-    public const int CurrentVersion = 3;
-
-    public int Version { get; set; } = CurrentVersion;
-
     public List<Outbound> Outbounds { get; set; } = new List<Outbound>();
 
     public List<RoutingPolicy> Policies { get; set; } = new List<RoutingPolicy>();
@@ -31,11 +26,6 @@ public sealed class AppConfig
     // Ignore lets it leave untouched (it then bypasses the proxy — diagnostics only).
     public Ipv6Mode Ipv6 { get; set; } = Ipv6Mode.Redirect;
 
-    // Config v1 only. Back then the redirector was IPv4-only and this switch decided whether the
-    // target's IPv6 was dropped. ConfigStore maps it onto Ipv6 on load and then clears it, so it is
-    // never written back (null properties are omitted).
-    public bool? BlockIpv6 { get; set; }
-
     // Path to wireproxy.exe, which runs the WireGuard tunnel of a VPN outbound in user space.
     // Null = look next to this executable and then on PATH. One setting for the whole machine:
     // it is the same binary whichever tunnel it runs.
@@ -46,15 +36,15 @@ public sealed class AppConfig
     public string? Theme { get; set; }
     public bool StartWithWindows { get; set; }
 
-    // A fresh install still needs something that works: one Direct outbound and a policy that
-    // sends everything through it.
+    // A fresh install still needs something that works: the Direct outbound, and one policy that
+    // has no rules yet — so nothing is claimed and nothing is redirected until the user says so.
     public static AppConfig CreateDefault()
     {
         var policy = new RoutingPolicy
         {
             Id = Guid.NewGuid(),
             Name = "Default",
-            DefaultOutboundId = Outbound.DirectId,
+            OutboundId = Outbound.DirectId,
         };
         return new AppConfig
         {

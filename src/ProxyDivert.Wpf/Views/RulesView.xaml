@@ -18,13 +18,71 @@
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Style="{StaticResource Heading}"
                            Text="{DynamicResource Str.Rules.Policies}" Margin="0,0,0,6"/>
-                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0" Orientation="Horizontal">
                     <Button Content="{DynamicResource Str.App.Add}" Command="{Binding AddPolicyCommand}" MinWidth="70"/>
                     <Button Content="{DynamicResource Str.App.Remove}" Command="{Binding RemovePolicyCommand}"
                             Margin="8,0,0,0" MinWidth="70"/>
                 </StackPanel>
-                <ListBox ItemsSource="{Binding Policies}" SelectedItem="{Binding SelectedPolicy}"
-                         DisplayMemberPath="Name"/>
+                <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Subtle}" Margin="0,6,0,0"
+                           TextWrapping="Wrap" Text="{DynamicResource Str.Rules.RenameHint}"/>
+
+                <!-- Double-click a row to rename it in place: the text becomes a box, and the edit
+                     lands when the box loses focus or on Enter. Which row is being renamed is one
+                     reference on the view model rather than a flag on every row, so each row asks
+                     whether it is that one. -->
+                <ListBox x:Name="PolicyList" ItemsSource="{Binding Policies}"
+                         SelectedItem="{Binding SelectedPolicy}"
+                         MouseDoubleClick="PolicyList_MouseDoubleClick">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <TextBlock VerticalAlignment="Center" Text="{Binding Name}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Value="True">
+                                                    <DataTrigger.Binding>
+                                                        <MultiBinding Converter="{StaticResource SameObject}">
+                                                            <Binding/>
+                                                            <Binding Path="DataContext.RenamingPolicy"
+                                                                     RelativeSource="{RelativeSource AncestorType=ListBox}"/>
+                                                        </MultiBinding>
+                                                    </DataTrigger.Binding>
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <TextBox x:Name="PolicyNameBox" Margin="-4,0"
+                                         KeyDown="PolicyNameBox_KeyDown"
+                                         LostFocus="PolicyNameBox_LostFocus"
+                                         Text="{Binding DataContext.PolicyName,
+                                                RelativeSource={RelativeSource AncestorType=ListBox},
+                                                UpdateSourceTrigger=PropertyChanged}">
+                                    <TextBox.Style>
+                                        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Value="True">
+                                                    <DataTrigger.Binding>
+                                                        <MultiBinding Converter="{StaticResource SameObject}">
+                                                            <Binding/>
+                                                            <Binding Path="DataContext.RenamingPolicy"
+                                                                     RelativeSource="{RelativeSource AncestorType=ListBox}"/>
+                                                        </MultiBinding>
+                                                    </DataTrigger.Binding>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBox.Style>
+                                </TextBox>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </DockPanel>
         </Border>
 
@@ -50,7 +108,7 @@
                     <WrapPanel Margin="0,10,0,0" VerticalAlignment="Center">
                         <TextBlock Text="{DynamicResource Str.Rules.Default}" VerticalAlignment="Center"/>
                         <ComboBox ItemsSource="{Binding Outbounds}" DisplayMemberPath="Name" SelectedValuePath="Id"
-                                  SelectedValue="{Binding SelectedPolicy.DefaultOutboundId}"
+                                  SelectedValue="{Binding SelectedPolicy.OutboundId}"
                                   Width="160" Margin="8,0,0,0"/>
 
                         <TextBlock Text="{DynamicResource Str.Rules.UdpMode}" VerticalAlignment="Center" Margin="20,0,0,0"/>
@@ -82,11 +140,6 @@
                                             Binding="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
                         <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.Rules.Not}"
                                                 Binding="{Binding IsNot, UpdateSourceTrigger=PropertyChanged}" Width="55"/>
-                        <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.Rules.Outbound}"
-                                                SelectedValueBinding="{Binding OutboundId, UpdateSourceTrigger=PropertyChanged}"
-                                                SelectedValuePath="Id" DisplayMemberPath="Name"
-                                                ItemsSource="{Binding Data.Outbounds, Source={StaticResource Vm}}"
-                                                Width="150"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>

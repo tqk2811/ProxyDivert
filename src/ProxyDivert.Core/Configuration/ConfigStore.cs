@@ -1,11 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Routing.Models.Conditions;
+using ProxyDivert.Core.Vpn.Enums;
 using TqkLibrary.WinDivert.Redirect.Enums;
 
 namespace ProxyDivert.Core.Configuration;
@@ -48,7 +51,7 @@ public sealed class ConfigStore
             AppConfig? config = JsonSerializer.Deserialize<AppConfig>(json, SerializerOptions);
             if (config == null) return AppConfig.CreateDefault();
             DecryptSecrets(config);
-            Migrate(config);
+            RestoreBuiltInOutbounds(config);
             return config;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
@@ -77,71 +80,31 @@ public sealed class ConfigStore
         else File.Move(tempPath, FilePath);
     }
 
-    // Brings a file written by an older version up to the current shape. Kept here rather than in
-    // the model so AppConfig stays plain data.
+    // Direct and Block are the application's own, identified by fixed id. Everything about them
+    // except their name is fixed too — Direct is the machine's own stack and Block is the absence
+    // of one, so a kind, a URL or a credential on either is meaningless, and switching Direct off
+    // would leave traffic nothing to fall back to.
     //
-    // v1 -> v2: BlockIpv6 became Ipv6 (Redirect / Block / Ignore). "Block it" carries over as-is.
-    // "Don't block it" used to mean the target's IPv6 escaped the proxy entirely — that was the
-    // only thing the old code could do, not what the setting was asking for, so it becomes Redirect.
-    //
-    // v2 -> v3: a process rule was two fixed conditions ANDed together; it is now a named filter
-    // over a tree. The mapping is exact, and it has to stay exact: a filter that comes back meaning
-    // something slightly different is a process that quietly stops being redirected, which the user
-    // finds out about by leaking their address.
-    internal static void Migrate(AppConfig config)
+    // Repaired on load rather than merely prevented, because for a while the interface let it
+    // happen: the outbound grid was read-only, which stopped the text cells but not the combo
+    // columns — those show a live ComboBox regardless — so one stray click turned Direct into an
+    // HTTP proxy with no URL, and saving kept it. A file already in that state has to come back
+    // usable, not just stop getting worse. The name is left alone: rules reference these by id, so
+    // renaming one is the user's business.
+    private static void RestoreBuiltInOutbounds(AppConfig config)
     {
-        if (config.Version < 2)
-            config.Ipv6 = config.BlockIpv6 == true ? Ipv6Mode.Block : Ipv6Mode.Redirect;
-
-        config.BlockIpv6 = null;
-
-        foreach (ProcessRule rule in config.ProcessRules)
+        foreach (Outbound outbound in config.Outbounds)
         {
-            UpgradeToConditionTree(rule);
+            if (!outbound.IsBuiltIn) continue;
 
-            // Cleared whatever the version said: a file written by this build must not carry two
-            // copies of the same condition, one of which nothing reads.
-            rule.LegacyMatcher = null;
-            rule.LegacyPattern = null;
-            rule.LegacyArgumentMatcher = null;
-            rule.LegacyArgumentPattern = null;
+            outbound.Kind = outbound.Id == Outbound.DirectId ? OutboundKind.Direct : OutboundKind.Block;
+            outbound.Url = null;
+            outbound.Username = null;
+            outbound.Password = null;
+            outbound.PreSharedKey = null;
+            outbound.VpnProtocol = VpnProtocol.Auto;
+            outbound.IsEnabled = true;
         }
-
-        config.Version = AppConfig.CurrentVersion;
-    }
-
-    // The two old slots become one "match all" group: the process condition, plus the argument
-    // condition when the user had filled that one in. An empty argument slot was never consulted,
-    // so it must not turn into a row in the tree either — an empty row is something the editor
-    // shows, and a filter nobody touched should not come back looking half-edited.
-    private static void UpgradeToConditionTree(ProcessRule rule)
-    {
-        if (rule.Condition != null) return;
-
-        string pattern = rule.LegacyPattern ?? string.Empty;
-
-        var group = new ConditionGroup { Operator = ConditionOperator.All };
-        group.Children.Add(new ProcessNameCondition
-        {
-            Matcher = rule.LegacyMatcher ?? ProcessMatcherType.ExeName,
-            Pattern = pattern,
-        });
-
-        if (!string.IsNullOrWhiteSpace(rule.LegacyArgumentPattern))
-        {
-            group.Children.Add(new CommandLineCondition
-            {
-                Matcher = rule.LegacyArgumentMatcher ?? ArgumentMatcherType.Contains,
-                Pattern = rule.LegacyArgumentPattern!,
-            });
-        }
-
-        rule.Condition = group;
-
-        // Filters never had names. The pattern is what the user recognised the row by, so it is
-        // what the row should still say after the upgrade.
-        if (string.IsNullOrWhiteSpace(rule.Name))
-            rule.Name = string.IsNullOrWhiteSpace(pattern) ? "Filter" : pattern.Trim();
     }
 
     private static void DecryptSecrets(AppConfig config)
