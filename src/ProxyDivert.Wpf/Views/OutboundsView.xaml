@@ -1,11 +1,52 @@
 <UserControl x:Class="ProxyDivert.Wpf.Views.OutboundsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:b="clr-namespace:ProxyDivert.Wpf.Bindings">
+             xmlns:b="clr-namespace:ProxyDivert.Wpf.Bindings"
+             xmlns:loc="clr-namespace:ProxyDivert.Wpf.Localization"
+             xmlns:enums="clr-namespace:ProxyDivert.Core.Routing.Enums;assembly=ProxyDivert.Core">
     <!-- A DataGrid column is outside the visual tree, so the combo columns below reach the view
          model through this proxy instead of an ancestor lookup that cannot resolve. -->
     <UserControl.Resources>
         <b:BindingProxy x:Key="Vm" Data="{Binding}"/>
+
+        <!-- A DataGridComboBoxColumn shows a live ComboBox whether or not the grid would let the
+             cell be edited, so a picker that must not be touched has to say so itself. This is the
+             one for the settings Direct and Block do not have. -->
+        <Style x:Key="RowPicker" TargetType="ComboBox" BasedOn="{StaticResource EnumComboColumn}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
+                    <Setter Property="IsEnabled" Value="False"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Same for the check box: its display element ignores hit-testing, so the click lands on
+             the cell and the grid refuses the edit — but nothing about it looked refused, and a box
+             that is the one live-looking thing on a row where everything else is dimmed reads as
+             the row being editable after all. Turning Direct off is not a setting either: it is
+             where traffic goes when no rule says otherwise. -->
+        <Style x:Key="RowCheck" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
+                    <Setter Property="IsEnabled" Value="False"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Which VPN to speak is a question only a VPN row can answer. On a proxy row the picker
+             would offer settings that change nothing, so it is there — the column stays in place
+             for the rows that need it — but greyed. Direct and Block are covered by the same rule:
+             neither is a VPN. -->
+        <Style x:Key="VpnProtocolPicker" TargetType="ComboBox" BasedOn="{StaticResource EnumComboColumn}">
+            <Setter Property="IsEnabled" Value="False"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="{x:Static enums:OutboundKind.Vpn}">
+                    <Setter Property="IsEnabled" Value="True"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
     <Border Style="{StaticResource Card}" Margin="4">
         <DockPanel>
@@ -68,18 +109,57 @@
             </StackPanel>
 
             <DataGrid ItemsSource="{Binding Outbounds}" SelectedItem="{Binding Selected}"
-                      AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
+                      AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
+                      BeginningEdit="Grid_BeginningEdit">
+                <!-- Direct and Block are in the list so a policy has something to point at, and a
+                     rule references one by id — renaming one or giving it a URL would only produce
+                     a broken configuration. They are still rows like any other: a fresh
+                     configuration holds nothing else, so disabling them outright would open the tab
+                     on a grid that looks switched off. Dimmed text says they are not yours to
+                     change, the code-behind refuses the edit, and the pickers grey themselves. -->
+                <DataGrid.CellStyle>
+                    <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.CellStyle>
                 <DataGrid.Columns>
                     <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}"
-                                            Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
+                                            Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}"
+                                            ElementStyle="{StaticResource RowCheck}"
+                                            EditingElementStyle="{StaticResource RowCheck}" Width="60"/>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Name}"
                                         Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="150"/>
-                    <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.App.Type}"
-                                            SelectedItemBinding="{Binding Kind, UpdateSourceTrigger=PropertyChanged}"
-                                            ItemsSource="{Binding Data.Kinds, Source={StaticResource Vm}}"
-                                            ElementStyle="{StaticResource EnumComboColumn}"
-                                            EditingElementStyle="{StaticResource EnumComboColumn}"
-                                            Width="110"/>
+                    <!-- A picker everywhere except on the two built-ins, whose kinds are deliberately
+                         not in the list — offering "Direct" as something an ordinary row could be
+                         turned into would only invite a second Direct that no rule points at. That
+                         left their own type cell showing nothing at all, so those rows say what they
+                         are in plain text instead. -->
+                    <DataGridTemplateColumn Header="{b:LocalizedBinding Str.App.Type}" Width="110"
+                                            SortMemberPath="Kind">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <TextBlock VerticalAlignment="Center"
+                                               Visibility="{Binding IsBuiltIn, Converter={StaticResource TrueToVisible}}">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{StaticResource EnumText}" Mode="OneWay">
+                                                <Binding Path="Kind"/>
+                                                <Binding Path="Version" Source="{x:Static loc:LocalizationScope.Instance}"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                    <ComboBox Margin="0,2" ItemTemplate="{StaticResource EnumItemTemplate}"
+                                              ItemsSource="{Binding Data.Kinds, Source={StaticResource Vm}}"
+                                              SelectedItem="{Binding Kind, UpdateSourceTrigger=PropertyChanged}"
+                                              Visibility="{Binding IsBuiltIn, Converter={StaticResource FalseToVisible}}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Url}"
                                         Binding="{Binding Url, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Username}"
@@ -95,14 +175,14 @@
                     <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.Outbound.VpnProtocol}"
                                             SelectedItemBinding="{Binding VpnProtocol, UpdateSourceTrigger=PropertyChanged}"
                                             ItemsSource="{Binding Data.VpnProtocols, Source={StaticResource Vm}}"
-                                            ElementStyle="{StaticResource EnumComboColumn}"
-                                            EditingElementStyle="{StaticResource EnumComboColumn}"
+                                            ElementStyle="{StaticResource VpnProtocolPicker}"
+                                            EditingElementStyle="{StaticResource VpnProtocolPicker}"
                                             Width="150"/>
                     <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.Outbound.Ipv6}"
                                             SelectedItemBinding="{Binding Ipv6Support, UpdateSourceTrigger=PropertyChanged}"
                                             ItemsSource="{Binding Data.Ipv6Supports, Source={StaticResource Vm}}"
-                                            ElementStyle="{StaticResource EnumComboColumn}"
-                                            EditingElementStyle="{StaticResource EnumComboColumn}"
+                                            ElementStyle="{StaticResource RowPicker}"
+                                            EditingElementStyle="{StaticResource RowPicker}"
                                             Width="100"/>
                 </DataGrid.Columns>
             </DataGrid>

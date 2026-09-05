@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Vpn;
 using ProxyDivert.Core.Vpn.Enums;
@@ -52,6 +53,7 @@ public sealed class Outbound
     // datagrams; a tunnel run in this process owns a whole userspace IP stack and carries UDP
     // itself. The question is answered from the URL alone, never by reading the file — this is on
     // the routing path, once per connection.
+    [JsonIgnore]
     public bool SupportsUdp => Kind switch
     {
         OutboundKind.Direct or OutboundKind.Socks5 => true,
@@ -61,7 +63,15 @@ public sealed class Outbound
 
     // SOCKS4 has no IPv6 in the protocol at all — no address type for it — so no setting can make
     // it carry IPv6. Direct is the machine's own stack: if the machine has IPv6, so does Direct.
+    [JsonIgnore]
     public bool CanEverCarryIpv6 => Kind != OutboundKind.Socks4;
+
+    // Direct and Block are the two the application creates for itself. They exist so a policy has
+    // something to point at, they carry no settings anyone could sensibly change, and a rule that
+    // references one by id would break if it were renamed or given a URL — so the list shows them
+    // and lets nothing be typed into them.
+    [JsonIgnore]
+    public bool IsBuiltIn => Id == DirectId || Id == BlockId;
 
     public static Outbound CreateDirect() => new Outbound
     {

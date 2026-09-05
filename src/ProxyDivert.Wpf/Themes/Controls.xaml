@@ -842,7 +842,13 @@
         <Setter Property="AutoGenerateColumns" Value="False"/>
         <Setter Property="CanUserAddRows" Value="False"/>
         <Setter Property="CanUserDeleteRows" Value="False"/>
-        <Setter Property="IsReadOnly" Value="True"/>
+        <!-- No IsReadOnly here. A theme says how a control looks, not what it lets the user do, and
+             setting it True for every grid in the application quietly took the text and check-box
+             cells of the editable grids with it: the outbound URL, its credentials, a rule's
+             pattern. Nothing looked disabled, the cell simply refused to open. The combo columns
+             kept working — their display element is a live ComboBox — which made the grids look
+             half-broken rather than read-only. The one grid that really is a read-out, the
+             connection list, says so itself. -->
         <Setter Property="SelectionMode" Value="Extended"/>
         <!-- A minimum, not a height: RowHeight is fixed, so a cell holding anything taller than a
              line of text — the process rule's picker and text box, both 28px plus their margin —
