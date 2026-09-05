@@ -6,6 +6,8 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using ProxyDivert.Core.Routing.Enums;
+using ProxyDivert.Core.Routing.Models.Conditions;
 using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.Views;
 using Xunit;
@@ -81,28 +83,23 @@ public class DataGridColumnBindingTests
             + Environment.NewLine + string.Join(Environment.NewLine, empty));
     }
 
-    // The process rule's kind and value live together in one DataGridTemplateColumn, and a cell
-    // template is only built once there is a row to build it for — measuring an empty grid, which
-    // is all the resource smoke test does, would never touch it. This puts a rule in the grid and
-    // checks what the user actually gets: two pickers with something in them, and two text boxes.
+    // A cell template is only built once there is a row to build it for — measuring an empty grid,
+    // which is all the resource smoke test does, would never touch it. This puts a filter in the
+    // grid and checks what the user actually gets in the conditions cell: the tree read back as a
+    // sentence, and a button to go and edit it.
     [Fact]
-    public void The_merged_rule_cell_gives_both_pickers_their_choices()
+    public void The_conditions_cell_says_what_the_filter_matches()
     {
-        var combos = new List<ComboBox>();
-        var boxes = new List<TextBox>();
+        var texts = new List<string>();
+        int buttons = 0;
 
         RunOnStaThread(() =>
         {
             EnsureApplication();
+            LocalizationManager.Apply(AppLanguage.English);
 
             var stub = new ViewModelStub();
-            stub.Rules.Add(new ProxyDivert.Core.Routing.Models.ProcessRule
-            {
-                Id = Guid.NewGuid(),
-                Matcher = ProxyDivert.Core.Routing.Enums.ProcessMatcherType.ExeName,
-                Pattern = "chrome.exe",
-                PolicyId = Guid.NewGuid(),
-            });
+            stub.Rules.Add(SampleFilter());
 
             var view = new ProcessesView { DataContext = stub };
             var window = new Window { Width = 1400, Height = 900, Content = view };
@@ -110,19 +107,104 @@ public class DataGridColumnBindingTests
             view.UpdateLayout();
 
             DataGrid grid = FindVisuals<DataGrid>(view).First();
-            combos.AddRange(FindVisuals<ComboBox>(grid));
-            boxes.AddRange(FindVisuals<TextBox>(grid));
+            texts.AddRange(FindVisuals<TextBlock>(grid).Select(block => block.Text ?? string.Empty));
+            buttons = FindVisuals<Button>(grid).Count();
 
             window.Close();
         });
 
-        // One picker for the process kind, one for the argument kind, one for the policy.
-        Assert.Equal(3, combos.Count);
-        Assert.All(combos, combo => Assert.NotNull(combo.ItemsSource));
-
-        // The value next to each picker.
-        Assert.Equal(2, boxes.Count);
+        // The whole tree, brackets and all, in the one cell that replaced two columns of pickers.
+        Assert.Contains(texts, text => text.Contains("java.exe") && text.Contains("minecraft")
+                                       && text.Contains("AND") && text.Contains("OR"));
+        Assert.True(buttons >= 1, "The conditions cell has no button to open the editor.");
     }
+
+    // The condition rows are drawn by a template that contains an ItemsControl over the same kind
+    // of thing it is itself, so a group inside a group renders through it again. Nothing about
+    // that shows up at build time: get the recursion wrong and the window opens with the nested
+    // group simply missing, or with its pickers empty. Only running it says.
+    [Fact]
+    public void The_filter_editor_draws_a_nested_group_with_every_picker_filled()
+    {
+        int combos = 0;
+        var empty = new List<string>();
+        var patterns = new List<string>();
+
+        RunOnStaThread(() =>
+        {
+            EnsureApplication();
+
+            var policy = new ProxyDivert.Core.Routing.Models.RoutingPolicy
+            {
+                Id = Guid.NewGuid(),
+                Name = "policy",
+                DefaultOutboundId = Guid.NewGuid(),
+            };
+            ProxyDivert.Core.Routing.Models.ProcessRule filter = SampleFilter();
+            filter.PolicyId = policy.Id;
+
+            var window = new ProcessFilterWindow(
+                new ProxyDivert.Wpf.ViewModels.ProcessFilterViewModel(filter, new[] { policy }))
+            {
+                Width = 1000,
+                Height = 800,
+            };
+            window.Show();
+            window.UpdateLayout();
+
+            foreach (ComboBox combo in FindVisuals<ComboBox>(window))
+            {
+                combos++;
+                if (combo.ItemsSource == null) empty.Add(combo.Name);
+            }
+
+            patterns.AddRange(FindVisuals<TextBox>(window).Select(box => box.Text ?? string.Empty));
+
+            window.Close();
+        });
+
+        // Eight in the tree — an operator picker on the root and on the nested group, plus the
+        // subject and comparison pickers on each of the three condition rows — and two below it,
+        // for the policy and for the process to try the filter against.
+        Assert.Equal(10, combos);
+        Assert.True(empty.Count == 0, $"{empty.Count} pickers in the filter editor resolved no ItemsSource.");
+
+        // The name box, plus one value box per condition — including the two inside the group.
+        Assert.Contains("java.exe", patterns);
+        Assert.Contains("minecraft", patterns);
+        Assert.Contains("forge", patterns);
+    }
+
+    // java.exe AND (minecraft OR forge) — one bracket inside another, which is the shape the whole
+    // editor exists for.
+    private static ProxyDivert.Core.Routing.Models.ProcessRule SampleFilter()
+        => new ProxyDivert.Core.Routing.Models.ProcessRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "Minecraft",
+            PolicyId = Guid.NewGuid(),
+            Condition = new ConditionGroup
+            {
+                Operator = ConditionOperator.All,
+                Children =
+                {
+                    new ProcessNameCondition
+                    {
+                        Matcher = ProxyDivert.Core.Routing.Enums.ProcessMatcherType.ExeName,
+                        Pattern = "java.exe",
+                    },
+                    new ConditionGroup
+                    {
+                        Operator = ConditionOperator.Any,
+                        Children =
+                        {
+                            new CommandLineCondition { Pattern = "minecraft" },
+                            new CommandLineCondition { Pattern = "forge" },
+                        },
+                    },
+                },
+            },
+        };
 
     // DataGrid.RowHeight is a fixed height, not a minimum, so a cell holding a control taller than
     // a line of text is simply cut off at the bottom — the grid reports no error and the row looks
@@ -138,13 +220,7 @@ public class DataGridColumnBindingTests
             EnsureApplication();
 
             var stub = new ViewModelStub();
-            stub.Rules.Add(new ProxyDivert.Core.Routing.Models.ProcessRule
-            {
-                Id = Guid.NewGuid(),
-                Matcher = ProxyDivert.Core.Routing.Enums.ProcessMatcherType.ExeName,
-                Pattern = "chrome.exe",
-                PolicyId = Guid.NewGuid(),
-            });
+            stub.Rules.Add(SampleFilter());
 
             var view = new ProcessesView { DataContext = stub };
             var window = new Window { Width = 1400, Height = 900, Content = view };

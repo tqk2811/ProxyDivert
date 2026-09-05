@@ -1,7 +1,8 @@
 <UserControl x:Class="ProxyDivert.Wpf.Views.ProcessesView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:b="clr-namespace:ProxyDivert.Wpf.Bindings">
+             xmlns:b="clr-namespace:ProxyDivert.Wpf.Bindings"
+             xmlns:loc="clr-namespace:ProxyDivert.Wpf.Localization">
     <!-- A DataGrid column is outside the visual tree, so the combo columns below reach the view
          model through this proxy instead of an ancestor lookup that cannot resolve. -->
     <UserControl.Resources>
@@ -33,43 +34,31 @@
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}"
                                                 Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
-                        <!-- Kind and value are one condition, so they are one column: choosing
-                             "full path" and then typing a bare name is a rule that silently never
-                             matches, and two separate columns invite exactly that. -->
-                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Target}" Width="*" MinWidth="300">
+                        <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Name}" Width="180"
+                                            Binding="{Binding Name}"/>
+                        <!-- A condition tree does not fit in a cell, so the cell shows what the
+                             tree reads as and the button opens it. The sentence is rebuilt when
+                             the language changes, which is what the second binding is for. -->
+                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Conditions}" Width="*" MinWidth="320">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Grid Margin="0,2">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="165"/>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <ComboBox ItemsSource="{Binding Data.Matchers, Source={StaticResource Vm}}"
-                                                  SelectedItem="{Binding Matcher, UpdateSourceTrigger=PropertyChanged}"
-                                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
-                                        <TextBox Grid.Column="1" Margin="6,0,0,0"
-                                                 Tag="{b:LocalizedBinding Str.Process.TargetHint}"
-                                                 Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <!-- The same shape again, ANDed with the one above. Left empty it is not
-                             consulted, so a rule written before this existed keeps its meaning. -->
-                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Argument}" Width="*" MinWidth="280">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="0,2">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="150"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <ComboBox ItemsSource="{Binding Data.ArgumentMatchers, Source={StaticResource Vm}}"
-                                                  SelectedItem="{Binding ArgumentMatcher, UpdateSourceTrigger=PropertyChanged}"
-                                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
-                                        <TextBox Grid.Column="1" Margin="6,0,0,0"
-                                                 Tag="{b:LocalizedBinding Str.Process.ArgumentHint}"
-                                                 Text="{Binding ArgumentPattern, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBlock VerticalAlignment="Center" TextWrapping="Wrap">
+                                            <TextBlock.Text>
+                                                <MultiBinding Converter="{StaticResource ConditionSummary}" Mode="OneWay">
+                                                    <Binding Path="Condition"/>
+                                                    <Binding Path="Version" Source="{x:Static loc:LocalizationScope.Instance}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                        <Button Grid.Column="1" Margin="8,0,0,0" MinWidth="70"
+                                                Content="{DynamicResource Str.Process.Edit}"
+                                                Command="{Binding Data.EditRuleCommand, Source={StaticResource Vm}}"
+                                                CommandParameter="{Binding}"/>
                                     </Grid>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>

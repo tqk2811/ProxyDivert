@@ -10,7 +10,7 @@ namespace ProxyDivert.Core.Configuration.Models;
 public sealed class AppConfig
 {
     // Bumped when a change needs a migration step on load (see ConfigStore.Migrate).
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     public int Version { get; set; } = CurrentVersion;
 

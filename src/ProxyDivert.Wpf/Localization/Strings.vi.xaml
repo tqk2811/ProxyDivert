@@ -16,6 +16,7 @@
     <sys:String x:Key="Str.App.Refresh">Làm mới</sys:String>
     <sys:String x:Key="Str.App.Clear">Xoá hết</sys:String>
     <sys:String x:Key="Str.App.Test">Thử</sys:String>
+    <sys:String x:Key="Str.App.Cancel">Huỷ</sys:String>
     <sys:String x:Key="Str.App.Enabled">Bật</sys:String>
     <sys:String x:Key="Str.App.Name">Tên</sys:String>
     <sys:String x:Key="Str.App.Pattern">Mẫu</sys:String>
@@ -30,10 +31,15 @@
 
     <sys:String x:Key="Str.Process.Rules">Luật tiến trình</sys:String>
     <sys:String x:Key="Str.Process.Applied">Tiến trình đang áp dụng</sys:String>
-    <sys:String x:Key="Str.Process.Target">Tên hoặc đường dẫn tiến trình</sys:String>
     <sys:String x:Key="Str.Process.TargetHint">chrome.exe</sys:String>
-    <sys:String x:Key="Str.Process.Argument">Argument</sys:String>
     <sys:String x:Key="Str.Process.ArgumentHint">để trống là bỏ qua</sys:String>
+    <sys:String x:Key="Str.Process.Conditions">Điều kiện</sys:String>
+    <sys:String x:Key="Str.Process.Edit">Sửa…</sys:String>
+    <sys:String x:Key="Str.Process.FilterTitle">Bộ lọc tiến trình</sys:String>
+    <sys:String x:Key="Str.Process.FilterName">Tên bộ lọc</sys:String>
+    <sys:String x:Key="Str.Process.FilterNameHint">vd Minecraft, Chrome hồ sơ công việc</sys:String>
+    <sys:String x:Key="Str.Process.UnnamedFilter">Bộ lọc chưa đặt tên</sys:String>
+    <sys:String x:Key="Str.Process.IncludeChildrenLong">Bám theo cả tiến trình con nó sinh ra</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Cả tiến trình con</sys:String>
     <sys:String x:Key="Str.Process.Policy">Bộ luật</sys:String>
     <sys:String x:Key="Str.Process.Pid">PID</sys:String>
@@ -43,6 +49,27 @@
     <sys:String x:Key="Str.Process.LaunchHint">Chạy chương trình ở trạng thái tạm dừng để gắn chuyển hướng trước kết nối đầu tiên, không lọt gói nào lúc khởi động.</sys:String>
     <sys:String x:Key="Str.Process.Inherited">kế thừa</sys:String>
     <sys:String x:Key="Str.Process.NoneApplied">Chưa áp dụng cho tiến trình nào. Bấm chạy, rồi mọi tiến trình khớp luật sẽ hiện ở đây.</sys:String>
+
+    <!-- Cửa sổ dựng điều kiện. Toán tử chỉ nằm ở đầu mỗi nhóm, nên chữ trên combo phải đọc thành
+         câu ("khớp TẤT CẢ"), không phải ký hiệu AND/OR. -->
+    <sys:String x:Key="Str.Cond.Reads">Bộ lọc này đọc là</sys:String>
+    <sys:String x:Key="Str.Cond.Nothing">chưa có điều kiện nào</sys:String>
+    <sys:String x:Key="Str.Cond.Action">Hành động</sys:String>
+    <sys:String x:Key="Str.Cond.TryWith">Thử với</sys:String>
+    <sys:String x:Key="Str.Cond.Not">KHÔNG</sys:String>
+    <sys:String x:Key="Str.Cond.NotHint">Đảo ngược dòng này</sys:String>
+    <sys:String x:Key="Str.Cond.NotGroupHint">Đảo ngược cả nhóm này</sys:String>
+    <sys:String x:Key="Str.Cond.AddCondition">+ Điều kiện</sys:String>
+    <sys:String x:Key="Str.Cond.AddGroup">+ Nhóm</sys:String>
+    <sys:String x:Key="Str.Cond.GroupSelected">Gộp nhóm</sys:String>
+    <sys:String x:Key="Str.Cond.GroupSelectedHint">Đưa các dòng đang tích vào chung một nhóm</sys:String>
+    <sys:String x:Key="Str.Cond.Ungroup">Gỡ nhóm</sys:String>
+    <sys:String x:Key="Str.Cond.UngroupHint">Đổ các dòng trong nhóm này ra nhóm cha (tắt KHÔNG trước đã)</sys:String>
+    <sys:String x:Key="Str.Cond.SelectHint">Tích để gộp chung nhóm với dòng khác</sys:String>
+    <sys:String x:Key="Str.Cond.AndJoin"> VÀ </sys:String>
+    <sys:String x:Key="Str.Cond.OrJoin"> HOẶC </sys:String>
+    <sys:String x:Key="Str.Cond.NotFormat">KHÔNG {0}</sys:String>
+    <sys:String x:Key="Str.Cond.LeafFormat">{0} {1} “{2}”</sys:String>
 
     <sys:String x:Key="Str.Outbound.Url">URL</sys:String>
     <sys:String x:Key="Str.Outbound.Username">Tài khoản</sys:String>
@@ -142,6 +169,14 @@
     <sys:String x:Key="Enum.ArgumentMatcherType.StartsWith">Bắt đầu bằng</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.EndsWith">Kết thúc bằng</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Regex">Regex</sys:String>
+    <sys:String x:Key="Enum.ConditionSubject.ProcessName">Tiến trình</sys:String>
+    <sys:String x:Key="Enum.ConditionSubject.CommandLine">Argument</sys:String>
+    <sys:String x:Key="Enum.ConditionOperator.All">Khớp TẤT CẢ</sys:String>
+    <sys:String x:Key="Enum.ConditionOperator.Any">Khớp BẤT KỲ</sys:String>
+    <sys:String x:Key="Enum.ConditionResult.Ignored">chưa điền gì</sys:String>
+    <sys:String x:Key="Enum.ConditionResult.Match">KHỚP</sys:String>
+    <sys:String x:Key="Enum.ConditionResult.NoMatch">không khớp</sys:String>
+    <sys:String x:Key="Enum.ConditionResult.Unknown">không đọc được dữ liệu</sys:String>
 
     <sys:String x:Key="Enum.OutboundKind.Direct">Đi thẳng</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Block">Chặn</sys:String>

@@ -13,6 +13,7 @@ using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Routing.Models.Conditions;
 using TqkLibrary.Proxy;
 using TqkLibrary.Proxy.Handlers;
 using TqkLibrary.Proxy.ProxySources;
@@ -148,11 +149,23 @@ var config = new AppConfig
 
 if (options.ProcessPattern != null)
 {
+    // The command line takes one process pattern, which is the simplest shape of a filter: a
+    // single condition in a group of one. Anything more elaborate is written in the window.
     config.ProcessRules.Add(new ProcessRule
     {
         Id = Guid.NewGuid(),
-        Matcher = ProcessMatcherType.ExeName,
-        Pattern = options.ProcessPattern,
+        Name = options.ProcessPattern,
+        Condition = new ConditionGroup
+        {
+            Children =
+            {
+                new ProcessNameCondition
+                {
+                    Matcher = ProcessMatcherType.ExeName,
+                    Pattern = options.ProcessPattern,
+                },
+            },
+        },
         PolicyId = policy.Id,
         IncludeChildren = true,
     });

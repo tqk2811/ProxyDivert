@@ -1,0 +1,291 @@
+<Window x:Class="ProxyDivert.Wpf.Views.ProcessFilterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:b="clr-namespace:ProxyDivert.Wpf.Bindings"
+        xmlns:cvm="clr-namespace:ProxyDivert.Wpf.ViewModels.Conditions"
+        Title="{DynamicResource Str.Process.FilterTitle}"
+        Height="660" Width="900" MinHeight="480" MinWidth="720"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Brush.Window.Background}"
+        TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
+
+    <!-- Same replaced caption as the main window, and the same rule that comes with it:
+         CaptionHeight must match the title row below exactly, because that is what the window
+         treats as draggable, and anything clickable inside it has to say IsHitTestVisibleInChrome
+         or the click drags the window instead of pressing the button. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="44" ResizeBorderThickness="6" GlassFrameThickness="0"
+                      CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <!-- NOT is a labelled button that turns red when it is on, not a tick box. A negation you
+             cannot see at a glance is how a filter ends up meaning the opposite of what its author
+             thinks it means. -->
+        <Style x:Key="NotButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinWidth" Value="58"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="Opacity" Value="0.55"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Negate}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Brush.Danger}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}"/>
+                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="RowButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+
+        <!-- ==== one condition ==== -->
+        <DataTemplate DataType="{x:Type cvm:ConditionLeafViewModel}">
+            <Grid Margin="0,3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="4"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="132"/>
+                    <ColumnDefinition Width="158"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Filled in by "try it against a running process": this row said yes, no, or
+                     could not tell. -->
+                <Border Grid.Column="0" CornerRadius="2" Margin="0,1,6,1"
+                        Background="{Binding TestResult, Converter={StaticResource ConditionResultBrush}}"/>
+
+                <CheckBox Grid.Column="1" VerticalAlignment="Center" Margin="0,0,6,0"
+                          IsChecked="{Binding IsSelected}"
+                          ToolTip="{DynamicResource Str.Cond.SelectHint}"/>
+
+                <Button Grid.Column="2" Style="{StaticResource NotButton}" Margin="0,0,6,0"
+                        Content="{DynamicResource Str.Cond.Not}"
+                        Command="{Binding ToggleNegateCommand}"
+                        ToolTip="{DynamicResource Str.Cond.NotHint}"/>
+
+                <ComboBox Grid.Column="3" Margin="0,0,6,0"
+                          ItemsSource="{Binding Subjects}"
+                          SelectedItem="{Binding Subject}"
+                          ItemTemplate="{StaticResource EnumItemTemplate}"/>
+
+                <ComboBox Grid.Column="4" Margin="0,0,6,0"
+                          ItemsSource="{Binding Matchers}"
+                          SelectedItem="{Binding Matcher}"
+                          ItemTemplate="{StaticResource EnumItemTemplate}"/>
+
+                <!-- Enter adds the next condition to the same group, so a run of them can be typed
+                     without going back to the mouse. -->
+                <TextBox Grid.Column="5" Margin="0,0,6,0"
+                         Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
+                         b:FocusBehavior.FocusWhen="{Binding IsNew, Mode=TwoWay}">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                            <Setter Property="Tag" Value="{DynamicResource Str.Process.TargetHint}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Subject}" Value="CommandLine">
+                                    <Setter Property="Tag" Value="{DynamicResource Str.Process.ArgumentHint}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Return" Command="{Binding Parent.AddConditionCommand}"/>
+                    </TextBox.InputBindings>
+                </TextBox>
+
+                <StackPanel Grid.Column="6" Orientation="Horizontal">
+                    <Button Style="{StaticResource RowButton}" Content="▲"
+                            Command="{Binding MoveUpCommand}" ToolTip="{DynamicResource Str.App.Up}"/>
+                    <Button Style="{StaticResource RowButton}" Content="▼"
+                            Command="{Binding MoveDownCommand}" ToolTip="{DynamicResource Str.App.Down}"/>
+                    <Button Style="{StaticResource RowButton}" Content="✕"
+                            Command="{Binding RemoveCommand}" ToolTip="{DynamicResource Str.App.Remove}"/>
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
+        <!-- ==== a group, which holds conditions and more groups ====
+             This template puts an ItemsControl over Children, and Children hold groups again, so
+             the nesting draws itself. The vertical rule down the left is the bracket. -->
+        <DataTemplate DataType="{x:Type cvm:ConditionGroupViewModel}">
+            <Border Margin="0,3" Padding="9,5,5,5" CornerRadius="8"
+                    BorderThickness="2,1,1,1"
+                    Background="{DynamicResource Brush.Surface.Alt}"
+                    BorderBrush="{DynamicResource Brush.Surface.BorderBrush}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="4"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" CornerRadius="2" Margin="0,1,6,1"
+                                Background="{Binding TestResult, Converter={StaticResource ConditionResultBrush}}"/>
+
+                        <CheckBox Grid.Column="1" VerticalAlignment="Center" Margin="0,0,6,0"
+                                  IsChecked="{Binding IsSelected}"
+                                  ToolTip="{DynamicResource Str.Cond.SelectHint}"
+                                  Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
+
+                        <Button Grid.Column="2" Style="{StaticResource NotButton}" Margin="0,0,6,0"
+                                Content="{DynamicResource Str.Cond.Not}"
+                                Command="{Binding ToggleNegateCommand}"
+                                ToolTip="{DynamicResource Str.Cond.NotGroupHint}"/>
+
+                        <ComboBox Grid.Column="3" Width="176"
+                                  ItemsSource="{Binding Operators}"
+                                  SelectedItem="{Binding Operator}"
+                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
+
+                        <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.AddCondition}"
+                                    Command="{Binding AddConditionCommand}"/>
+                            <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.AddGroup}"
+                                    Command="{Binding AddGroupCommand}"/>
+                            <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.GroupSelected}"
+                                    Command="{Binding GroupSelectedCommand}"
+                                    ToolTip="{DynamicResource Str.Cond.GroupSelectedHint}"/>
+                            <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.Ungroup}"
+                                    Command="{Binding UngroupCommand}"
+                                    ToolTip="{DynamicResource Str.Cond.UngroupHint}"
+                                    Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
+                            <Button Style="{StaticResource RowButton}" Margin="6,0,0,0" Content="✕"
+                                    Command="{Binding RemoveCommand}"
+                                    ToolTip="{DynamicResource Str.App.Remove}"
+                                    Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <ItemsControl Margin="16,2,0,0" ItemsSource="{Binding Children}"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="44"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ==== title bar ====
+             No minimize button, unlike the main window. This opens modal, so a minimized copy of
+             it would leave the window behind it visible and refusing every click — the app would
+             look hung. Maximize earns its place: a condition tree several groups deep is exactly
+             what someone would want the whole screen for. -->
+        <Grid Grid.Row="0" Background="{DynamicResource Brush.TitleBar.Background}">
+            <TextBlock Margin="16,0,0,0" VerticalAlignment="Center"
+                       FontWeight="SemiBold" FontSize="13"
+                       Text="{DynamicResource Str.Process.FilterTitle}"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Height="44"
+                        WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button Style="{StaticResource WindowControlButton}" VerticalAlignment="Center"
+                        Click="Maximize_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                <!-- E922 maximize, E923 restore: the glyph has to say which one the
+                                     click will do, or a maximized window still offers to maximize. -->
+                                <Setter Property="Text" Value="&#xE922;"/>
+                                <Style.Triggers>
+                                    <DataTrigger Value="Maximized"
+                                                 Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}">
+                                        <Setter Property="Text" Value="&#xE923;"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Button>
+                <Button Style="{StaticResource WindowCloseButton}" VerticalAlignment="Center"
+                        Click="Close_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8BB;" FontSize="10"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1" Margin="14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ==== name ==== -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                <TextBlock Text="{DynamicResource Str.Process.FilterName}" VerticalAlignment="Center"
+                           Width="110"/>
+                <TextBox Width="420" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                         Tag="{DynamicResource Str.Process.FilterNameHint}"/>
+            </StackPanel>
+
+            <!-- ==== the tree read back as a sentence ====
+                 The editor never asks anyone to type an expression, but it always shows the one they
+                 built — otherwise a bracket dragged into place is a change nobody can check. -->
+            <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,10,0,0">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Subtle}" Text="{DynamicResource Str.Cond.Reads}"/>
+                    <TextBlock Margin="0,3,0,0" FontSize="13" TextWrapping="Wrap"
+                               Text="{Binding Summary}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ==== the conditions ==== -->
+            <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,10,0,0" Padding="6">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ContentControl Content="{Binding Root}"/>
+                </ScrollViewer>
+            </Border>
+
+            <!-- ==== what happens to whatever matches ==== -->
+            <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,10,0,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{DynamicResource Str.Cond.Action}" VerticalAlignment="Center"
+                               Width="110"/>
+                    <ComboBox Width="220" ItemsSource="{Binding Policies}"
+                              SelectedItem="{Binding SelectedPolicy}" DisplayMemberPath="Name"/>
+                    <CheckBox Margin="16,0,0,0" VerticalAlignment="Center"
+                              Content="{DynamicResource Str.Process.IncludeChildrenLong}"
+                              IsChecked="{Binding IncludeChildren}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ==== try it against something that is running ==== -->
+            <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,10,0,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{DynamicResource Str.Cond.TryWith}" VerticalAlignment="Center"
+                               Width="110"/>
+                    <ComboBox Width="260" ItemsSource="{Binding TestProcesses}"
+                              SelectedItem="{Binding SelectedTestProcess}" DisplayMemberPath="Display"/>
+                    <Button Margin="8,0,0,0" MinWidth="80" Content="{DynamicResource Str.App.Test}"
+                            Command="{Binding RunTestCommand}"/>
+                    <Border Width="10" Height="10" CornerRadius="5" Margin="16,0,6,0"
+                            VerticalAlignment="Center"
+                            Background="{Binding TestResult, Converter={StaticResource ConditionResultBrush}}"/>
+                    <ContentControl VerticalAlignment="Center" Content="{Binding TestResult}"
+                                    ContentTemplate="{StaticResource EnumItemTemplate}"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                <Button MinWidth="96" Content="{DynamicResource Str.App.Cancel}" IsCancel="True"/>
+                <Button MinWidth="96" Margin="8,0,0,0" Style="{StaticResource AccentButton}"
+                        Content="{DynamicResource Str.App.Save}" Click="Save_Click"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

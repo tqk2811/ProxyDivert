@@ -1,20 +1,43 @@
 using System;
+using System.Linq;
 using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Routing.Models.Conditions;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;
 
 public class ProcessRuleMatcherTests
 {
-    private static ProcessRule Rule(ProcessMatcherType matcher, string pattern) => new ProcessRule
+    // The simplest filter there is: one condition, on its own in the root group. Every case below
+    // that predates condition trees is written through this, so what it asserts is that a filter
+    // upgraded from the two-slot version still decides exactly what it used to.
+    private static ProcessRule Rule(ProcessMatcherType matcher, string pattern)
+        => Rule(new ProcessNameCondition { Matcher = matcher, Pattern = pattern });
+
+    private static ProcessRule Rule(params ProcessCondition[] conditions) => new ProcessRule
     {
         Id = Guid.NewGuid(),
-        Matcher = matcher,
-        Pattern = pattern,
+        Name = "test",
+        Condition = Group(ConditionOperator.All, conditions),
         PolicyId = Guid.NewGuid(),
     };
+
+    private static ConditionGroup Group(ConditionOperator op, params ProcessCondition[] children)
+        => new ConditionGroup { Operator = op, Children = children.ToList() };
+
+    private static ProcessNameCondition Process(string pattern, ProcessMatcherType matcher = ProcessMatcherType.ExeName)
+        => new ProcessNameCondition { Matcher = matcher, Pattern = pattern };
+
+    private static CommandLineCondition Arguments(string pattern, ArgumentMatcherType matcher = ArgumentMatcherType.Contains)
+        => new CommandLineCondition { Matcher = matcher, Pattern = pattern };
+
+    private static T Not<T>(T condition) where T : ProcessCondition
+    {
+        condition.Negate = true;
+        return condition;
+    }
 
     [Theory]
     [InlineData("chrome", "chrome", true)]
@@ -104,12 +127,9 @@ public class ProcessRuleMatcherTests
     // ==== the second condition: the command line ====
 
     private static ProcessRule WithArgument(ArgumentMatcherType matcher, string? pattern)
-    {
-        ProcessRule rule = Rule(ProcessMatcherType.ExeName, "java");
-        rule.ArgumentMatcher = matcher;
-        rule.ArgumentPattern = pattern;
-        return rule;
-    }
+        => Rule(
+            Process("java"),
+            new CommandLineCondition { Matcher = matcher, Pattern = pattern ?? string.Empty });
 
     // A rule written before arguments existed says nothing about them, and must keep matching
     // exactly what it used to.
@@ -190,5 +210,150 @@ public class ProcessRuleMatcherTests
         rule.IsEnabled = false;
 
         Assert.False(ProcessRuleMatcher.NeedsCommandLine(rule));
+    }
+
+    [Fact]
+    public void A_condition_nested_in_a_group_still_makes_the_engine_read_command_lines()
+    {
+        ProcessRule rule = Rule(
+            Process("java"),
+            Group(ConditionOperator.Any, Arguments("minecraft"), Arguments("forge")));
+
+        Assert.True(ProcessRuleMatcher.NeedsCommandLine(rule));
+    }
+
+    // ==== brackets ====
+
+    // (java.exe) AND (minecraft OR forge) — the shape the whole tree exists for.
+    [Theory]
+    [InlineData("java", "java.exe -Dminecraft", true)]
+    [InlineData("java", "java.exe -Dforge", true)]
+    [InlineData("java", "java.exe -Declipse", false)]
+    [InlineData("python", "python.exe -Dminecraft", false)]
+    public void An_or_group_inside_an_and_group(string processName, string commandLine, bool expected)
+    {
+        ProcessRule rule = Rule(
+            Process("java"),
+            Group(ConditionOperator.Any, Arguments("minecraft"), Arguments("forge")));
+
+        Assert.Equal(expected, ProcessRuleMatcher.IsMatch(rule, processName, null, commandLine));
+    }
+
+    [Fact]
+    public void Not_flips_a_plain_yes_or_no()
+    {
+        ProcessRule rule = Rule(Process("java"), Not(Arguments("minecraft")));
+
+        Assert.True(ProcessRuleMatcher.IsMatch(rule, "java", null, "java.exe -Declipse"));
+        Assert.False(ProcessRuleMatcher.IsMatch(rule, "java", null, "java.exe -Dminecraft"));
+    }
+
+    [Fact]
+    public void Not_on_a_group_inverts_the_whole_bracket()
+    {
+        ProcessRule rule = Rule(
+            Process("java"),
+            Not(Group(ConditionOperator.Any, Arguments("minecraft"), Arguments("forge"))));
+
+        Assert.True(ProcessRuleMatcher.IsMatch(rule, "java", null, "java.exe -Declipse"));
+        Assert.False(ProcessRuleMatcher.IsMatch(rule, "java", null, "java.exe -Dforge"));
+    }
+
+    // The reason the evaluator answers in four states instead of two. A command line that cannot
+    // be read is not a "no" — flip a "no" and it becomes a match, and this filter would then claim
+    // every system process on the machine, which is precisely what it was written to avoid.
+    [Fact]
+    public void Not_does_not_turn_an_unreadable_command_line_into_a_match()
+    {
+        ProcessRule rule = Rule(Process("java"), Not(Arguments("minecraft")));
+
+        Assert.False(ProcessRuleMatcher.IsMatch(rule, "java", null, commandLine: null));
+    }
+
+    [Fact]
+    public void An_unreadable_path_does_not_become_a_match_when_negated()
+    {
+        ProcessRule rule = Rule(Not(Process(@"C:\Games\client.exe", ProcessMatcherType.FullPath)));
+
+        Assert.False(ProcessRuleMatcher.IsMatch(rule, "client", executablePath: null));
+    }
+
+    // One branch saying a definite yes is enough, even while another cannot be read at all.
+    [Fact]
+    public void Any_takes_a_definite_yes_over_something_it_could_not_read()
+    {
+        ProcessRule rule = Rule(Group(ConditionOperator.Any, Arguments("minecraft"), Process("java")));
+
+        Assert.True(ProcessRuleMatcher.IsMatch(rule, "java", null, commandLine: null));
+    }
+
+    // ==== rows that are not conditions yet ====
+
+    [Fact]
+    public void A_row_with_nothing_typed_in_it_is_left_out_of_its_group()
+    {
+        ProcessRule rule = Rule(Process("java"), Arguments(string.Empty));
+
+        Assert.True(ProcessRuleMatcher.IsMatch(rule, "java", null, "java.exe -Declipse"));
+        Assert.False(ProcessRuleMatcher.NeedsCommandLine(rule));
+    }
+
+    // An empty group is vacuously true in logic, and a filter that matches everything is how the
+    // whole machine ends up redirected. It matches nothing instead.
+    [Fact]
+    public void A_filter_with_nothing_filled_in_matches_nothing()
+    {
+        Assert.False(ProcessRuleMatcher.IsMatch(Rule(), "chrome", @"C:\chrome.exe"));
+        Assert.False(ProcessRuleMatcher.IsMatch(Rule(Process(string.Empty)), "chrome", @"C:\chrome.exe"));
+    }
+
+    [Fact]
+    public void A_filter_with_no_condition_at_all_matches_nothing()
+    {
+        var rule = new ProcessRule { Id = Guid.NewGuid(), Name = "empty", PolicyId = Guid.NewGuid() };
+
+        Assert.False(ProcessRuleMatcher.IsMatch(rule, "chrome", @"C:\chrome.exe"));
+        Assert.False(ProcessRuleMatcher.NeedsCommandLine(rule));
+    }
+
+    // Nothing the editor builds gets this deep; a hand-edited config file can. Recursion has to
+    // stop before the stack does, and stopping means "cannot tell", not "yes".
+    [Fact]
+    public void A_tree_deeper_than_the_limit_does_not_match()
+    {
+        var innermost = new ConditionGroup { Children = { Process("chrome") } };
+        ConditionGroup current = innermost;
+        for (int i = 0; i < ProcessRuleMatcher.MaxDepth + 2; i++)
+            current = new ConditionGroup { Children = { current } };
+
+        var rule = new ProcessRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "deep",
+            Condition = current,
+            PolicyId = Guid.NewGuid(),
+        };
+
+        Assert.False(ProcessRuleMatcher.IsMatch(rule, "chrome", null));
+    }
+
+    [Fact]
+    public void Evaluate_reports_each_answer_apart_so_a_row_can_be_coloured()
+    {
+        Assert.Equal(
+            ConditionResult.Match,
+            ProcessRuleMatcher.Evaluate(Process("java"), "java", null, null));
+
+        Assert.Equal(
+            ConditionResult.NoMatch,
+            ProcessRuleMatcher.Evaluate(Process("python"), "java", null, null));
+
+        Assert.Equal(
+            ConditionResult.Unknown,
+            ProcessRuleMatcher.Evaluate(Arguments("minecraft"), "java", null, null));
+
+        Assert.Equal(
+            ConditionResult.Ignored,
+            ProcessRuleMatcher.Evaluate(Arguments(string.Empty), "java", null, "java.exe"));
     }
 }

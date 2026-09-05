@@ -16,6 +16,7 @@
     <sys:String x:Key="Str.App.Refresh">Refresh</sys:String>
     <sys:String x:Key="Str.App.Clear">Clear</sys:String>
     <sys:String x:Key="Str.App.Test">Test</sys:String>
+    <sys:String x:Key="Str.App.Cancel">Cancel</sys:String>
     <sys:String x:Key="Str.App.Enabled">Enabled</sys:String>
     <sys:String x:Key="Str.App.Name">Name</sys:String>
     <sys:String x:Key="Str.App.Pattern">Pattern</sys:String>
@@ -30,10 +31,15 @@
 
     <sys:String x:Key="Str.Process.Rules">Process rules</sys:String>
     <sys:String x:Key="Str.Process.Applied">Processes being redirected</sys:String>
-    <sys:String x:Key="Str.Process.Target">Process name or path</sys:String>
     <sys:String x:Key="Str.Process.TargetHint">chrome.exe</sys:String>
-    <sys:String x:Key="Str.Process.Argument">Argument</sys:String>
     <sys:String x:Key="Str.Process.ArgumentHint">leave empty to ignore</sys:String>
+    <sys:String x:Key="Str.Process.Conditions">Conditions</sys:String>
+    <sys:String x:Key="Str.Process.Edit">Edit…</sys:String>
+    <sys:String x:Key="Str.Process.FilterTitle">Process filter</sys:String>
+    <sys:String x:Key="Str.Process.FilterName">Filter name</sys:String>
+    <sys:String x:Key="Str.Process.FilterNameHint">e.g. Minecraft, Chrome work profile</sys:String>
+    <sys:String x:Key="Str.Process.UnnamedFilter">Unnamed filter</sys:String>
+    <sys:String x:Key="Str.Process.IncludeChildrenLong">Follow the processes it starts</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Children</sys:String>
     <sys:String x:Key="Str.Process.Policy">Policy</sys:String>
     <sys:String x:Key="Str.Process.Pid">PID</sys:String>
@@ -43,6 +49,27 @@
     <sys:String x:Key="Str.Process.LaunchHint">Launching a program suspended lets the redirect attach before its first connection, so nothing escapes at startup.</sys:String>
     <sys:String x:Key="Str.Process.Inherited">child</sys:String>
     <sys:String x:Key="Str.Process.NoneApplied">Nothing is being redirected. Start the engine, and every process a rule claims turns up here.</sys:String>
+
+    <!-- The condition editor. The operator lives at the top of a group and nowhere else, so these
+         read as a sentence ("match ALL of") rather than as AND/OR symbols. -->
+    <sys:String x:Key="Str.Cond.Reads">This filter reads as</sys:String>
+    <sys:String x:Key="Str.Cond.Nothing">no conditions yet</sys:String>
+    <sys:String x:Key="Str.Cond.Action">Then</sys:String>
+    <sys:String x:Key="Str.Cond.TryWith">Try it with</sys:String>
+    <sys:String x:Key="Str.Cond.Not">NOT</sys:String>
+    <sys:String x:Key="Str.Cond.NotHint">Invert this row</sys:String>
+    <sys:String x:Key="Str.Cond.NotGroupHint">Invert this whole group</sys:String>
+    <sys:String x:Key="Str.Cond.AddCondition">+ Condition</sys:String>
+    <sys:String x:Key="Str.Cond.AddGroup">+ Group</sys:String>
+    <sys:String x:Key="Str.Cond.GroupSelected">Group ticked</sys:String>
+    <sys:String x:Key="Str.Cond.GroupSelectedHint">Put the ticked rows into a group of their own</sys:String>
+    <sys:String x:Key="Str.Cond.Ungroup">Ungroup</sys:String>
+    <sys:String x:Key="Str.Cond.UngroupHint">Spill this group into the one above it (turn NOT off first)</sys:String>
+    <sys:String x:Key="Str.Cond.SelectHint">Tick to group this row with another</sys:String>
+    <sys:String x:Key="Str.Cond.AndJoin"> AND </sys:String>
+    <sys:String x:Key="Str.Cond.OrJoin"> OR </sys:String>
+    <sys:String x:Key="Str.Cond.NotFormat">NOT {0}</sys:String>
+    <sys:String x:Key="Str.Cond.LeafFormat">{0} {1} “{2}”</sys:String>
 
     <sys:String x:Key="Str.Outbound.Url">URL</sys:String>
     <sys:String x:Key="Str.Outbound.Username">Username</sys:String>
@@ -142,6 +169,14 @@
     <sys:String x:Key="Enum.ArgumentMatcherType.StartsWith">Starts with</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.EndsWith">Ends with</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Regex">Regex</sys:String>
+    <sys:String x:Key="Enum.ConditionSubject.ProcessName">Process</sys:String>
+    <sys:String x:Key="Enum.ConditionSubject.CommandLine">Argument</sys:String>
+    <sys:String x:Key="Enum.ConditionOperator.All">Match ALL of</sys:String>
+    <sys:String x:Key="Enum.ConditionOperator.Any">Match ANY of</sys:String>
+    <sys:String x:Key="Enum.ConditionResult.Ignored">nothing filled in</sys:String>
+    <sys:String x:Key="Enum.ConditionResult.Match">MATCHES</sys:String>
+    <sys:String x:Key="Enum.ConditionResult.NoMatch">does not match</sys:String>
+    <sys:String x:Key="Enum.ConditionResult.Unknown">could not read the data</sys:String>
 
     <sys:String x:Key="Enum.OutboundKind.Direct">Direct</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Block">Block</sys:String>

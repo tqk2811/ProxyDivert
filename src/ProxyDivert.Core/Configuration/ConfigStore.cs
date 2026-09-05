@@ -3,7 +3,9 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ProxyDivert.Core.Configuration.Models;
+using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Routing.Models.Conditions;
 using TqkLibrary.WinDivert.Redirect.Enums;
 
 namespace ProxyDivert.Core.Configuration;
@@ -81,13 +83,65 @@ public sealed class ConfigStore
     // v1 -> v2: BlockIpv6 became Ipv6 (Redirect / Block / Ignore). "Block it" carries over as-is.
     // "Don't block it" used to mean the target's IPv6 escaped the proxy entirely — that was the
     // only thing the old code could do, not what the setting was asking for, so it becomes Redirect.
+    //
+    // v2 -> v3: a process rule was two fixed conditions ANDed together; it is now a named filter
+    // over a tree. The mapping is exact, and it has to stay exact: a filter that comes back meaning
+    // something slightly different is a process that quietly stops being redirected, which the user
+    // finds out about by leaking their address.
     internal static void Migrate(AppConfig config)
     {
         if (config.Version < 2)
             config.Ipv6 = config.BlockIpv6 == true ? Ipv6Mode.Block : Ipv6Mode.Redirect;
 
         config.BlockIpv6 = null;
+
+        foreach (ProcessRule rule in config.ProcessRules)
+        {
+            UpgradeToConditionTree(rule);
+
+            // Cleared whatever the version said: a file written by this build must not carry two
+            // copies of the same condition, one of which nothing reads.
+            rule.LegacyMatcher = null;
+            rule.LegacyPattern = null;
+            rule.LegacyArgumentMatcher = null;
+            rule.LegacyArgumentPattern = null;
+        }
+
         config.Version = AppConfig.CurrentVersion;
+    }
+
+    // The two old slots become one "match all" group: the process condition, plus the argument
+    // condition when the user had filled that one in. An empty argument slot was never consulted,
+    // so it must not turn into a row in the tree either — an empty row is something the editor
+    // shows, and a filter nobody touched should not come back looking half-edited.
+    private static void UpgradeToConditionTree(ProcessRule rule)
+    {
+        if (rule.Condition != null) return;
+
+        string pattern = rule.LegacyPattern ?? string.Empty;
+
+        var group = new ConditionGroup { Operator = ConditionOperator.All };
+        group.Children.Add(new ProcessNameCondition
+        {
+            Matcher = rule.LegacyMatcher ?? ProcessMatcherType.ExeName,
+            Pattern = pattern,
+        });
+
+        if (!string.IsNullOrWhiteSpace(rule.LegacyArgumentPattern))
+        {
+            group.Children.Add(new CommandLineCondition
+            {
+                Matcher = rule.LegacyArgumentMatcher ?? ArgumentMatcherType.Contains,
+                Pattern = rule.LegacyArgumentPattern!,
+            });
+        }
+
+        rule.Condition = group;
+
+        // Filters never had names. The pattern is what the user recognised the row by, so it is
+        // what the row should still say after the upgrade.
+        if (string.IsNullOrWhiteSpace(rule.Name))
+            rule.Name = string.IsNullOrWhiteSpace(pattern) ? "Filter" : pattern.Trim();
     }
 
     private static void DecryptSecrets(AppConfig config)

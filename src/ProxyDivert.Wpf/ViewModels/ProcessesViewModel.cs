@@ -1,15 +1,19 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
+using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Routing.Models.Conditions;
 using ProxyDivert.Wpf.Services;
+using ProxyDivert.Wpf.Views;
 using TqkLibrary.WinDivert.ProcessControl;
 using TqkLibrary.WinDivert.ProcessControl.Interfaces;
 
@@ -18,6 +22,10 @@ namespace ProxyDivert.Wpf.ViewModels;
 // The Processes tab: which programs get redirected, and which ones the engine is actually holding
 // right now — shown as a tree, because a process adopted through IncludeChildren only makes sense
 // underneath the process that dragged it in.
+//
+// A filter is a name, a condition tree and an action, and only the name and the action are small
+// enough to edit in a grid cell. The conditions are shown as the sentence they read as, and edited
+// in a window of their own.
 public sealed partial class ProcessesViewModel : ObservableObject
 {
     private readonly AppServices _services;
@@ -29,10 +37,6 @@ public sealed partial class ProcessesViewModel : ObservableObject
         = new ObservableCollection<AppliedProcessNode>();
 
     public ObservableCollection<RoutingPolicy> Policies { get; } = new ObservableCollection<RoutingPolicy>();
-
-    public Array Matchers { get; } = Enum.GetValues(typeof(ProcessMatcherType));
-
-    public Array ArgumentMatchers { get; } = Enum.GetValues(typeof(ArgumentMatcherType));
 
     [ObservableProperty]
     private ProcessRule? _selectedRule;
@@ -94,23 +98,20 @@ public sealed partial class ProcessesViewModel : ObservableObject
         }
     }
 
+    // Adding opens the editor straight away rather than dropping a blank row into the list. A
+    // filter that exists but says nothing is a row the user has to notice and then go fix, and an
+    // empty condition tree matches nothing, so the row would sit there doing quietly nothing.
     [RelayCommand]
     private void AddRule()
     {
         RoutingPolicy? policy = Policies.FirstOrDefault();
         if (policy is null) return;
 
-        var rule = new ProcessRule
-        {
-            Id = Guid.NewGuid(),
-            Matcher = ProcessMatcherType.ExeName,
-            Pattern = SelectedProcess?.Name ?? "program.exe",
-            PolicyId = policy.Id,
-        };
-        _services.Config.ProcessRules.Add(rule);
-        Rules.Add(rule);
-        SelectedRule = rule;
-        _services.SaveAndApply();
+        string pattern = SelectedProcess?.Name ?? "program.exe";
+        ProcessRule rule = NewRule(policy, pattern, ConditionGroup.CreateDefault(pattern));
+
+        if (!Edit(rule)) return;
+        Add(rule);
     }
 
     [RelayCommand]
@@ -122,16 +123,36 @@ public sealed partial class ProcessesViewModel : ObservableObject
 
         // Prefer the full path when it is readable: two programs with the same file name are
         // common (every Electron app ships an "app.exe"), and the path says which one is meant.
-        var rule = new ProcessRule
+        var condition = new ConditionGroup
         {
-            Id = Guid.NewGuid(),
-            Matcher = row.Path != null ? ProcessMatcherType.FullPath : ProcessMatcherType.ExeName,
-            Pattern = row.Path ?? row.Name,
-            PolicyId = policy.Id,
+            Children =
+            {
+                new ProcessNameCondition
+                {
+                    Matcher = row.Path != null ? ProcessMatcherType.FullPath : ProcessMatcherType.ExeName,
+                    Pattern = row.Path ?? row.Name,
+                },
+            },
         };
-        _services.Config.ProcessRules.Add(rule);
-        Rules.Add(rule);
+
+        ProcessRule rule = NewRule(policy, row.Name, condition);
+        if (!Edit(rule)) return;
+        Add(rule);
+    }
+
+    [RelayCommand]
+    private void EditRule(ProcessRule? rule)
+    {
+        rule ??= SelectedRule;
+        if (rule is null || !Edit(rule)) return;
+
+        // A ProcessRule is plain data with nothing to raise a change, so the row is put back into
+        // the collection to make the grid rebuild it. Cheaper than making the whole model
+        // observable for one column that only changes behind a dialog.
+        int index = Rules.IndexOf(rule);
+        if (index >= 0) Rules[index] = rule;
         SelectedRule = rule;
+
         _services.SaveAndApply();
     }
 
@@ -147,6 +168,38 @@ public sealed partial class ProcessesViewModel : ObservableObject
 
     [RelayCommand]
     private void Save() => _services.SaveAndApply();
+
+    // Opens the filter window on a copy and writes the result back only when the user saves.
+    private bool Edit(ProcessRule rule)
+    {
+        var viewModel = new ProcessFilterViewModel(rule, Policies);
+        var window = new ProcessFilterWindow(viewModel);
+
+        Window? owner = Application.Current?.MainWindow;
+        if (owner != null && !ReferenceEquals(owner, window)) window.Owner = owner;
+
+        if (window.ShowDialog() != true) return false;
+
+        viewModel.ApplyTo(rule);
+        return true;
+    }
+
+    private static ProcessRule NewRule(RoutingPolicy policy, string name, ProcessCondition condition)
+        => new ProcessRule
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            Condition = condition,
+            PolicyId = policy.Id,
+        };
+
+    private void Add(ProcessRule rule)
+    {
+        _services.Config.ProcessRules.Add(rule);
+        Rules.Add(rule);
+        SelectedRule = rule;
+        _services.SaveAndApply();
+    }
 
     // Starts a program suspended, lets the engine attach, then resumes it. This is the only way to
     // guarantee that not a single connection escapes before the redirect is in place.
@@ -165,22 +218,32 @@ public sealed partial class ProcessesViewModel : ObservableObject
         {
             suspended = new SuspendedProcessLauncher().Launch(dialog.FileName, args: null);
 
-            // A rule must exist for the engine to adopt it, so create one for this exact program.
+            // A filter must exist for the engine to adopt it, so create one for this exact program
+            // unless something the user already wrote would have claimed it anyway. Asked of the
+            // matcher rather than of the patterns, because a filter that claims this program by
+            // wildcard or by name is just as good and a second one would be noise.
             RoutingPolicy? policy = Policies.FirstOrDefault();
-            if (policy != null && !_services.Config.ProcessRules.Any(r =>
-                    r.Matcher == ProcessMatcherType.FullPath &&
-                    string.Equals(r.Pattern, dialog.FileName, StringComparison.OrdinalIgnoreCase)))
+            string name = Path.GetFileNameWithoutExtension(dialog.FileName);
+
+            if (policy != null && !_services.Config.ProcessRules.Any(
+                    r => ProcessRuleMatcher.IsMatch(r, name, dialog.FileName)))
             {
-                var rule = new ProcessRule
-                {
-                    Id = Guid.NewGuid(),
-                    Matcher = ProcessMatcherType.FullPath,
-                    Pattern = dialog.FileName,
-                    PolicyId = policy.Id,
-                };
-                _services.Config.ProcessRules.Add(rule);
-                Rules.Add(rule);
-                _services.SaveAndApply();
+                ProcessRule rule = NewRule(
+                    policy,
+                    name,
+                    new ConditionGroup
+                    {
+                        Children =
+                        {
+                            new ProcessNameCondition
+                            {
+                                Matcher = ProcessMatcherType.FullPath,
+                                Pattern = dialog.FileName,
+                            },
+                        },
+                    });
+
+                Add(rule);
             }
 
             // The watcher sees the suspended process on its next scan; resuming only after that
