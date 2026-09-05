@@ -34,11 +34,17 @@ public sealed class ProcessWatcher : IDisposable
 
     private readonly ILogger<ProcessWatcher> _logger;
     private readonly IProcessFinder _processFinder;
+    private readonly ProcessCommandLineReader _commandLines;
     private readonly ConcurrentDictionary<uint, TrackedProcess> _tracked = new ConcurrentDictionary<uint, TrackedProcess>();
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
     private readonly object _rulesLock = new object();
 
     private IReadOnlyList<ProcessRule> _rules = Array.Empty<ProcessRule>();
+
+    // Recomputed with the rule set: nothing here reads a command line while no rule asks about
+    // arguments, so the WMI cost only exists for the people who use the feature.
+    private volatile bool _anyRuleNeedsCommandLine;
+
     private ManagementEventWatcher? _startWatcher;
     private ManagementEventWatcher? _stopWatcher;
     private Task? _pollTask;
@@ -57,6 +63,7 @@ public sealed class ProcessWatcher : IDisposable
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _processFinder = processFinder ?? new ProcessFinder();
+        _commandLines = new ProcessCommandLineReader(_logger);
     }
 
     public IReadOnlyCollection<TrackedProcess> Tracked => _tracked.Values.ToList();
@@ -91,6 +98,7 @@ public sealed class ProcessWatcher : IDisposable
         lock (_rulesLock)
         {
             _rules = rules ?? Array.Empty<ProcessRule>();
+            _anyRuleNeedsCommandLine = _rules.Any(ProcessRuleMatcher.NeedsCommandLine);
         }
         ScanOnce();
         DropProcessesThatNoLongerMatch();
@@ -110,8 +118,17 @@ public sealed class ProcessWatcher : IDisposable
             return;
         }
 
+        // One query for the whole machine rather than one per process — and none at all unless a
+        // rule asks about arguments.
+        IReadOnlyDictionary<uint, string> commandLines = _anyRuleNeedsCommandLine
+            ? _commandLines.ReadAll()
+            : EmptyCommandLines;
+
         foreach (ProcessInfo process in processes)
-            TryAttach(process.Id, process.Name, process.ExecutablePath, parentPid: 0);
+        {
+            commandLines.TryGetValue(process.Id, out string? commandLine);
+            TryAttach(process.Id, process.Name, process.ExecutablePath, parentPid: 0, commandLine);
+        }
 
         ReapExitedProcesses(processes);
     }
@@ -169,12 +186,12 @@ public sealed class ProcessWatcher : IDisposable
         ProcessAttached?.Invoke(child);
     }
 
-    private bool TryAttach(uint pid, string name, string? path, uint parentPid)
+    private bool TryAttach(uint pid, string name, string? path, uint parentPid, string? commandLine)
     {
         if (pid == 0 || _tracked.ContainsKey(pid)) return false;
         if (IsSelfOrHelper(pid, name)) return false;
 
-        ProcessRule? rule = FindMatchingRule(name, path);
+        ProcessRule? rule = FindMatchingRule(name, path, commandLine);
         if (rule == null) return false;
 
         var tracked = new TrackedProcess(pid, name, path, rule, rule.PolicyId, parentPid);
@@ -201,17 +218,20 @@ public sealed class ProcessWatcher : IDisposable
 
     private static readonly uint CurrentProcessId = (uint)Environment.ProcessId;
 
-    private ProcessRule? FindMatchingRule(string name, string? path)
+    private ProcessRule? FindMatchingRule(string name, string? path, string? commandLine)
     {
         IReadOnlyList<ProcessRule> rules;
         lock (_rulesLock) rules = _rules;
 
         foreach (ProcessRule rule in rules)
         {
-            if (ProcessRuleMatcher.IsMatch(rule, name, path)) return rule;
+            if (ProcessRuleMatcher.IsMatch(rule, name, path, commandLine)) return rule;
         }
         return null;
     }
+
+    private static readonly IReadOnlyDictionary<uint, string> EmptyCommandLines
+        = new Dictionary<uint, string>();
 
     private void Detach(uint pid, string reason)
     {
@@ -247,13 +267,17 @@ public sealed class ProcessWatcher : IDisposable
                 continue;
             }
 
-            ProcessRule? rule = FindMatchingRule(tracked.Name, tracked.ExecutablePath);
+            // Only the processes already being redirected are re-tested here, so a query each is
+            // affordable where a sweep of the whole machine would not be.
+            string? commandLine = _anyRuleNeedsCommandLine ? _commandLines.Read(tracked.ProcessId) : null;
+
+            ProcessRule? rule = FindMatchingRule(tracked.Name, tracked.ExecutablePath, commandLine);
             if (rule == null) Detach(kv.Key, "no longer matches any rule");
             else if (rule.PolicyId != tracked.PolicyId)
             {
                 // The policy changed: re-attach so the engine reads the new assignment.
                 Detach(kv.Key, "policy changed");
-                TryAttach(tracked.ProcessId, tracked.Name, tracked.ExecutablePath, tracked.ParentProcessId);
+                TryAttach(tracked.ProcessId, tracked.Name, tracked.ExecutablePath, tracked.ParentProcessId, commandLine);
             }
         }
     }
@@ -294,8 +318,10 @@ public sealed class ProcessWatcher : IDisposable
 
             // The trace gives no path; look it up, tolerating a process that has already exited.
             string? path = _processFinder.FindById(pid)?.ExecutablePath;
+            // Nor a command line — and this one costs a WMI query, so only when a rule wants it.
+            string? commandLine = _anyRuleNeedsCommandLine ? _commandLines.Read(pid) : null;
 
-            if (!TryAttach(pid, name, path, parentPid))
+            if (!TryAttach(pid, name, path, parentPid, commandLine))
             {
                 // Not a match itself — but it may be the child of something already tracked.
                 AttachChild(pid, parentPid);

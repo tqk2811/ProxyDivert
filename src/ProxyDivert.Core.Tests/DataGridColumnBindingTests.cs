@@ -31,6 +31,7 @@ public class DataGridColumnBindingTests
         public Array VpnProtocols { get; } = Enum.GetValues(typeof(ProxyDivert.Core.Vpn.Enums.VpnProtocol));
         public Array Ipv6Supports { get; } = Enum.GetValues(typeof(ProxyDivert.Core.Routing.Enums.Ipv6Support));
         public Array Matchers { get; } = Enum.GetValues(typeof(ProxyDivert.Core.Routing.Enums.HostMatcherType));
+        public Array ArgumentMatchers { get; } = Enum.GetValues(typeof(ProxyDivert.Core.Routing.Enums.ArgumentMatcherType));
         public Array UdpModes { get; } = Enum.GetValues(typeof(ProxyDivert.Core.Routing.Enums.UdpMode));
         public ObservableCollection<object> Policies { get; } = new();
         public ObservableCollection<object> Outbounds { get; } = new();
@@ -70,12 +71,57 @@ public class DataGridColumnBindingTests
         });
 
         // If the walk ever stops finding the grids, the check above would pass by looking at
-        // nothing at all; this is what says it actually looked.
-        Assert.Equal(7, inspected);
+        // nothing at all; this is what says it actually looked. Combo boxes that live inside a
+        // DataGridTemplateColumn are not counted here: those sit in the visual tree like any
+        // other control, so they cannot have this bug in the first place.
+        Assert.Equal(6, inspected);
 
         Assert.True(empty.Count == 0,
             "These combo columns resolved no ItemsSource, so their drop-downs would open empty:"
             + Environment.NewLine + string.Join(Environment.NewLine, empty));
+    }
+
+    // The process rule's kind and value live together in one DataGridTemplateColumn, and a cell
+    // template is only built once there is a row to build it for — measuring an empty grid, which
+    // is all the resource smoke test does, would never touch it. This puts a rule in the grid and
+    // checks what the user actually gets: two pickers with something in them, and two text boxes.
+    [Fact]
+    public void The_merged_rule_cell_gives_both_pickers_their_choices()
+    {
+        var combos = new List<ComboBox>();
+        var boxes = new List<TextBox>();
+
+        RunOnStaThread(() =>
+        {
+            EnsureApplication();
+
+            var stub = new ViewModelStub();
+            stub.Rules.Add(new ProxyDivert.Core.Routing.Models.ProcessRule
+            {
+                Id = Guid.NewGuid(),
+                Matcher = ProxyDivert.Core.Routing.Enums.ProcessMatcherType.ExeName,
+                Pattern = "chrome.exe",
+                PolicyId = Guid.NewGuid(),
+            });
+
+            var view = new ProcessesView { DataContext = stub };
+            var window = new Window { Width = 1400, Height = 900, Content = view };
+            window.Show();
+            view.UpdateLayout();
+
+            DataGrid grid = FindVisuals<DataGrid>(view).First();
+            combos.AddRange(FindVisuals<ComboBox>(grid));
+            boxes.AddRange(FindVisuals<TextBox>(grid));
+
+            window.Close();
+        });
+
+        // One picker for the process kind, one for the argument kind, one for the policy.
+        Assert.Equal(3, combos.Count);
+        Assert.All(combos, combo => Assert.NotNull(combo.ItemsSource));
+
+        // The value next to each picker.
+        Assert.Equal(2, boxes.Count);
     }
 
     // A column never receives the invalidation a dictionary swap sends, so "{DynamicResource ...}"

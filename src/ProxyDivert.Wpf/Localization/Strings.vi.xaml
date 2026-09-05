@@ -30,6 +30,10 @@
 
     <sys:String x:Key="Str.Process.Rules">Luật tiến trình</sys:String>
     <sys:String x:Key="Str.Process.Applied">Tiến trình đang áp dụng</sys:String>
+    <sys:String x:Key="Str.Process.Target">Tên hoặc đường dẫn tiến trình</sys:String>
+    <sys:String x:Key="Str.Process.TargetHint">chrome.exe</sys:String>
+    <sys:String x:Key="Str.Process.Argument">Argument</sys:String>
+    <sys:String x:Key="Str.Process.ArgumentHint">để trống là bỏ qua</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Cả tiến trình con</sys:String>
     <sys:String x:Key="Str.Process.Policy">Bộ luật</sys:String>
     <sys:String x:Key="Str.Process.Pid">PID</sys:String>
@@ -128,6 +132,9 @@
     <sys:String x:Key="Enum.ProcessMatcherType.ExeName">Tên tệp chạy</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.FullPath">Đường dẫn đầy đủ</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.Wildcard">Ký tự đại diện</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.Contains">Có chứa</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.Wildcard">Ký tự đại diện</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.Exact">Khớp chính xác</sys:String>
 
     <sys:String x:Key="Enum.OutboundKind.Direct">Đi thẳng</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Block">Chặn</sys:String>

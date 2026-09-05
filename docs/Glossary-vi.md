@@ -143,3 +143,9 @@ Lớp WPF cho phép thay thanh tiêu đề hệ thống bằng nội dung của 
 Cột của `DataGrid` (`DataGridComboBoxColumn`, `DataGridTextColumn`...) không phải con visual cũng không phải con logical của lưới, nên binding đặt trên chính thuộc tính của cột không có tổ tiên nào để đi ngược lên: `RelativeSource AncestorType=UserControl` không bao giờ phân giải, `ItemsSource` lặng lẽ ở lại `null` và danh sách xổ xuống rỗng — build không báo, log không báo. `BindingProxy` là một `Freezable` đặt trong `Resources` của phần tử: WPF cấp cho nó ngữ cảnh kế thừa của phần tử đó, gồm cả `DataContext`, nên cột lấy được view model qua `{Binding Data.Xxx, Source={StaticResource Vm}}` mà không cần cây nào cả.
 
 Cùng gốc đó, `Header="{DynamicResource ...}"` trên cột cũng không nhận được tín hiệu invalidate khi hoán đổi từ điển chuỗi: nó phân giải một lần lúc lưới được dựng rồi đóng băng ở ngôn ngữ tại thời điểm đó. `LocalizedBinding` bind vào một object tĩnh đổi theo ngôn ngữ nên chạy lại được.
+
+## Luật theo argument (command line)
+
+Điều kiện thứ hai trên cùng một luật tiến trình, AND với điều kiện tên/đường dẫn: tiến trình phải khớp CẢ hai mới được nhận. Để trống thì không xét, nên luật viết từ trước khi có tính năng này giữ nguyên ý nghĩa. Dùng để tách một chương trình trong nhiều cái cùng chạy từ một tệp — `java.exe` thì có nhiều, nhưng chỉ cái có `minecraft` trong command line mới là game.
+
+Đọc command line của tiến trình khác tốn một truy vấn WMI (`Win32_Process.CommandLine`), nên engine chỉ trả phí đó khi có ít nhất một luật đang bật điền ô này. Command line không đọc được (tiến trình hệ thống, tiến trình của tài khoản khác) thì coi như KHÔNG khớp — hướng an toàn, vì luật đã nói rõ chỉ mình tên tiến trình là chưa đủ.

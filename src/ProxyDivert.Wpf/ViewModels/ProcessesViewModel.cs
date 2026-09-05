@@ -32,6 +32,8 @@ public sealed partial class ProcessesViewModel : ObservableObject
 
     public Array Matchers { get; } = Enum.GetValues(typeof(ProcessMatcherType));
 
+    public Array ArgumentMatchers { get; } = Enum.GetValues(typeof(ArgumentMatcherType));
+
     [ObservableProperty]
     private ProcessRule? _selectedRule;
 

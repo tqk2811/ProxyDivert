@@ -33,14 +33,47 @@
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}"
                                                 Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
-                        <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.App.Type}"
-                                                SelectedItemBinding="{Binding Matcher, UpdateSourceTrigger=PropertyChanged}"
-                                                ItemsSource="{Binding Data.Matchers, Source={StaticResource Vm}}"
-                                                ElementStyle="{StaticResource EnumComboColumn}"
-                                                EditingElementStyle="{StaticResource EnumComboColumn}"
-                                                Width="110"/>
-                        <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Pattern}"
-                                            Binding="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                        <!-- Kind and value are one condition, so they are one column: choosing
+                             "full path" and then typing a bare name is a rule that silently never
+                             matches, and two separate columns invite exactly that. -->
+                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Target}" Width="*" MinWidth="260">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox ItemsSource="{Binding Data.Matchers, Source={StaticResource Vm}}"
+                                                  SelectedItem="{Binding Matcher, UpdateSourceTrigger=PropertyChanged}"
+                                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
+                                        <TextBox Grid.Column="1" Margin="6,0,0,0"
+                                                 Tag="{b:LocalizedBinding Str.Process.TargetHint}"
+                                                 Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <!-- The same shape again, ANDed with the one above. Left empty it is not
+                             consulted, so a rule written before this existed keeps its meaning. -->
+                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Argument}" Width="*" MinWidth="240">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="120"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox ItemsSource="{Binding Data.ArgumentMatchers, Source={StaticResource Vm}}"
+                                                  SelectedItem="{Binding ArgumentMatcher, UpdateSourceTrigger=PropertyChanged}"
+                                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
+                                        <TextBox Grid.Column="1" Margin="6,0,0,0"
+                                                 Tag="{b:LocalizedBinding Str.Process.ArgumentHint}"
+                                                 Text="{Binding ArgumentPattern, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.Process.IncludeChildren}"
                                                 Binding="{Binding IncludeChildren, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
                         <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.Process.Policy}"

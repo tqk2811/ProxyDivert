@@ -49,8 +49,12 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
 2. Tab **Đường ra**: thêm proxy (`socks5://host:port`, `http://host:port`), bấm **Thử** để kiểm tra.
 3. Tab **Luật**: thêm luật cho bộ luật mặc định, ví dụ `Wildcard` + `*.google.com` → proxy vừa tạo.
    Đích không khớp luật nào sẽ đi thẳng (đường ra mặc định).
-4. Tab **Tiến trình**: thêm luật gọi tên chương trình — theo tên tệp chạy, đường dẫn đầy đủ hoặc ký
-   tự đại diện — hoặc bấm **Chạy ở trạng thái tạm dừng…** để không lọt kết nối nào lúc khởi động.
+4. Tab **Tiến trình**: thêm luật gọi tên chương trình. Kiểu khớp và giá trị nằm chung một ô — chọn
+   tên tệp chạy, đường dẫn đầy đủ hoặc ký tự đại diện, rồi gõ giá trị ngay bên cạnh. Ô **Argument**
+   kế đó là điều kiện thứ hai của cùng luật đó, AND với điều kiện trên: để trống thì không xét, điền
+   vào thì lọc được đúng một chương trình trong nhiều cái cùng chạy từ một tệp (`java.exe` **có
+   chứa** `minecraft`). Hoặc bấm **Chạy ở trạng thái tạm dừng…** để không lọt kết nối nào lúc khởi
+   động.
 5. Gạt công tắc trên thanh tiêu đề. Nửa dưới tab **Tiến trình** khi đó hiện dạng cây mọi tiến trình
    engine đang thực sự áp dụng, tiến trình con nhận theo **Cả tiến trình con** nằm lồng dưới tiến
    trình đã sinh ra nó. Tab **Kết nối** hiện từng kết nối kèm tên miền, đường ra và số byte.

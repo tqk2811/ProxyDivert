@@ -30,6 +30,10 @@
 
     <sys:String x:Key="Str.Process.Rules">Process rules</sys:String>
     <sys:String x:Key="Str.Process.Applied">Processes being redirected</sys:String>
+    <sys:String x:Key="Str.Process.Target">Process name or path</sys:String>
+    <sys:String x:Key="Str.Process.TargetHint">chrome.exe</sys:String>
+    <sys:String x:Key="Str.Process.Argument">Argument</sys:String>
+    <sys:String x:Key="Str.Process.ArgumentHint">leave empty to ignore</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Children</sys:String>
     <sys:String x:Key="Str.Process.Policy">Policy</sys:String>
     <sys:String x:Key="Str.Process.Pid">PID</sys:String>
@@ -128,6 +132,9 @@
     <sys:String x:Key="Enum.ProcessMatcherType.ExeName">Executable name</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.FullPath">Full path</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.Wildcard">Wildcard</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.Contains">Contains</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.Wildcard">Wildcard</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.Exact">Exact</sys:String>
 
     <sys:String x:Key="Enum.OutboundKind.Direct">Direct</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Block">Block</sys:String>

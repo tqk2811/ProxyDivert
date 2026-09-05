@@ -82,6 +82,7 @@ public class WpfResourceSmokeTests
                 typeof(ProxyDivert.Core.Routing.Enums.UdpMode),
                 typeof(ProxyDivert.Core.Routing.Enums.HostMatcherType),
                 typeof(ProxyDivert.Core.Routing.Enums.ProcessMatcherType),
+                typeof(ProxyDivert.Core.Routing.Enums.ArgumentMatcherType),
                 typeof(ProxyDivert.Core.Routing.Enums.OutboundKind),
                 typeof(ProxyDivert.Core.Routing.Enums.Ipv6Support),
                 typeof(ProxyDivert.Core.Vpn.Enums.VpnProtocol),

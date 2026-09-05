@@ -49,8 +49,12 @@ and `WinDivert64.sys` copied next to it.
 2. **Outbounds** tab: add a proxy (`socks5://host:port`, `http://host:port`) and press **Test**.
 3. **Rules** tab: add a rule to the default policy — say `Wildcard` + `*.google.com` → the proxy you
    just made. Destinations matching no rule take the policy's default outbound (Direct).
-4. **Processes** tab: add a rule naming the program — by executable name, full path or wildcard — or
-   press **Launch suspended…** so not one connection escapes while the process starts.
+4. **Processes** tab: add a rule naming the program. Kind and value sit together in one cell — pick
+   executable name, full path or wildcard, then type the value beside it. The **Argument** cell next
+   to it is a second condition on the same rule, ANDed with the first: leave it empty and it is
+   ignored, or fill it in to reach one program among several started from the same executable
+   (`java.exe` **contains** `minecraft`). Or press **Launch suspended…** so not one connection
+   escapes while the process starts.
 5. Throw the switch in the title bar. The lower half of the **Processes** tab then shows, as a tree,
    every process the engine is actually holding, with anything adopted through **Children** nested
    under the process that spawned it. The **Connections** tab lists every connection with its host
