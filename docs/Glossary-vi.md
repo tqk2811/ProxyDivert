@@ -176,7 +176,9 @@ Cả `Ký tự đại diện` lẫn `Regex` đều chạy qua `Regex.IsMatch` v�
 
 Điều kiện soi toàn bộ command line, một loại lá trong cây điều kiện của bộ lọc. Dùng để tách một chương trình trong nhiều cái cùng chạy từ một tệp — `java.exe` thì có nhiều, nhưng chỉ cái có `minecraft` trong command line mới là game.
 
-Đọc command line của tiến trình khác tốn một truy vấn WMI (`Win32_Process.CommandLine`), nên engine chỉ trả phí đó khi có ít nhất một bộ lọc đang bật chứa một lá loại này có điền giá trị — `ProcessRuleMatcher.NeedsCommandLine` duyệt cả cây để biết. Command line không đọc được (tiến trình hệ thống, tiến trình của tài khoản khác) cho kết quả `Unknown`, và bộ lọc không áp dụng — hướng an toàn.
+Đọc command line của tiến trình khác tốn một truy vấn WMI (`Win32_Process.CommandLine`) — khoảng 210ms, gần đúng bằng giá đọc của **cả máy** trong một truy vấn. Command line không đổi trong đời một tiến trình, nên engine đọc mỗi tiến trình đúng một lần rồi nhớ trong [bảng command line](#L219). Command line không đọc được (tiến trình hệ thống, tiến trình của tài khoản khác) cho kết quả `Unknown`, và bộ lọc không áp dụng — hướng an toàn.
+
+`ProcessRuleMatcher.NeedsCommandLine` (duyệt cả cây) nay chỉ quyết định việc đọc có nằm trên đường ra quyết định hay không — tức có đáng **chờ** hay không; bảng thì được nuôi sẵn trong nền dù chưa có bộ lọc nào hỏi tới argument, để lúc người dùng viết bộ lọc đầu tiên là đã có dữ liệu.
 
 ## Bộ lọc tiến trình (tên → điều kiện → hành động)
 
@@ -214,3 +216,18 @@ Kiểu giao diện cho biểu thức boolean tuỳ ý: mỗi nút là một nhó
 ## Cây biểu thức (AST) và parser điều kiện
 
 Cách thứ ba: cho gõ thẳng chuỗi điều kiện (`exe = "java.exe" and args contains "minecraft" or exe = "chrome.exe"`), rồi parser dựng cây biểu thức (AST — abstract syntax tree) để so khớp. Gọn và mạnh nhất cho người dùng thạo, nhưng phải tự viết parser, tự báo lỗi cú pháp ở đúng vị trí, và người dùng phải học cú pháp — thường làm thêm ở "chế độ nâng cao" chứ không thay cho giao diện bấm chọn.
+
+## Bảng command line (`ProcessCommandLineCache`)
+
+Bảng nhớ `pid → command line`, để một bộ lọc hỏi về argument được kiểm lại từ bộ nhớ thay vì từ WMI.
+
+Ba bất biến giữ cho nó đúng:
+
+* **Có khoá = đã hỏi rồi**, không hỏi lại.
+* **Giá trị `null` là một CÂU TRẢ LỜI** ("đã hỏi, không đọc được"), không phải chỗ trống. Đây là điều đắt giá nhất: khoảng một nửa số tiến trình trên máy là dịch vụ mà công cụ không có quyền mở; không ghi nhận được điều đó thì mỗi lượt quét lại hỏi lại toàn bộ chúng.
+* **Tên tiến trình đi kèm câu trả lời.** Windows cấp lại pid, nên câu trả lời chỉ được dùng khi tên vẫn khớp.
+
+Xoá mục theo ba lớp: sự kiện tiến trình đóng (`Win32_ProcessStopTrace`), mỗi lượt quét (bỏ pid không còn sống hoặc đã đổi chủ), và ngay trước khi đọc cho một tiến trình vừa khởi động. Tiến trình chạy ở **session 0** (SYSTEM / LOCAL SERVICE / NETWORK SERVICE) được ghi thẳng là "không đọc được" mà không tốn truy vấn nào — đằng nào cũng không mở được.
+
+Trước khi có bảng này, lưu cấu hình phải hỏi WMI một truy vấn cho **từng** tiến trình đang được redirect (30 tiến trình × 210ms) ngay trên luồng giao diện, nên bấm `Lưu` là đơ 5–10 giây.
+

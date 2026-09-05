@@ -17,10 +17,11 @@ namespace ProxyDivert.Core.Processes;
 // Watches the machine for processes that match the user's process rules and reports them, so the
 // engine can put them under redirection and take them out again when they exit.
 //
-// Two sources of truth, because neither alone is enough:
-//   * an initial scan, for processes that were already running when the tool started;
-//   * WMI start/stop events (Win32_ProcessStartTrace), which fire fast enough to catch a process
-//     before it opens its first socket in the common case.
+// Two sources of truth, because neither alone is enough, and in this order:
+//   * WMI start/stop events (Win32_ProcessStartTrace), hooked the moment the watcher starts and
+//     fast enough to catch a process before it opens its first socket in the common case;
+//   * a sweep of what was already running, which follows on a background thread. Hooking first is
+//     what stops a process started during the sweep from falling between the two.
 // WMI needs administrator rights and can fail on a broken WMI repository, so a polling fallback
 // takes over automatically — slower to attach, but never silently blind.
 //
@@ -32,22 +33,35 @@ public sealed class ProcessWatcher : IDisposable
     // started by hand is caught before the page loads; slow enough not to burn a core.
     private const int PollIntervalMs = 750;
 
+    // How many new processes may be waiting to have their command line read in the background. Past
+    // this the oldest are simply dropped: the next scan fills the gaps in one query anyway, and a
+    // queue that grows without limit during a burst would outlive the processes it describes.
+    private const int PrefetchQueueLimit = 256;
+
     private readonly ILogger<ProcessWatcher> _logger;
     private readonly IProcessFinder _processFinder;
-    private readonly ProcessCommandLineReader _commandLines;
+    private readonly ProcessCommandLineCache _commandLines;
     private readonly ConcurrentDictionary<uint, TrackedProcess> _tracked = new ConcurrentDictionary<uint, TrackedProcess>();
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
     private readonly object _rulesLock = new object();
 
+    // New processes whose command line nothing is waiting for. Read on a thread of their own so the
+    // table stays complete without the process-start handler paying for it.
+    private readonly BlockingCollection<(uint Pid, string Name)> _prefetch
+        = new BlockingCollection<(uint Pid, string Name)>(PrefetchQueueLimit);
+
     private IReadOnlyList<ProcessRule> _rules = Array.Empty<ProcessRule>();
 
-    // Recomputed with the rule set: nothing here reads a command line while no rule asks about
-    // arguments, so the WMI cost only exists for the people who use the feature.
+    // Recomputed with the rule set. It no longer decides whether command lines are read at all —
+    // they are, in the background, so the table is ready before the first rule asks — only whether
+    // reading one is on the path of a decision and therefore worth waiting for.
     private volatile bool _anyRuleNeedsCommandLine;
 
     private ManagementEventWatcher? _startWatcher;
     private ManagementEventWatcher? _stopWatcher;
     private Task? _pollTask;
+    private Task? _initialScanTask;
+    private Task? _prefetchTask;
     private bool _started;
 
     /// <summary>A matched (or inherited) process appeared and should be redirected.</summary>
@@ -59,11 +73,15 @@ public sealed class ProcessWatcher : IDisposable
     /// <summary>True while process discovery runs on WMI events; false while it is polling.</summary>
     public bool IsUsingWmi { get; private set; }
 
-    public ProcessWatcher(ILogger<ProcessWatcher> logger, IProcessFinder? processFinder = null)
+    public ProcessWatcher(
+        ILogger<ProcessWatcher> logger,
+        IProcessFinder? processFinder = null,
+        IProcessCommandLineReader? commandLineReader = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _processFinder = processFinder ?? new ProcessFinder();
-        _commandLines = new ProcessCommandLineReader(_logger);
+        _commandLines = new ProcessCommandLineCache(
+            commandLineReader ?? new ProcessCommandLineReader(_logger), _logger);
     }
 
     public IReadOnlyCollection<TrackedProcess> Tracked => _tracked.Values.ToList();
@@ -77,15 +95,33 @@ public sealed class ProcessWatcher : IDisposable
     public IReadOnlyDictionary<uint, IReadOnlyList<Guid>> BuildPolicyMap()
         => _tracked.ToDictionary(kv => kv.Key, kv => kv.Value.PolicyIds);
 
+    /// <summary>
+    /// Starts watching. The hooks for new and exiting processes go up straight away; the sweep of
+    /// what is already running happens in the background.
+    /// </summary>
+    /// <remarks>
+    /// That order is deliberate. The first sweep costs a process enumeration plus a WMI query —
+    /// a few hundred milliseconds — and Start is called from the UI thread, so doing it first would
+    /// freeze the window; worse, a process started during it would fall in the gap between the sweep
+    /// and the hooks and never be seen. Hooking first closes that gap: an event that arrives while
+    /// the sweep is still running is harmless, because attaching twice does nothing the second time.
+    /// </remarks>
     public void Start(IReadOnlyList<ProcessRule> rules)
     {
         if (_started) throw new InvalidOperationException("Already started");
         _started = true;
-        ApplyRules(rules);
+        SetRules(rules);
 
-        if (!TryStartWmi())
+        _prefetchTask = Task.Run(() => PrefetchLoop(_cts.Token));
+
+        if (TryStartWmi())
+        {
+            _initialScanTask = Task.Run(InitialScan);
+        }
+        else
         {
             IsUsingWmi = false;
+            // The poll loop's first pass is the initial scan, so there is nothing extra to start.
             _pollTask = Task.Run(() => PollLoop(_cts.Token));
             _logger.LogWarning("WMI is unavailable, polling every {IntervalMs}ms instead — attaching to a new process will be slower", PollIntervalMs);
         }
@@ -95,17 +131,42 @@ public sealed class ProcessWatcher : IDisposable
     // are detached. Safe to call while running — this is what the UI does after a rule edit.
     public void ApplyRules(IReadOnlyList<ProcessRule> rules)
     {
+        SetRules(rules);
+        ScanOnce();
+        DropProcessesThatNoLongerMatch();
+    }
+
+    private void SetRules(IReadOnlyList<ProcessRule> rules)
+    {
         lock (_rulesLock)
         {
             _rules = rules ?? Array.Empty<ProcessRule>();
             _anyRuleNeedsCommandLine = _rules.Any(ProcessRuleMatcher.NeedsCommandLine);
         }
-        ScanOnce();
-        DropProcessesThatNoLongerMatch();
     }
 
     // One full pass over the running process list. Also used as the poll body.
-    public void ScanOnce()
+    public void ScanOnce() => Scan(readCommandLines: _anyRuleNeedsCommandLine);
+
+    // The first pass after Start, on a background thread.
+    private void InitialScan()
+    {
+        if (_cts.IsCancellationRequested) return;
+        try
+        {
+            // Command lines are read here even when no rule asks about arguments yet. It is one
+            // query for the whole machine, off the UI thread, once — against one query per
+            // redirected process, on the UI thread, the moment the user writes their first rule
+            // about arguments. Paying it now is what makes Save fast later.
+            Scan(readCommandLines: true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "the initial process scan failed");
+        }
+    }
+
+    private void Scan(bool readCommandLines)
     {
         IReadOnlyList<ProcessInfo> processes;
         try
@@ -118,15 +179,18 @@ public sealed class ProcessWatcher : IDisposable
             return;
         }
 
-        // One query for the whole machine rather than one per process — and none at all unless a
-        // rule asks about arguments.
-        IReadOnlyDictionary<uint, string> commandLines = _anyRuleNeedsCommandLine
-            ? _commandLines.ReadAll()
-            : EmptyCommandLines;
+        // Costs nothing and is the safety net for a stop event that never arrived: a pid Windows has
+        // handed to a different program must not be answered for out of the table.
+        _commandLines.Retain(processes);
+        // Only the processes with no answer yet cost anything here, and if there are more than a
+        // couple they are read in a single machine-wide query.
+        if (readCommandLines) _commandLines.EnsureLoaded(processes);
 
         foreach (ProcessInfo process in processes)
         {
-            commandLines.TryGetValue(process.Id, out string? commandLine);
+            string? commandLine = _anyRuleNeedsCommandLine
+                ? _commandLines.Get(process.Id, process.Name)
+                : null;
             TryAttach(process.Id, process.Name, process.ExecutablePath, parentPid: 0, commandLine);
         }
 
@@ -230,9 +294,6 @@ public sealed class ProcessWatcher : IDisposable
         return null;
     }
 
-    private static readonly IReadOnlyDictionary<uint, string> EmptyCommandLines
-        = new Dictionary<uint, string>();
-
     private void Detach(uint pid, string reason)
     {
         if (!_tracked.TryRemove(pid, out TrackedProcess? tracked)) return;
@@ -267,9 +328,12 @@ public sealed class ProcessWatcher : IDisposable
                 continue;
             }
 
-            // Only the processes already being redirected are re-tested here, so a query each is
-            // affordable where a sweep of the whole machine would not be.
-            string? commandLine = _anyRuleNeedsCommandLine ? _commandLines.Read(tracked.ProcessId) : null;
+            // Answered from the table, which the scan above has just brought up to date. A query
+            // each is what this used to do, and at ~210ms apiece it is what made saving a rule
+            // freeze the window for the better part of ten seconds.
+            string? commandLine = _anyRuleNeedsCommandLine
+                ? _commandLines.Get(tracked.ProcessId, tracked.Name)
+                : null;
 
             ProcessRule? rule = FindMatchingRule(tracked.Name, tracked.ExecutablePath, commandLine);
             if (rule == null) Detach(kv.Key, "no longer matches any rule");
@@ -316,10 +380,25 @@ public sealed class ProcessWatcher : IDisposable
             uint parentPid = Convert.ToUInt32(e.NewEvent.Properties["ParentProcessID"].Value);
             string name = e.NewEvent.Properties["ProcessName"].Value?.ToString() ?? string.Empty;
 
+            // Windows hands pids out again, so whatever the table remembers about this one belongs
+            // to its previous owner.
+            _commandLines.Forget(pid);
+
             // The trace gives no path; look it up, tolerating a process that has already exited.
             string? path = _processFinder.FindById(pid)?.ExecutablePath;
-            // Nor a command line — and this one costs a WMI query, so only when a rule wants it.
-            string? commandLine = _anyRuleNeedsCommandLine ? _commandLines.Read(pid) : null;
+
+            string? commandLine = null;
+            if (_anyRuleNeedsCommandLine)
+            {
+                // A rule needs it to decide, so it is read here and the attach waits for it.
+                commandLine = _commandLines.Get(pid, name);
+            }
+            else
+            {
+                // Nothing is waiting on it right now, but reading it in the background keeps the
+                // table complete for the moment the user does write a rule about arguments.
+                QueuePrefetch(pid, name);
+            }
 
             if (!TryAttach(pid, name, path, parentPid, commandLine))
             {
@@ -338,6 +417,9 @@ public sealed class ProcessWatcher : IDisposable
         try
         {
             uint pid = Convert.ToUInt32(e.NewEvent.Properties["ProcessID"].Value);
+            // Before the detach, and unconditionally: the pid may be reissued within milliseconds,
+            // and the next owner must not inherit this one's command line.
+            _commandLines.Forget(pid);
             Detach(pid, "exited");
         }
         catch (Exception ex)
@@ -346,15 +428,52 @@ public sealed class ProcessWatcher : IDisposable
         }
     }
 
+    // Queued rather than read here: process-start events are delivered one at a time — measured,
+    // not assumed: sixty handlers in a burst, not one overlapping pair — so a read on that thread
+    // delays every process behind it. A full queue drops the request; the next scan fills that gap
+    // in one query.
+    private void QueuePrefetch(uint pid, string name)
+    {
+        try { _prefetch.TryAdd((pid, name)); }
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
+        {
+            // The watcher is shutting down; there is nothing left to keep warm.
+        }
+    }
+
+    private void PrefetchLoop(CancellationToken ct)
+    {
+        try
+        {
+            foreach ((uint pid, string name) in _prefetch.GetConsumingEnumerable(ct))
+            {
+                try { _commandLines.Get(pid, name); }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "reading the command line of pid={Pid} ahead of time failed", pid);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // Shutting down.
+        }
+    }
+
     private async Task PollLoop(CancellationToken ct)
     {
+        // The first pass here IS the initial scan, so it primes the command line table the same way
+        // InitialScan does; the passes after it only fill in what has appeared since.
+        bool isFirstPass = true;
+
         while (!ct.IsCancellationRequested)
         {
-            try { ScanOnce(); }
+            try { Scan(readCommandLines: isFirstPass || _anyRuleNeedsCommandLine); }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "a polling scan failed");
             }
+            isFirstPass = false;
 
             try { await Task.Delay(PollIntervalMs, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { return; }
@@ -375,8 +494,13 @@ public sealed class ProcessWatcher : IDisposable
     {
         try { _cts.Cancel(); } catch { }
         DisposeWmi();
+        try { _prefetch.CompleteAdding(); } catch { }
         try { _pollTask?.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        try { _initialScanTask?.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        try { _prefetchTask?.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        try { _prefetch.Dispose(); } catch { }
         _cts.Dispose();
         _tracked.Clear();
+        _commandLines.Clear();
     }
 }

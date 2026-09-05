@@ -22,7 +22,7 @@ namespace ProxyDivert.Core.Processes;
 /// processes of another user. A rule that asks about arguments therefore does not match those,
 /// which is the safe direction — see ProcessRuleMatcher.
 /// </remarks>
-public sealed class ProcessCommandLineReader
+public sealed class ProcessCommandLineReader : IProcessCommandLineReader
 {
     private readonly ILogger _logger;
 
@@ -31,7 +31,7 @@ public sealed class ProcessCommandLineReader
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    /// <summary>Command line of one process, or null when it cannot be read.</summary>
+    /// <inheritdoc />
     public string? Read(uint processId)
     {
         if (processId == 0) return null;
@@ -57,10 +57,7 @@ public sealed class ProcessCommandLineReader
         return null;
     }
 
-    /// <summary>
-    /// Command lines of every process this one may look at, keyed by process id. One query for the
-    /// whole machine — far cheaper than <see cref="Read"/> per process during a full scan.
-    /// </summary>
+    /// <inheritdoc />
     public IReadOnlyDictionary<uint, string> ReadAll()
     {
         var lines = new Dictionary<uint, string>();
