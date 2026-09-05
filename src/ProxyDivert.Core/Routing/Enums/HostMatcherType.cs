@@ -24,4 +24,9 @@ public enum HostMatcherType
 
     // Destination port. Pattern is a single port ("443") or a range ("8000-8100").
     Port = 8,
+
+    // Transport protocol. Pattern is "tcp" or "udp" — the one facet of a connection that is known
+    // before anything else, with no name and no handshake needed. This is how a policy claims all
+    // of a process's UDP (its DNS included) without having to guess which ports it will use.
+    Protocol = 9,
 }

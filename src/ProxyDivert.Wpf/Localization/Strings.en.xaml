@@ -161,6 +161,7 @@
     <sys:String x:Key="Enum.HostMatcherType.Regex">Regular expression</sys:String>
     <sys:String x:Key="Enum.HostMatcherType.IpCidr">IP / CIDR</sys:String>
     <sys:String x:Key="Enum.HostMatcherType.Port">Port</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Protocol">Protocol (tcp/udp)</sys:String>
 
     <sys:String x:Key="Enum.ProcessMatcherType.ExeName">Executable name</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.FullPath">Full path</sys:String>

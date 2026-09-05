@@ -161,6 +161,7 @@
     <sys:String x:Key="Enum.HostMatcherType.Regex">Biểu thức chính quy</sys:String>
     <sys:String x:Key="Enum.HostMatcherType.IpCidr">IP / CIDR</sys:String>
     <sys:String x:Key="Enum.HostMatcherType.Port">Cổng</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Protocol">Giao thức (tcp/udp)</sys:String>
 
     <sys:String x:Key="Enum.ProcessMatcherType.ExeName">Tên tệp chạy</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.FullPath">Đường dẫn đầy đủ</sys:String>

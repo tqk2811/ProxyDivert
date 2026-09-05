@@ -94,7 +94,7 @@ ConnectionTracker → sự kiện Opened/Updated/Closed cho UI (PID, domain, đ�
 ### 3.2 Mô hình dữ liệu (ProxyDivert.Core)
 
 - `Outbound`: `Id`, `Name`, `Kind` (Direct | Block | HttpProxy | Socks4 | Socks5 | về sau Vpn/Ssh), `Uri`, `Credential`, `IsEnabled`. Factory `OutboundSourceFactory` → `IProxySource` (chuyển từ `ProxyUriParser` của Demo).
-- `RoutingRule`: `Matcher` (DomainSuffix | DomainWildcard | DomainRegex | DomainEquals | IpCidr | Port), `Pattern`, `IsNot`, `OutboundId`, `Order`.
+- `RoutingRule`: `Matcher` (DomainSuffix | DomainWildcard | DomainRegex | DomainEquals | IpCidr | Port | Protocol), `Pattern`, `IsNot`, `OutboundId`, `Order`.
 - `RoutingPolicy`: `Name`, danh sách `RoutingRule` theo thứ tự, `DefaultOutboundId` (mặc định Direct), `UdpMode`, `BlockQuic`.
 - `ProcessRule`: `Matcher` (ExeName | FullPath | Wildcard), `Pattern`, `IncludeChildren`, `PolicyId`, `IsEnabled`.
 - `AppConfig`: các danh sách trên + tuỳ chọn DNS (SystemSniff | DoH + endpoint) + log. Lưu JSON cạnh exe như ProxyRouterWpf; credential mã hoá DPAPI.

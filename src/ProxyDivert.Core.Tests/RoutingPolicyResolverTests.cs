@@ -232,4 +232,55 @@ public class RoutingPolicyResolverTests
 
         Assert.Equal(OutboundKind.Socks5, decision.Outbound.Kind);
     }
+
+    // A DNS query names a server nothing has taught us a name for, so every name matcher — the
+    // catch-all "*" included — declines it and it falls through to Direct. That is the answer the
+    // engine turns into "leave this flow alone", so it must stay Direct and not become Block.
+    [Fact]
+    public void Dns_with_no_name_falls_through_to_direct()
+    {
+        RoutingPolicy policy = Policy(Rule(HostMatcherType.Wildcard, "*"));
+        policy.UdpMode = UdpMode.ThroughOutbound;
+        policy.BlockQuic = true;
+        var resolver = Resolver(policy, Socks5());
+
+        RouteDecision decision = resolver.ResolveUdp(Target(host: null, address: "8.8.8.8", port: 53, isUdp: true));
+
+        Assert.Equal(OutboundKind.Direct, decision.Outbound.Kind);
+    }
+
+    // ...and this is how the user asks for it back: a protocol rule needs no name, so it claims
+    // the DNS the name matchers could not.
+    [Fact]
+    public void A_protocol_rule_claims_the_dns_that_name_rules_cannot()
+    {
+        RoutingPolicy policy = Policy(Rule(HostMatcherType.Protocol, "udp"));
+        policy.UdpMode = UdpMode.ThroughOutbound;
+        policy.BlockQuic = false;
+        var resolver = Resolver(policy, Socks5());
+
+        RouteDecision decision = resolver.ResolveUdp(Target(host: null, address: "8.8.8.8", port: 53, isUdp: true));
+
+        Assert.Equal(OutboundKind.Socks5, decision.Outbound.Kind);
+    }
+
+    [Fact]
+    public void A_udp_protocol_rule_leaves_tcp_alone()
+    {
+        var resolver = Resolver(Policy(Rule(HostMatcherType.Protocol, "udp")), Socks5());
+
+        RouteDecision decision = resolver.Resolve(Target("example.com"));
+
+        Assert.Equal(OutboundKind.Direct, decision.Outbound.Kind);
+    }
+
+    [Fact]
+    public void A_tcp_protocol_rule_claims_tcp()
+    {
+        var resolver = Resolver(Policy(Rule(HostMatcherType.Protocol, "tcp")), Socks5());
+
+        RouteDecision decision = resolver.Resolve(Target(host: null));
+
+        Assert.Equal(OutboundKind.Socks5, decision.Outbound.Kind);
+    }
 }

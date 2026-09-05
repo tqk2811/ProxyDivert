@@ -91,7 +91,8 @@ public sealed class RoutingPolicyResolver
         {
             foreach (RoutingRule rule in policy.Rules.Where(r => r.IsEnabled).OrderBy(r => r.Order))
             {
-                bool match = HostMatcher.IsMatch(rule.Matcher, rule.Pattern, target.Host, target.Address, target.Port);
+                bool match = HostMatcher.IsMatch(
+                    rule.Matcher, rule.Pattern, target.Host, target.Address, target.Port, target.IsUdp);
                 if (rule.IsNot) match = !match;
                 if (!match) continue;
 

@@ -53,6 +53,35 @@ public class HostMatcherTests
     public void IpCidr_matches_ipv4(string pattern, string address, bool expected)
         => Assert.Equal(expected, HostMatcher.IsMatch(HostMatcherType.IpCidr, pattern, null, IPAddress.Parse(address), 443));
 
+    [Theory]
+    [InlineData("udp", true, true)]
+    [InlineData("udp", false, false)]
+    [InlineData("tcp", false, true)]
+    [InlineData("tcp", true, false)]
+    [InlineData("UDP", true, true)]                          // case-insensitive
+    [InlineData("  tcp  ", false, true)]                     // trimmed like every other pattern
+    public void Protocol_matches_the_transport(string pattern, bool isUdp, bool expected)
+        => Assert.Equal(expected, HostMatcher.IsMatch(HostMatcherType.Protocol, pattern, null, SomeIp, 53, isUdp));
+
+    [Theory]
+    [InlineData("both")]
+    [InlineData("icmp")]
+    [InlineData("*")]
+    public void Protocol_never_matches_a_pattern_that_is_not_tcp_or_udp(string pattern)
+    {
+        // A typo must claim nothing rather than everything — the wrong half of that choice would
+        // silently route traffic the rule was written to leave alone.
+        Assert.False(HostMatcher.IsMatch(HostMatcherType.Protocol, pattern, null, SomeIp, 53, isUdp: true));
+        Assert.False(HostMatcher.IsMatch(HostMatcherType.Protocol, pattern, null, SomeIp, 53, isUdp: false));
+    }
+
+    [Fact]
+    public void Protocol_matches_without_a_host_name()
+    {
+        // The whole point: DNS has no name to match on, and this is the matcher that still claims it.
+        Assert.True(HostMatcher.IsMatch(HostMatcherType.Protocol, "udp", host: null, SomeIp, 53, isUdp: true));
+    }
+
     [Fact]
     public void IpCidr_never_matches_across_address_families()
         => Assert.False(HostMatcher.IsMatch(HostMatcherType.IpCidr, "10.0.0.0/8", null, IPAddress.Parse("::1"), 443));
