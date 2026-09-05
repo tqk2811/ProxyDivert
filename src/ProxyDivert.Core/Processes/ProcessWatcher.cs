@@ -50,6 +50,8 @@ public sealed class ProcessWatcher : IDisposable
     private readonly BlockingCollection<(uint Pid, string Name)> _prefetch
         = new BlockingCollection<(uint Pid, string Name)>(PrefetchQueueLimit);
 
+    private readonly ProcessEventBacklog _backlog = new ProcessEventBacklog();
+
     private IReadOnlyList<ProcessRule> _rules = Array.Empty<ProcessRule>();
 
     // Recomputed with the rule set. It no longer decides whether command lines are read at all —
@@ -72,6 +74,17 @@ public sealed class ProcessWatcher : IDisposable
 
     /// <summary>True while process discovery runs on WMI events; false while it is polling.</summary>
     public bool IsUsingWmi { get; private set; }
+
+    /// <summary>
+    /// How far behind the process-start events may fall, in milliseconds, before their command
+    /// lines are read for the whole machine at once instead of one process at a time. 0 or less
+    /// turns that off. Comes from the configuration and can be changed while running.
+    /// </summary>
+    public int EventBacklogMs
+    {
+        get => _backlog.ThresholdMs;
+        set => _backlog.ThresholdMs = value;
+    }
 
     public ProcessWatcher(
         ILogger<ProcessWatcher> logger,
@@ -390,6 +403,12 @@ public sealed class ProcessWatcher : IDisposable
             string? commandLine = null;
             if (_anyRuleNeedsCommandLine)
             {
+                // Events are delivered one at a time, so an event that reaches us already stale
+                // means more are queued behind it — each of which would otherwise cost a query of
+                // its own. One query for the machine answers for all of them at once.
+                if (_backlog.ShouldCatchUp(TryReadProperty(e.NewEvent, "TIME_CREATED")))
+                    CatchUpCommandLines();
+
                 // A rule needs it to decide, so it is read here and the attach waits for it.
                 commandLine = _commandLines.Get(pid, name);
             }
@@ -426,6 +445,32 @@ public sealed class ProcessWatcher : IDisposable
         {
             _logger.LogWarning(ex, "handling a WMI process-stop event failed");
         }
+    }
+
+    // Reads the command lines of every running process in one query, so the events still queued
+    // behind this one are answered from memory instead of a query each.
+    private void CatchUpCommandLines()
+    {
+        try
+        {
+            IReadOnlyList<ProcessInfo> processes = _processFinder.ListAll();
+            _commandLines.EnsureLoaded(processes);
+            _logger.LogDebug(
+                "process events were running behind, so the command lines of {Count} processes were read in one go",
+                processes.Count);
+        }
+        catch (Exception ex)
+        {
+            // Falling back to a query per process is slow, not wrong.
+            _logger.LogDebug(ex, "catching up on command lines failed");
+        }
+    }
+
+    // A property WMI may or may not have put on the event. Nothing here is worth an exception.
+    private static object? TryReadProperty(ManagementBaseObject wmiEvent, string name)
+    {
+        try { return wmiEvent[name]; }
+        catch (ManagementException) { return null; }
     }
 
     // Queued rather than read here: process-start events are delivered one at a time — measured,

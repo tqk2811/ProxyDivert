@@ -36,6 +36,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _ipv6 = services.Config.Ipv6;
         _wireProxyPath = services.Config.WireProxyPath ?? string.Empty;
         _diagnosticLogPath = services.Config.DiagnosticLogPath ?? string.Empty;
+        _processEventBacklogMs = services.Config.ProcessEventBacklogMs;
         _theme = ThemeManager.Parse(services.Config.Theme);
         _language = LocalizationManager.Parse(services.Config.Language);
         _startWithWindows = services.Config.StartWithWindows;
@@ -57,6 +58,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string _diagnosticLogPath;
 
     [ObservableProperty]
+    private int _processEventBacklogMs;
+
+    [ObservableProperty]
     private ThemeMode _theme;
 
     [ObservableProperty]
@@ -76,6 +80,11 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnDiagnosticLogPathChanged(string value)
         => _services.Config.DiagnosticLogPath = string.IsNullOrWhiteSpace(value) ? null : value;
+
+    // A negative value has no meaning — 0 already says "never catch up" — so it is clamped rather
+    // than stored, which keeps a typo in the box from reaching the engine.
+    partial void OnProcessEventBacklogMsChanged(int value)
+        => _services.Config.ProcessEventBacklogMs = value < 0 ? 0 : value;
 
     // Appearance is the one pair of settings that takes effect the moment it is picked, so it is
     // also written out at once: a theme that reverts on the next launch because Save was never

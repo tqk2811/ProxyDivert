@@ -118,6 +118,9 @@
     <sys:String x:Key="Str.Settings.Ipv6Hint">Redirect: đưa IPv6 qua luật định tuyến y như IPv4. Block: chặn để ứng dụng tự lùi về IPv4 — dùng khi đường ra không có tuyến IPv6. Ignore: thả cho đi thẳng, tức là lọt ra ngoài proxy.</sys:String>
     <sys:String x:Key="Str.Settings.WireProxy">wireproxy.exe</sys:String>
     <sys:String x:Key="Str.Settings.WireProxyHint">Chỉ cần cho đường ra VPN: wireproxy chạy đường hầm WireGuard ở tầng ứng dụng, không tạo card mạng ảo. Bỏ trống thì tìm cạnh ProxyDivert.exe rồi tới PATH.</sys:String>
+    <sys:String x:Key="Str.Settings.EventBacklog">Quét bù khi trễ</sys:String>
+    <sys:String x:Key="Str.Settings.Milliseconds">ms</sys:String>
+    <sys:String x:Key="Str.Settings.EventBacklogHint">Chỉ ảnh hưởng tới bộ lọc có soi argument. Windows báo tiến trình mới lần lượt từng cái, mà đọc một command line tốn khoảng 210ms, nên một chương trình mở ba chục tiến trình cùng lúc sẽ bị dồn hàng. Khi một sự kiện tới tay đã cũ quá mức này, công cụ đọc command line của cả máy trong một truy vấn thay vì từng cái. Đặt nhỏ thì bù sớm hơn; 0 là tắt, luôn đọc từng tiến trình.</sys:String>
     <sys:String x:Key="Str.Settings.LogPath">File nhật ký chi tiết</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Giao diện</sys:String>
     <sys:String x:Key="Str.Settings.Language">Ngôn ngữ</sys:String>

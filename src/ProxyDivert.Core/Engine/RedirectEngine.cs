@@ -136,6 +136,7 @@ public sealed class RedirectEngine : IDisposable
             _watcher = new ProcessWatcher(_loggerFactory.CreateLogger<ProcessWatcher>());
             _watcher.ProcessAttached += OnProcessAttached;
             _watcher.ProcessDetached += OnProcessDetached;
+            _watcher.EventBacklogMs = config.ProcessEventBacklogMs;
             _watcher.Start(config.ProcessRules);
 
             // VPN tunnels come up now, in the background, rather than when a request first needs
@@ -179,6 +180,9 @@ public sealed class RedirectEngine : IDisposable
                 _udpForwarder?.InvalidateOutbound(outboundId);
             }
             _vpnKeeper?.Sync(config.Outbounds, config.WireProxyPath);
+            // Takes effect on the next process event, with no restart — it only tunes how the
+            // watcher reads command lines, not what it watches.
+            if (_watcher != null) _watcher.EventBacklogMs = config.ProcessEventBacklogMs;
             _watcher?.ApplyRules(config.ProcessRules);
             RebuildResolver();
             _logger.LogInformation("configuration applied");

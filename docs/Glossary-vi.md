@@ -231,3 +231,10 @@ Xoá mục theo ba lớp: sự kiện tiến trình đóng (`Win32_ProcessStopTr
 
 Trước khi có bảng này, lưu cấu hình phải hỏi WMI một truy vấn cho **từng** tiến trình đang được redirect (30 tiến trình × 210ms) ngay trên luồng giao diện, nên bấm `Lưu` là đơ 5–10 giây.
 
+## Quét bù khi sự kiện dồn (`ProcessEventBacklog`)
+
+WMI giao sự kiện của **một** watcher lần lượt từng cái, không bao giờ song song — đo thật: 60 handler trong một đợt, không cặp nào chồng nhau. Nên một handler tốn 210ms (đọc command line) làm mọi tiến trình phía sau xếp hàng: một trình duyệt mở 30 tiến trình con thì tiến trình cuối phải chờ vài giây mới được redirect, và trong lúc chờ thì traffic của nó đi thẳng ra ngoài.
+
+Dấu hiệu để biết đang dồn là **tuổi của chính sự kiện** — `TIME_CREATED`, thuộc tính mà mọi lớp sự kiện WMI đều có. Đo trong một đợt burst, tuổi sự kiện đang xử lý tăng đúng bằng chi phí của handler: 5ms → 263 → 528 → 790 → … → 15.459ms. Tức nó nói thẳng chiều dài hàng chờ bằng mili giây thật, không phải một con số đếm tự đặt.
+
+Khi sự kiện tới tay đã cũ hơn ngưỡng (tab **Cài đặt** → `Quét bù khi trễ`, mặc định 500ms), công cụ đọc command line của **cả máy** trong một truy vấn thay vì từng cái; các sự kiện còn xếp hàng phía sau đều thành cache hit và hàng chờ tan. Hai lượt quét bù cách nhau tối thiểu 1 giây. Đặt 0 là tắt hẳn, quay về đọc từng tiến trình. Không đọc được `TIME_CREATED` thì cũng coi như không dồn — hành vi y như trước khi có cơ chế này.

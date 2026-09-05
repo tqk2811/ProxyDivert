@@ -29,6 +29,21 @@ public class ConfigStoreTests : IDisposable
         Assert.Contains(config.Outbounds, o => o.Kind == OutboundKind.Direct);
     }
 
+    // The one setting on this page with a number rather than a path or a mode behind it, and the
+    // engine reads it on every process event — a value that silently reverted to the default on
+    // restart would look like the tuning simply not working.
+    [Fact]
+    public void Round_trips_the_process_event_backlog_threshold()
+    {
+        var store = new ConfigStore(ConfigPath);
+        AppConfig config = AppConfig.CreateDefault();
+        config.ProcessEventBacklogMs = 250;
+
+        store.Save(config);
+
+        Assert.Equal(250, new ConfigStore(ConfigPath).Load().ProcessEventBacklogMs);
+    }
+
     [Fact]
     public void Round_trips_rules_and_policies()
     {
