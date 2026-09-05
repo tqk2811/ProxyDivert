@@ -132,9 +132,16 @@
     <sys:String x:Key="Enum.ProcessMatcherType.ExeName">Executable name</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.FullPath">Full path</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.Wildcard">Wildcard</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.StartsWith">Starts with</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.EndsWith">Ends with</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.Contains">Contains</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.Regex">Regex</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Contains">Contains</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Wildcard">Wildcard</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Exact">Exact</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.StartsWith">Starts with</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.EndsWith">Ends with</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.Regex">Regex</sys:String>
 
     <sys:String x:Key="Enum.OutboundKind.Direct">Direct</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Block">Block</sys:String>

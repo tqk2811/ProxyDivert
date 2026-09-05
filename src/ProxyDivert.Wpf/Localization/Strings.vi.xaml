@@ -132,9 +132,16 @@
     <sys:String x:Key="Enum.ProcessMatcherType.ExeName">Tên tệp chạy</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.FullPath">Đường dẫn đầy đủ</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.Wildcard">Ký tự đại diện</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.StartsWith">Bắt đầu bằng</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.EndsWith">Kết thúc bằng</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.Contains">Có chứa</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.Regex">Regex</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Contains">Có chứa</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Wildcard">Ký tự đại diện</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Exact">Khớp chính xác</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.StartsWith">Bắt đầu bằng</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.EndsWith">Kết thúc bằng</sys:String>
+    <sys:String x:Key="Enum.ArgumentMatcherType.Regex">Regex</sys:String>
 
     <sys:String x:Key="Enum.OutboundKind.Direct">Đi thẳng</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Block">Chặn</sys:String>

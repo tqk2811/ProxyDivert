@@ -36,12 +36,12 @@
                         <!-- Kind and value are one condition, so they are one column: choosing
                              "full path" and then typing a bare name is a rule that silently never
                              matches, and two separate columns invite exactly that. -->
-                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Target}" Width="*" MinWidth="260">
+                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Target}" Width="*" MinWidth="300">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Grid Margin="0,2">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="165"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
                                         <ComboBox ItemsSource="{Binding Data.Matchers, Source={StaticResource Vm}}"
@@ -56,12 +56,12 @@
                         </DataGridTemplateColumn>
                         <!-- The same shape again, ANDed with the one above. Left empty it is not
                              consulted, so a rule written before this existed keeps its meaning. -->
-                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Argument}" Width="*" MinWidth="240">
+                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Argument}" Width="*" MinWidth="280">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Grid Margin="0,2">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="120"/>
+                                            <ColumnDefinition Width="150"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
                                         <ComboBox ItemsSource="{Binding Data.ArgumentMatchers, Source={StaticResource Vm}}"

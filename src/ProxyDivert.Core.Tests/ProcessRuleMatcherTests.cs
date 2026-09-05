@@ -62,6 +62,45 @@ public class ProcessRuleMatcherTests
         Assert.False(ProcessRuleMatcher.IsMatch(rule, "chrome", null));
     }
 
+    // ==== the plain string comparisons over the process ====
+
+    // These look at the path and the name both. Path only would make "Contains chrome" useless for
+    // every process whose path cannot be read; name only would make "StartsWith C:\Games"
+    // impossible to express.
+    [Theory]
+    [InlineData(ProcessMatcherType.StartsWith, @"C:\Games", @"C:\Games\Foo\client.exe", true)]
+    [InlineData(ProcessMatcherType.StartsWith, @"C:/Games", @"C:\Games\Foo\client.exe", true)]  // pasted with slashes
+    [InlineData(ProcessMatcherType.StartsWith, @"D:\Games", @"C:\Games\Foo\client.exe", false)]
+    [InlineData(ProcessMatcherType.EndsWith, @"\client.exe", @"C:\Games\Foo\client.exe", true)]
+    [InlineData(ProcessMatcherType.EndsWith, @"\server.exe", @"C:\Games\Foo\client.exe", false)]
+    [InlineData(ProcessMatcherType.Contains, "games", @"C:\Games\Foo\client.exe", true)]
+    [InlineData(ProcessMatcherType.Contains, "nothere", @"C:\Games\Foo\client.exe", false)]
+    [InlineData(ProcessMatcherType.Regex, @"^C:\\Games\\.*\.exe$", @"C:\Games\Foo\client.exe", true)]
+    [InlineData(ProcessMatcherType.Regex, @"^D:\\.*$", @"C:\Games\Foo\client.exe", false)]
+    public void The_plain_comparisons_read_the_path(
+        ProcessMatcherType matcher, string pattern, string path, bool expected)
+        => Assert.Equal(expected, ProcessRuleMatcher.IsMatch(Rule(matcher, pattern), "client", path));
+
+    [Theory]
+    [InlineData(ProcessMatcherType.StartsWith, "chr", "chrome.exe", true)]
+    [InlineData(ProcessMatcherType.EndsWith, ".exe", "chrome.exe", true)]
+    [InlineData(ProcessMatcherType.Contains, "rom", "chrome.exe", true)]
+    [InlineData(ProcessMatcherType.Contains, "firefox", "chrome.exe", false)]
+    [InlineData(ProcessMatcherType.Regex, "^chr.*", "chrome.exe", true)]
+    public void The_plain_comparisons_still_work_with_no_readable_path(
+        ProcessMatcherType matcher, string pattern, string processName, bool expected)
+        => Assert.Equal(expected, ProcessRuleMatcher.IsMatch(Rule(matcher, pattern), processName, null));
+
+    // Both patterns come from a text box, so neither may take the watcher down.
+    [Fact]
+    public void A_regex_that_does_not_compile_matches_nothing()
+    {
+        Assert.False(ProcessRuleMatcher.IsMatch(Rule(ProcessMatcherType.Regex, "(unclosed"), "chrome", null));
+
+        ProcessRule rule = WithArgument(ArgumentMatcherType.Regex, "[z-a]");
+        Assert.False(ProcessRuleMatcher.IsMatch(rule, "java", null, "java.exe -jar app.jar"));
+    }
+
     // ==== the second condition: the command line ====
 
     private static ProcessRule WithArgument(ArgumentMatcherType matcher, string? pattern)
@@ -108,6 +147,17 @@ public class ProcessRuleMatcherTests
         => Assert.Equal(expected, ProcessRuleMatcher.IsMatch(
             WithArgument(ArgumentMatcherType.Exact, pattern), "java", null, commandLine));
 
+    [Theory]
+    [InlineData(ArgumentMatcherType.StartsWith, "java.exe", "java.exe -jar app.jar", true)]
+    [InlineData(ArgumentMatcherType.StartsWith, "-jar", "java.exe -jar app.jar", false)]
+    [InlineData(ArgumentMatcherType.EndsWith, "app.jar", "java.exe -jar app.jar", true)]
+    [InlineData(ArgumentMatcherType.EndsWith, "java.exe", "java.exe -jar app.jar", false)]
+    [InlineData(ArgumentMatcherType.Regex, @"-jar\s+\w+\.jar", "java.exe -jar app.jar", true)]
+    [InlineData(ArgumentMatcherType.Regex, @"-cp\s", "java.exe -jar app.jar", false)]
+    public void The_other_comparisons_read_the_command_line(
+        ArgumentMatcherType matcher, string pattern, string commandLine, bool expected)
+        => Assert.Equal(expected, ProcessRuleMatcher.IsMatch(
+            WithArgument(matcher, pattern), "java", null, commandLine));
 
     // A rule that asks about the command line has said the process is not enough on its own, so a
     // command line it cannot read is a "no". The other direction would redirect the very processes

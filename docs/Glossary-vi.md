@@ -142,7 +142,15 @@ Lớp WPF cho phép thay thanh tiêu đề hệ thống bằng nội dung của 
 
 Cột của `DataGrid` (`DataGridComboBoxColumn`, `DataGridTextColumn`...) không phải con visual cũng không phải con logical của lưới, nên binding đặt trên chính thuộc tính của cột không có tổ tiên nào để đi ngược lên: `RelativeSource AncestorType=UserControl` không bao giờ phân giải, `ItemsSource` lặng lẽ ở lại `null` và danh sách xổ xuống rỗng — build không báo, log không báo. `BindingProxy` là một `Freezable` đặt trong `Resources` của phần tử: WPF cấp cho nó ngữ cảnh kế thừa của phần tử đó, gồm cả `DataContext`, nên cột lấy được view model qua `{Binding Data.Xxx, Source={StaticResource Vm}}` mà không cần cây nào cả.
 
-Cùng gốc đó, `Header="{DynamicResource ...}"` trên cột cũng không nhận được tín hiệu invalidate khi hoán đổi từ điển chuỗi: nó phân giải một lần lúc lưới được dựng rồi đóng băng ở ngôn ngữ tại thời điểm đó. `LocalizedBinding` bind vào một object tĩnh đổi theo ngôn ngữ nên chạy lại được.
+## Kiểu so khớp của luật tiến trình
+
+Một luật tiến trình có hai ô, mỗi ô gồm combo chọn kiểu so khớp và ô nhập giá trị. Bộ kiểu lấy theo mẫu ProxyRouterWpf (`ProxySourceGroupFilterType`), bỏ hai kiểu chỉ dành cho nguồn proxy là `CidrIp` và `TotalBytes`.
+
+Ô tiến trình: `Tên tệp chạy` (bỏ đuôi .exe hai bên), `Đường dẫn đầy đủ`, `Ký tự đại diện`, `Bắt đầu bằng`, `Kết thúc bằng`, `Có chứa`, `Regex`. Ba kiểu đầu chỉ soi đúng thứ chúng nói; bốn kiểu sau soi CẢ đường dẫn đầy đủ LẪN tên tệp chạy và khớp cái nào cũng tính — nếu chỉ soi đường dẫn thì `Có chứa chrome` vô dụng với mọi tiến trình Windows không cho đọc đường dẫn, còn nếu chỉ soi tên thì không viết nổi `Bắt đầu bằng C:Games`.
+
+Ô argument: `Có chứa` (mặc định), `Ký tự đại diện`, `Khớp chính xác`, `Bắt đầu bằng`, `Kết thúc bằng`, `Regex` — tất cả trên toàn bộ command line.
+
+Cả `Ký tự đại diện` lẫn `Regex` đều chạy qua `Regex.IsMatch` với hạn 100ms và bắt cả lỗi biên dịch lẫn quá hạn: mẫu do người dùng gõ, chạy trên mọi tiến trình mỗi lượt quét, nên một biểu thức backtrack thảm hoạ sẽ treo watcher. Mẫu hỏng thì khớp rỗng, không ném lỗi.
 
 ## Luật theo argument (command line)
 
