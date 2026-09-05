@@ -137,3 +137,9 @@ Hướng chảy dữ liệu của một data-binding WPF: `OneWay` chỉ đọc 
 ## WindowChrome (thanh tiêu đề tự vẽ)
 
 Lớp WPF cho phép thay thanh tiêu đề hệ thống bằng nội dung của chính cửa sổ, mà vẫn giữ nguyên hành vi cửa sổ thật: kéo, snap, bấm đúp phóng to, kéo cạnh đổi kích thước, và không đè lên thanh tác vụ khi maximize. `CaptionHeight` là chiều cao dải được coi là "thanh tiêu đề" — phải khớp đúng chiều cao hàng bạn vẽ. Mọi control có thể bấm nằm trong dải đó phải đặt `WindowChrome.IsHitTestVisibleInChrome="True"`, nếu không cú bấm bị hiểu thành kéo cửa sổ.
+
+## DataGridColumn nằm ngoài visual tree / BindingProxy
+
+Cột của `DataGrid` (`DataGridComboBoxColumn`, `DataGridTextColumn`...) không phải con visual cũng không phải con logical của lưới, nên binding đặt trên chính thuộc tính của cột không có tổ tiên nào để đi ngược lên: `RelativeSource AncestorType=UserControl` không bao giờ phân giải, `ItemsSource` lặng lẽ ở lại `null` và danh sách xổ xuống rỗng — build không báo, log không báo. `BindingProxy` là một `Freezable` đặt trong `Resources` của phần tử: WPF cấp cho nó ngữ cảnh kế thừa của phần tử đó, gồm cả `DataContext`, nên cột lấy được view model qua `{Binding Data.Xxx, Source={StaticResource Vm}}` mà không cần cây nào cả.
+
+Cùng gốc đó, `Header="{DynamicResource ...}"` trên cột cũng không nhận được tín hiệu invalidate khi hoán đổi từ điển chuỗi: nó phân giải một lần lúc lưới được dựng rồi đóng băng ở ngôn ngữ tại thời điểm đó. `LocalizedBinding` bind vào một object tĩnh đổi theo ngôn ngữ nên chạy lại được.

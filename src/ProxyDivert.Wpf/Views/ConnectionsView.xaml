@@ -1,6 +1,7 @@
 <UserControl x:Class="ProxyDivert.Wpf.Views.ConnectionsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:b="clr-namespace:ProxyDivert.Wpf.Bindings">
     <Border Style="{StaticResource Card}" Margin="4">
         <DockPanel>
             <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
@@ -19,17 +20,17 @@
             <DataGrid ItemsSource="{Binding Connections}" AutoGenerateColumns="False"
                       CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="{DynamicResource Str.Process.Pid}" Binding="{Binding ProcessId}" Width="70"/>
-                    <DataGridTextColumn Header="{DynamicResource Str.Conn.Process}" Binding="{Binding ProcessName}" Width="140"/>
-                    <DataGridTextColumn Header="{DynamicResource Str.Conn.Host}" Binding="{Binding Host}" Width="*"/>
-                    <DataGridTextColumn Header="{DynamicResource Str.Conn.Destination}" Binding="{Binding Destination}" Width="160"/>
-                    <DataGridTextColumn Header="{DynamicResource Str.Conn.Outbound}" Binding="{Binding OutboundName}" Width="120"/>
-                    <DataGridTextColumn Header="{DynamicResource Str.Conn.Reason}" Binding="{Binding RouteReason}" Width="180"/>
-                    <DataGridTextColumn Header="{DynamicResource Str.Conn.Up}"
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Process.Pid}" Binding="{Binding ProcessId}" Width="70"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Process}" Binding="{Binding ProcessName}" Width="140"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Host}" Binding="{Binding Host}" Width="*"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Destination}" Binding="{Binding Destination}" Width="160"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Outbound}" Binding="{Binding OutboundName}" Width="120"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Reason}" Binding="{Binding RouteReason}" Width="180"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Up}"
                                         Binding="{Binding BytesUp, Converter={StaticResource ByteSize}}" Width="80"/>
-                    <DataGridTextColumn Header="{DynamicResource Str.Conn.Down}"
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Down}"
                                         Binding="{Binding BytesDown, Converter={StaticResource ByteSize}}" Width="80"/>
-                    <DataGridTextColumn Header="{DynamicResource Str.Conn.Duration}"
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Duration}"
                                         Binding="{Binding StartedUtc, Converter={StaticResource Duration}}" Width="80"/>
                 </DataGrid.Columns>
 

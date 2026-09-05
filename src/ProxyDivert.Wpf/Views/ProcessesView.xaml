@@ -1,6 +1,12 @@
 <UserControl x:Class="ProxyDivert.Wpf.Views.ProcessesView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:b="clr-namespace:ProxyDivert.Wpf.Bindings">
+    <!-- A DataGrid column is outside the visual tree, so the combo columns below reach the view
+         model through this proxy instead of an ancestor lookup that cannot resolve. -->
+    <UserControl.Resources>
+        <b:BindingProxy x:Key="Vm" Data="{Binding}"/>
+    </UserControl.Resources>
     <Grid Margin="4">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -25,24 +31,22 @@
                 <DataGrid ItemsSource="{Binding Rules}" SelectedItem="{Binding SelectedRule}"
                           AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
                     <DataGrid.Columns>
-                        <DataGridCheckBoxColumn Header="{DynamicResource Str.App.Enabled}"
+                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}"
                                                 Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
-                        <DataGridComboBoxColumn Header="{DynamicResource Str.App.Type}"
+                        <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.App.Type}"
                                                 SelectedItemBinding="{Binding Matcher, UpdateSourceTrigger=PropertyChanged}"
-                                                ItemsSource="{Binding DataContext.Matchers,
-                                                    RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                ItemsSource="{Binding Data.Matchers, Source={StaticResource Vm}}"
                                                 ElementStyle="{StaticResource EnumComboColumn}"
                                                 EditingElementStyle="{StaticResource EnumComboColumn}"
                                                 Width="110"/>
-                        <DataGridTextColumn Header="{DynamicResource Str.App.Pattern}"
+                        <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Pattern}"
                                             Binding="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
-                        <DataGridCheckBoxColumn Header="{DynamicResource Str.Process.IncludeChildren}"
+                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.Process.IncludeChildren}"
                                                 Binding="{Binding IncludeChildren, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
-                        <DataGridComboBoxColumn Header="{DynamicResource Str.Process.Policy}"
+                        <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.Process.Policy}"
                                                 SelectedValueBinding="{Binding PolicyId, UpdateSourceTrigger=PropertyChanged}"
                                                 SelectedValuePath="Id" DisplayMemberPath="Name"
-                                                ItemsSource="{Binding DataContext.Policies,
-                                                    RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                ItemsSource="{Binding Data.Policies, Source={StaticResource Vm}}"
                                                 Width="150"/>
                     </DataGrid.Columns>
                 </DataGrid>

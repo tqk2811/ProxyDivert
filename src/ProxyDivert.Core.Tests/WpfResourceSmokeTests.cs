@@ -19,6 +19,7 @@ namespace ProxyDivert.Core.Tests;
 //
 // WPF requires a single-threaded apartment, and xUnit gives no STA facts, so each test body runs
 // on an STA thread of its own and rethrows whatever happened there.
+[Collection("WPF")]
 public class WpfResourceSmokeTests
 {
     [Fact]
