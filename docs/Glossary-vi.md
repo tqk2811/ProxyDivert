@@ -242,3 +242,15 @@ Khi sự kiện tới tay đã cũ hơn ngưỡng (tab **Cài đặt** → `Qué
 ## Chặng đi và chặng về của UDP relay (egress leg / reply leg)
 
 Một luồng UDP bị chuyển hướng có hai nửa độc lập, khác hẳn TCP. **Chặng đi**: gói của tiến trình bị NAT về `127.0.0.1:<cổng relay>`, relay đọc được rồi gửi ra ngoài bằng **socket của chính tool** (cổng ephemeral hoàn toàn khác cổng gốc). **Chặng về**: gói trả lời từ đích thật quay về **cổng ephemeral đó**, không phải cổng của tiến trình — bảng NAT khoá theo cổng nguồn gốc nên tra không ra. Vì vậy chặng về **bắt buộc phải do phần mềm tự dựng lại**: đọc phản hồi trên socket upstream rồi bơm ngược vào tiến trình (`InjectReplyToProcessAsync`) để middleware NAT ghi lại địa chỉ thành `đích gốc → nguồn gốc`. Thiếu vòng đọc này thì UDP thành **một chiều**: câu hỏi đi được, câu trả lời mất hẳn — biểu hiện rõ nhất là DNS (UDP/53) không bao giờ có đáp án.
+
+## Đi thẳng không chuyển hướng (UDP passthrough)
+
+Với UDP, "Direct" **không** thể làm bằng cách cho gói qua relay rồi relay gửi hộ — xem [chặng đi và chặng về](#L242). Nên khi một luồng UDP được định tuyến ra `Direct`, công cụ quyết định **ngay trên đường gói tin**, trước khi NAT chạm vào: trả `PacketDisposition.Pass` để gói đi ra nguyên trạng từ chính socket của tiến trình, y như khi tiến trình không bị theo dõi. Trả lời quay về đúng socket đó, không cần bảng NAT.
+
+Đổi lại, luồng đó mang **địa chỉ thật** của máy. Với DNS thì đây đúng bằng mức phơi bày mà chế độ `SystemSniff` đã tuyên bố sẵn. Muốn DNS đi qua outbound thì thêm một luật khớp được nó — luật `Protocol` = `udp`, hoặc `Port` = `53` — khi đó luồng ra một outbound thật chứ không còn là `Direct`, và nó quay lại đi qua relay như cũ.
+
+Câu hỏi chỉ được đặt **một lần cho mỗi luồng**, lúc luồng chưa có bản ghi NAT. Luồng đã chuyển hướng thì giữ nguyên chuyển hướng kể cả khi câu trả lời đổi (bảng DNS ngược vừa học được tên mới): nửa luồng qua relay nửa luồng đi thẳng sẽ chờ trả lời ở hai nơi khác nhau. Riêng `Block` vẫn đi qua relay để bị thả ở đó — thả bằng cách "cho đi thẳng" thì đúng là làm rò rỉ thứ cần chặn.
+
+## Matcher `Protocol` (lọc theo tcp/udp)
+
+Kiểu so khớp luật nhìn vào **giao thức tầng vận chuyển**, pattern là `tcp` hoặc `udp`. Khác mọi matcher theo tên ở chỗ nó **luôn có dữ liệu để so**: không cần SNI, không cần bảng DNS ngược, không cần bắt tay xong. Đây là cách duy nhất viết được luật kiểu "toàn bộ UDP của tiến trình này", gồm cả DNS — thứ mà `Wildcard *` cũng bỏ sót vì gói DNS không mang tên miền nào cả. Pattern không phải `tcp`/`udp` thì **không khớp gì hết** (chứ không phải khớp tất cả): gõ sai một luật phải mất tác dụng, không được âm thầm ôm luôn traffic mà luật đó sinh ra để loại trừ.
