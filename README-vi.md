@@ -49,14 +49,18 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
 2. Tab **Đường ra**: thêm proxy (`socks5://host:port`, `http://host:port`), bấm **Thử** để kiểm tra.
 3. Tab **Luật**: thêm luật cho bộ luật mặc định, ví dụ `Wildcard` + `*.google.com` → proxy vừa tạo.
    Đích không khớp luật nào sẽ đi thẳng (đường ra mặc định).
-4. Tab **Tiến trình**: thêm luật gọi tên chương trình. Kiểu khớp và giá trị nằm chung một ô — chọn
-   tên tệp chạy, đường dẫn đầy đủ, ký tự đại diện, bắt đầu bằng, kết thúc bằng, có chứa hoặc regex,
-   rồi gõ giá trị ngay bên cạnh. Bốn kiểu cuối soi cả đường dẫn đầy đủ lẫn tên tệp chạy, khớp cái
-   nào cũng được, nên `có chứa chrome` vẫn bắt được tiến trình mà Windows không cho đọc đường dẫn.
-   Ô **Argument** kế đó là điều kiện thứ hai của cùng luật đó, AND với điều kiện trên, cũng đủ bấy
-   nhiêu kiểu so khớp nhưng trên command line: để trống thì không xét, điền vào thì lọc được đúng
-   một chương trình trong nhiều cái cùng chạy từ một tệp (`java.exe` **có chứa** `minecraft`). Hoặc
-   bấm **Chạy ở trạng thái tạm dừng…** để không lọt kết nối nào lúc khởi động.
+4. Tab **Tiến trình**: bấm **Thêm**, cửa sổ bộ lọc mở ra. Một bộ lọc gồm tên, các điều kiện, và
+   hành động áp dụng cho thứ khớp được. Mỗi dòng điều kiện chọn soi cái gì (**Tiến trình** hay
+   **Argument**), so khớp kiểu nào (tên tệp chạy, đường dẫn đầy đủ, ký tự đại diện, bắt đầu bằng,
+   kết thúc bằng, có chứa, regex — bốn kiểu cuối soi cả đường dẫn lẫn tên tệp chạy, khớp cái nào
+   cũng được, nên `có chứa chrome` vẫn bắt được tiến trình mà Windows không cho đọc đường dẫn), và
+   giá trị. Các dòng nối với nhau bằng đúng một combo ở đầu nhóm — **Khớp TẤT CẢ** hoặc **Khớp BẤT
+   KỲ** — nên không phải đặt toán tử giữa hai dòng, cũng không có độ ưu tiên nào để nhầm. Nút
+   **KHÔNG** trên mỗi dòng hoặc mỗi nhóm để đảo ngược, **+ Nhóm** để lồng thêm một lớp ngoặc, còn
+   tích hai dòng rồi bấm **Gộp nhóm** thì đóng ngoặc cho chúng sau khi đã viết xong. Câu ở trên cùng
+   nói bộ lọc hiện đang có nghĩa gì, và **Thử với** chạy nó trên một tiến trình đang chạy rồi tô màu
+   đúng dòng đã quyết định. `java.exe VÀ (minecraft HOẶC forge)` viết ra như vậy. Hoặc bấm **Chạy ở
+   trạng thái tạm dừng…** để không lọt kết nối nào lúc khởi động.
 5. Gạt công tắc trên thanh tiêu đề. Nửa dưới tab **Tiến trình** khi đó hiện dạng cây mọi tiến trình
    engine đang thực sự áp dụng, tiến trình con nhận theo **Cả tiến trình con** nằm lồng dưới tiến
    trình đã sinh ra nó. Tab **Kết nối** hiện từng kết nối kèm tên miền, đường ra và số byte.

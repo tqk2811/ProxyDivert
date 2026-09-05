@@ -144,16 +144,53 @@ Cột của `DataGrid` (`DataGridComboBoxColumn`, `DataGridTextColumn`...) khôn
 
 ## Kiểu so khớp của luật tiến trình
 
-Một luật tiến trình có hai ô, mỗi ô gồm combo chọn kiểu so khớp và ô nhập giá trị. Bộ kiểu lấy theo mẫu ProxyRouterWpf (`ProxySourceGroupFilterType`), bỏ hai kiểu chỉ dành cho nguồn proxy là `CidrIp` và `TotalBytes`.
+Một điều kiện gồm ba phần: combo **đối tượng** (soi cái gì), combo **kiểu so khớp**, và ô giá trị. Combo đối tượng quyết định combo so khớp hiển thị bộ nào — vì hai bộ thật sự khác nhau, command line không phải đường dẫn. Bộ kiểu lấy theo mẫu ProxyRouterWpf (`ProxySourceGroupFilterType`), bỏ hai kiểu chỉ dành cho nguồn proxy là `CidrIp` và `TotalBytes`.
 
-Ô tiến trình: `Tên tệp chạy` (bỏ đuôi .exe hai bên), `Đường dẫn đầy đủ`, `Ký tự đại diện`, `Bắt đầu bằng`, `Kết thúc bằng`, `Có chứa`, `Regex`. Ba kiểu đầu chỉ soi đúng thứ chúng nói; bốn kiểu sau soi CẢ đường dẫn đầy đủ LẪN tên tệp chạy và khớp cái nào cũng tính — nếu chỉ soi đường dẫn thì `Có chứa chrome` vô dụng với mọi tiến trình Windows không cho đọc đường dẫn, còn nếu chỉ soi tên thì không viết nổi `Bắt đầu bằng C:Games`.
+Đối tượng `Tiến trình`: `Tên tệp chạy` (bỏ đuôi .exe hai bên), `Đường dẫn đầy đủ`, `Ký tự đại diện`, `Bắt đầu bằng`, `Kết thúc bằng`, `Có chứa`, `Regex`. Ba kiểu đầu chỉ soi đúng thứ chúng nói; bốn kiểu sau soi CẢ đường dẫn đầy đủ LẪN tên tệp chạy và khớp cái nào cũng tính — nếu chỉ soi đường dẫn thì `Có chứa chrome` vô dụng với mọi tiến trình Windows không cho đọc đường dẫn, còn nếu chỉ soi tên thì không viết nổi `Bắt đầu bằng C:Games`.
 
-Ô argument: `Có chứa` (mặc định), `Ký tự đại diện`, `Khớp chính xác`, `Bắt đầu bằng`, `Kết thúc bằng`, `Regex` — tất cả trên toàn bộ command line.
+Đối tượng `Argument`: `Có chứa` (mặc định), `Ký tự đại diện`, `Khớp chính xác`, `Bắt đầu bằng`, `Kết thúc bằng`, `Regex` — tất cả trên toàn bộ command line.
 
-Cả `Ký tự đại diện` lẫn `Regex` đều chạy qua `Regex.IsMatch` với hạn 100ms và bắt cả lỗi biên dịch lẫn quá hạn: mẫu do người dùng gõ, chạy trên mọi tiến trình mỗi lượt quét, nên một biểu thức backtrack thảm hoạ sẽ treo watcher. Mẫu hỏng thì khớp rỗng, không ném lỗi.
+Cả `Ký tự đại diện` lẫn `Regex` đều chạy qua `Regex.IsMatch` với hạn 100ms **tính cho cả lần đánh giá một bộ lọc**, không phải cho từng mẫu: cây hai chục lá regex mà mỗi lá được 100ms là hai giây cho mỗi tiến trình mỗi lượt quét. Mẫu do người dùng gõ, chạy trên mọi tiến trình mỗi lượt quét, nên một biểu thức backtrack thảm hoạ sẽ treo watcher. Mẫu hỏng hoặc quá hạn cho kết quả `Unknown` (xem mục logic ba trạng thái), không ném lỗi.
 
 ## Luật theo argument (command line)
 
-Điều kiện thứ hai trên cùng một luật tiến trình, AND với điều kiện tên/đường dẫn: tiến trình phải khớp CẢ hai mới được nhận. Để trống thì không xét, nên luật viết từ trước khi có tính năng này giữ nguyên ý nghĩa. Dùng để tách một chương trình trong nhiều cái cùng chạy từ một tệp — `java.exe` thì có nhiều, nhưng chỉ cái có `minecraft` trong command line mới là game.
+Điều kiện soi toàn bộ command line, một loại lá trong cây điều kiện của bộ lọc. Dùng để tách một chương trình trong nhiều cái cùng chạy từ một tệp — `java.exe` thì có nhiều, nhưng chỉ cái có `minecraft` trong command line mới là game.
 
-Đọc command line của tiến trình khác tốn một truy vấn WMI (`Win32_Process.CommandLine`), nên engine chỉ trả phí đó khi có ít nhất một luật đang bật điền ô này. Command line không đọc được (tiến trình hệ thống, tiến trình của tài khoản khác) thì coi như KHÔNG khớp — hướng an toàn, vì luật đã nói rõ chỉ mình tên tiến trình là chưa đủ.
+Đọc command line của tiến trình khác tốn một truy vấn WMI (`Win32_Process.CommandLine`), nên engine chỉ trả phí đó khi có ít nhất một bộ lọc đang bật chứa một lá loại này có điền giá trị — `ProcessRuleMatcher.NeedsCommandLine` duyệt cả cây để biết. Command line không đọc được (tiến trình hệ thống, tiến trình của tài khoản khác) cho kết quả `Unknown`, và bộ lọc không áp dụng — hướng an toàn.
+
+## Bộ lọc tiến trình (tên → điều kiện → hành động)
+
+Hình dạng của `ProcessRule` từ config v3: một cái **tên** người dùng tự đặt, một **cây điều kiện**, và **hành động** (policy nào + có bám theo tiến trình con không). Tên tồn tại vì một cây điều kiện không còn đọc lướt qua trong ô lưới được nữa — "Minecraft" thì được, còn cây thì nằm sau một cú bấm.
+
+Lưới ở tab Tiến trình vì thế còn: bật/tắt, tên, câu tóm tắt điều kiện, policy, nút Sửa. Câu tóm tắt do `ConditionTextBuilder` dựng, có dịch, nên cột đó phải bind qua `LocalizationScope.Version` mới đổi theo ngôn ngữ.
+
+## Cây điều kiện (ConditionGroup / LeafCondition)
+
+Cấu trúc đệ quy thay cho hai ô cố định của v2. Nút gốc trừu tượng `ProcessCondition` mang cờ `Negate`; `ConditionGroup` có `Operator` (`All`/`Any`) và danh sách con; các lá (`ProcessNameCondition`, `CommandLineCondition`) mang kiểu so khớp và giá trị. Lưu bằng `[JsonPolymorphic]` với khoá phân biệt `kind` — chuỗi `group`/`process`/`commandLine` là **định dạng file**, không đổi tên được.
+
+Toán tử nằm ở nhóm chứ không nằm giữa hai dòng: đó là lý do giao diện không phải một ô gõ biểu thức trá hình, vì không có toán tử nào để đặt giữa hai dòng thì cũng không có độ ưu tiên nào để nhầm. Thêm loại đối tượng mới (tiến trình cha, tài khoản, tiêu đề cửa sổ) = thêm một lớp lá và một dòng `[JsonDerivedType]`.
+
+Migration v2→v3 ở `ConfigStore.Migrate`: hai ô cũ thành một nhóm `All` gồm lá tiến trình, cộng lá argument nếu ô argument có điền. Ô argument rỗng KHÔNG sinh ra dòng nào — nó vốn không được xét, và một bộ lọc chưa ai đụng tới thì không nên mở ra trông như đang sửa dở.
+
+## Logic ba trạng thái khi đánh giá điều kiện (ConditionResult)
+
+`ConditionResult` có bốn giá trị chứ không phải bool, và hai trong bốn là thứ giữ cho bộ lọc không tóm cả máy:
+
+* `Unknown` — dữ liệu không đọc được (command line của tiến trình hệ thống, đường dẫn của tiến trình 64-bit nhìn từ host 32-bit), hoặc mẫu regex hỏng/quá hạn. `NOT` **không** đảo nó. Nếu đảo thì `argument KHÔNG chứa X` sẽ đúng với mọi tiến trình không đọc được command line — tức gần như toàn bộ hệ thống.
+* `Ignored` — dòng chưa điền giá trị. Không kéo nhóm xuống "không" lúc người dùng đang gõ dở, cũng không nâng nhóm lên "có".
+* Nhóm gộp theo kiểu Kleene: `All` gặp một `NoMatch` là chốt không; còn lại hễ có `Unknown` thì cả nhóm `Unknown`. `Any` gặp một `Match` là chốt có, kể cả khi bên cạnh có `Unknown`.
+* Ở gốc, chỉ `Match` mới là áp dụng bộ lọc. `Ignored` (chưa điền gì) và `Unknown` đều là không áp dụng — cùng hướng an toàn mà bản hai ô đã chọn.
+
+Độ sâu cây bị chặn ở `ProcessRuleMatcher.MaxDepth` (16) khi nạp: giao diện không dựng nổi cây sâu vậy, nhưng file config sửa tay thì có, và đệ quy phải dừng trước khi stack dừng. Quá sâu trả `Unknown`, không phải `Match`.
+
+## DNF (dạng chuẩn tuyển, disjunctive normal form)
+
+Biểu thức boolean viết thành "OR của các nhóm AND": `(a AND b) OR (c AND d) OR e`. Mọi biểu thức boolean đều quy được về dạng này, nên UI chỉ cần đúng hai tầng — danh sách nhóm, trong mỗi nhóm là danh sách điều kiện — mà vẫn diễn đạt được mọi thứ, không cần cấu trúc đệ quy. Giá phải trả là có biểu thức nở ra dài hơn khi khai triển: `a AND (b OR c)` phải viết thành `(a AND b) OR (a AND c)`.
+
+## Query builder (bộ dựng điều kiện lồng nhau)
+
+Kiểu giao diện cho biểu thức boolean tuỳ ý: mỗi nút là một nhóm có toán tử AND/OR của riêng nó, con của nhóm là điều kiện lá hoặc nhóm con, kèm nút "+ điều kiện" / "+ nhóm". Quen thuộc từ luật của Outlook, bộ lọc Notion, JQL builder của Jira. Diễn đạt được mọi biểu thức kể cả lồng sâu, nhưng model, phần lưu file, bộ so khớp và cả UI đều phải viết đệ quy.
+
+## Cây biểu thức (AST) và parser điều kiện
+
+Cách thứ ba: cho gõ thẳng chuỗi điều kiện (`exe = "java.exe" and args contains "minecraft" or exe = "chrome.exe"`), rồi parser dựng cây biểu thức (AST — abstract syntax tree) để so khớp. Gọn và mạnh nhất cho người dùng thạo, nhưng phải tự viết parser, tự báo lỗi cú pháp ở đúng vị trí, và người dùng phải học cú pháp — thường làm thêm ở "chế độ nâng cao" chứ không thay cho giao diện bấm chọn.
