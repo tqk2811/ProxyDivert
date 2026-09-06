@@ -254,3 +254,7 @@ Câu hỏi chỉ được đặt **một lần cho mỗi luồng**, lúc luồng
 ## Matcher `Protocol` (lọc theo tcp/udp)
 
 Kiểu so khớp luật nhìn vào **giao thức tầng vận chuyển**, pattern là `tcp` hoặc `udp`. Khác mọi matcher theo tên ở chỗ nó **luôn có dữ liệu để so**: không cần SNI, không cần bảng DNS ngược, không cần bắt tay xong. Đây là cách duy nhất viết được luật kiểu "toàn bộ UDP của tiến trình này", gồm cả DNS — thứ mà `Wildcard *` cũng bỏ sót vì gói DNS không mang tên miền nào cả. Pattern không phải `tcp`/`udp` thì **không khớp gì hết** (chứ không phải khớp tất cả): gõ sai một luật phải mất tác dụng, không được âm thầm ôm luôn traffic mà luật đó sinh ra để loại trừ.
+
+## Luồng thoát (escaped flow)
+
+Kết nối TCP mà bắt tay (SYN) đã diễn ra **trước khi** công cụ kịp giành lấy nó — tiến trình được attach khi đã có socket mở, hoặc sự kiện tầng SOCKET thua cuộc đua với gói SYN (xem [rò rỉ SYN](#L37)). Luồng như vậy **không bao giờ được chuyển hướng giữa chừng**: nửa kết nối qua relay, nửa đi thẳng là chết kết nối. `NatRedirectMiddleware` chỉ có hai lựa chọn cho nó: **cho qua** (mặc định — kết nối sống nhưng lộ IP thật tới đích đó, ghi cảnh báo "passing escaped flow" một lần mỗi luồng) hoặc **thả** (`RedirectOptions.BlockEscapedFlows` = true — không rò rỉ gì, ứng dụng thấy kết nối chết và mở kết nối mới, kết nối mới được bắt từ SYN).
