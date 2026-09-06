@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using ProxyDivert.Core.Configuration;
 using ProxyDivert.Core.Configuration.Models;
@@ -42,23 +43,33 @@ public sealed class AppServices : IDisposable
 
     private readonly AppLoggerProvider _loggerProvider;
 
-    // The file THIS run auto-logs to, or null when auto-save is off. Computed once and kept,
-    // because the name carries a timestamp: recomputing it on every Save would scatter a run's
-    // trace across a new file per keystroke.
-    private string? _autoLogPath;
+    // True while auto-save is on. The path itself is derived from the clock rather than stored,
+    // because it names an HOUR: everything logged between 14:00 and 15:00 belongs in one file, no
+    // matter how many times the engine is started or the settings are saved in between.
+    private bool _autoSaveLog;
+
+    // Rolls the file over when the hour turns. Nothing else notices the clock, so without this a
+    // long-running session would keep writing to the hour it happened to start in.
+    private readonly Timer _logRollTimer;
 
     /// <summary>
-    /// Where the trace actually goes: this run's timestamped file when auto-save is on, otherwise
-    /// the path the user pinned, otherwise nowhere.
+    /// Where the trace actually goes: this hour's file when auto-save is on, otherwise the path the
+    /// user pinned, otherwise nowhere.
     /// </summary>
     public string? EffectiveLogPath
-        => _autoLogPath ?? (string.IsNullOrWhiteSpace(Config.DiagnosticLogPath) ? null : Config.DiagnosticLogPath);
+        => _autoSaveLog
+            ? BuildAutoLogPath()
+            : (string.IsNullOrWhiteSpace(Config.DiagnosticLogPath) ? null : Config.DiagnosticLogPath);
 
-    /// <summary>A fresh <c>Logs\yyyyMMdd-HHmmss.log</c> beside the executable.</summary>
+    /// <summary>
+    /// This hour's <c>Logs\yyyyMMdd-HH.log</c> beside the executable. One file per hour, appended
+    /// to: a run that spans 14:59 to 15:01 leaves two files, and two runs inside the same hour
+    /// share one instead of the second one hiding the first.
+    /// </summary>
     public static string BuildAutoLogPath()
         => Path.Combine(
             AppContext.BaseDirectory, "Logs",
-            FormattableString.Invariant($"{DateTime.Now:yyyyMMdd-HHmmss}.log"));
+            FormattableString.Invariant($"{DateTime.Now:yyyyMMdd-HH}.log"));
 
     public AppServices(string? configPath = null)
     {
@@ -66,7 +77,7 @@ public sealed class AppServices : IDisposable
         // that carries the logging is built.
         ConfigStore = new ConfigStore(configPath);
         Config = ConfigStore.Load();
-        if (Config.AutoSaveLog) _autoLogPath = BuildAutoLogPath();
+        _autoSaveLog = Config.AutoSaveLog;
 
         _provider = new ServiceCollection()
             .AddProxyDivert(EffectiveLogPath)
@@ -75,20 +86,32 @@ public sealed class AppServices : IDisposable
         Logs = _provider.GetRequiredService<InMemoryLogStore>();
         _loggerProvider = _provider.GetRequiredService<AppLoggerProvider>();
         Engine = _provider.GetRequiredService<RedirectEngine>();
+
+        // Checked every minute rather than scheduled for the exact turn of the hour: SetFilePath
+        // is a no-op when the path has not changed, so the cost of asking is nothing and there is
+        // no wake-up to get wrong across sleep, a clock change or a daylight-saving jump.
+        _logRollTimer = new Timer(_ => RollLogFileIfNeeded(), null,
+            TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+    }
+
+    private void RollLogFileIfNeeded()
+    {
+        try { _loggerProvider.SetFilePath(EffectiveLogPath); }
+        catch { /* the trace file is never worth taking the application down for */ }
     }
 
     public void Save() => ConfigStore.Save(Config);
 
     /// <summary>
-    /// Turns the per-run trace file on or off, and starts writing at once rather than at the next
-    /// Save — the switch is flicked precisely because the next few seconds are the interesting
-    /// ones. Turning it on again later opens a NEW file, so two attempts at reproducing something
-    /// do not overwrite each other.
+    /// Turns the trace file on or off, and starts writing at once rather than at the next Save —
+    /// the switch is flicked precisely because the next few seconds are the interesting ones.
+    /// Turning it on again inside the same hour appends to that hour's file, so two attempts at
+    /// reproducing something end up in one readable sequence instead of overwriting each other.
     /// </summary>
     public void SetAutoSaveLog(bool enabled)
     {
         Config.AutoSaveLog = enabled;
-        _autoLogPath = enabled ? BuildAutoLogPath() : null;
+        _autoSaveLog = enabled;
         Save();
         _loggerProvider.SetFilePath(EffectiveLogPath);
     }
@@ -109,6 +132,7 @@ public sealed class AppServices : IDisposable
 
     public void Dispose()
     {
+        _logRollTimer.Dispose();
         Engine.Dispose();
         _provider.Dispose();
     }

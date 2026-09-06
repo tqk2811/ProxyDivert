@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 
 namespace ProxyDivert.Core.Logging;
@@ -17,12 +19,27 @@ namespace ProxyDivert.Core.Logging;
 /// The file can be pointed somewhere else while the application runs — see
 /// <see cref="SetFilePath"/> — because the path is a user setting, and a setting the user cannot
 /// change without a restart is a worse setting.
+///
+/// Lines reach the file through a queue drained by one background thread. The callers that matter
+/// are the packet pump and the socket pump: a disk write on those threads is a stall the whole
+/// machine's traffic waits behind, so logging here never touches the disk on the caller's thread
+/// and never blocks. A flood past <see cref="QueueCapacity"/> is dropped rather than allowed to
+/// slow the packet path down or grow without bound — the in-memory store still has those lines.
 /// </remarks>
 public sealed class AppLoggerProvider : ILoggerProvider
 {
+    // Deep enough to swallow a burst from the packet path, small enough to stay bounded memory.
+    private const int QueueCapacity = 16384;
+
     private readonly object _fileLock = new object();
     private readonly InMemoryLogStore _store;
     private readonly LogLevel _minFileLevel;
+
+    private readonly BlockingCollection<string> _pending =
+        new BlockingCollection<string>(new ConcurrentQueue<string>(), QueueCapacity);
+    private readonly Thread _writerThread;
+    private volatile bool _disposed;
+    private long _dropped;
 
     private StreamWriter? _writer;
     private string? _filePath;
@@ -37,6 +54,15 @@ public sealed class AppLoggerProvider : ILoggerProvider
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _minFileLevel = minFileLevel;
+        _writerThread = new Thread(DrainLoop)
+        {
+            IsBackground = true,
+            Name = "ProxyDivert log writer",
+            // Below the packet pumps on purpose: writing the trace must never win CPU from the
+            // thing it is tracing.
+            Priority = ThreadPriority.BelowNormal,
+        };
+        _writerThread.Start();
         SetFilePath(filePath);
     }
 
@@ -60,12 +86,15 @@ public sealed class AppLoggerProvider : ILoggerProvider
             {
                 string? dir = Path.GetDirectoryName(filePath);
                 if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir!);
-                // Delete first: an editor holding a read handle would otherwise let stale bytes
-                // survive past the truncation FileMode.Create is supposed to perform.
-                try { if (File.Exists(filePath)) File.Delete(filePath); } catch { }
-                var fs = new FileStream(filePath!, FileMode.Create, FileAccess.Write, FileShare.Read);
-                _writer = new StreamWriter(fs) { AutoFlush = true };
+                // Append, never truncate: the file this path names is shared by every run that
+                // lands in the same hour, and a second run must add to the record rather than
+                // erase what the first one wrote.
+                var fs = new FileStream(filePath!, FileMode.Append, FileAccess.Write, FileShare.Read);
+                // AutoFlush off — the drain loop flushes when it runs out of lines, which batches a
+                // burst into one write instead of one syscall per line.
+                _writer = new StreamWriter(fs) { AutoFlush = false };
                 _writer.WriteLine($"=== ProxyDivert log opened {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} UTC ===");
+                _writer.Flush();
             }
             catch (Exception ex)
             {
@@ -83,10 +112,37 @@ public sealed class AppLoggerProvider : ILoggerProvider
         _store.Add(entry);
 
         if (entry.Level < _minFileLevel) return;
-        lock (_fileLock)
+        if (_disposed || _writer == null) return;
+
+        // Hand off and return. TryAdd never waits, so a caller on the packet path is not held up
+        // by the disk, and a burst past the queue's capacity is dropped instead of throttling it.
+        if (!_pending.TryAdd(entry.ToString()))
+            Interlocked.Increment(ref _dropped);
+    }
+
+    // The only thread that touches the file. Flushes when the queue momentarily empties, which is
+    // the natural batching point: under a burst it writes many lines per syscall, and when idle
+    // every line is on disk within one line's time.
+    private void DrainLoop()
+    {
+        foreach (string line in _pending.GetConsumingEnumerable())
         {
-            try { _writer?.WriteLine(entry.ToString()); }
-            catch { /* a full or disconnected disk must not break the packet path */ }
+            lock (_fileLock)
+            {
+                try
+                {
+                    if (_writer == null) continue;
+                    _writer.WriteLine(line);
+                    if (_pending.Count == 0)
+                    {
+                        long dropped = Interlocked.Exchange(ref _dropped, 0);
+                        if (dropped > 0)
+                            _writer.WriteLine($"=== {dropped} line(s) dropped: the log queue could not keep up ===");
+                        _writer.Flush();
+                    }
+                }
+                catch { /* a full or disconnected disk must not break the packet path */ }
+            }
         }
     }
 
@@ -105,7 +161,14 @@ public sealed class AppLoggerProvider : ILoggerProvider
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        // Let the drain loop finish what is already queued, then close the file. A bounded wait,
+        // because a log file must not be what keeps the application from exiting.
+        try { _pending.CompleteAdding(); } catch { }
+        try { _writerThread.Join(TimeSpan.FromSeconds(2)); } catch { }
         lock (_fileLock) CloseWriter();
+        try { _pending.Dispose(); } catch { }
     }
 
     private sealed class StoreLogger : ILogger
