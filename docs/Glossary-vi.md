@@ -353,3 +353,18 @@ Cách chia trách nhiệm (sửa 2026-09-07):
 - Ngược lại, đường hầm đang có bộ lọc chạy qua thì nút Disconnect bị khoá: ngắt nó sẽ làm mọi kết nối bộ lọc đó bắt được rơi vào lỗi mà trên màn hình không có gì giải thích.
 
 **Bẫy đi kèm**: `KeptVpnTunnel.Dispose` phải gọi `_factory.Invalidate(outboundId)`. Trước đây `Engine.Stop` dispose cả factory nên không ai để ý; bỏ chỗ đó đi mà không invalidate thì "Disconnect" chỉ dừng vòng giám sát, còn tiến trình `wireproxy` vẫn chạy và vẫn nói chuyện với máy chủ VPN.
+
+## Hai cách phát hiện tiến trình (sự kiện tiến trình / nghe socket)
+
+Câu hỏi công cụ phải trả lời là "traffic này có thuộc luật nào không", mà luật thì mô tả **tiến trình**. Có hai đường đi tới câu trả lời, người dùng chọn ở tab Cài đặt và **khoá khi engine đang bật**.
+
+**1. Sự kiện tiến trình** (mặc định). Đợi hệ điều hành báo có tiến trình mới, đối chiếu bộ lọc, khớp thì attach. Nguồn sự kiện lại có hai lựa chọn con, đứng sau `IProcessEventSource`:
+- **ETW** — đọc thẳng provider `Microsoft-Windows-Kernel-Process` (keyword `0x0010`, EventId 1/2) bằng một phiên trace riêng tên `ProxyDivert-Process`. Sự kiện tới trong khoảng 1ms.
+- **WMI** — `Win32_ProcessStartTrace`/`StopTrace`, chính là sự kiện ETW đó sau khi dịch vụ WMI gói lại; thêm một dịch vụ và một chặng COM, và sự kiện của một watcher được giao **lần lượt từng cái**.
+Nguồn nào không khởi động được thì tự lùi sang nguồn kia, rồi mới tới quét định kỳ 750ms.
+
+**2. Nghe socket** (`ProcessDetectionMode.NetworkSniff`). Mở **một** handle WinDivert lớp SOCKET cho cả máy (filter `tcp or udp`, bắt buộc `Sniff | RecvOnly` — xem `SocketTracker.OpenMachineWideHandle`), mỗi sự kiện đã mang sẵn `ProcessId`. Với pid chưa gặp, `RedirectOptions.ShouldTrackProcess` hỏi ngược lên `ProcessRuleTracker.ShouldRedirect`: đọc thông tin tiến trình (`ProcessInventory.EnsureKnown`, quét máy có tiết chế 50ms), khớp bộ lọc, không khớp thì **lần ngược chuỗi cha** tới tổ tiên đang được theo dõi. Câu trả lời được cache theo pid; trả về `null` nghĩa là "chưa đọc được" và **không** cache, nếu không một tiến trình vừa sinh sẽ bị loại vĩnh viễn. Mode này không cần sự kiện tiến trình nên WMI/ETW đều tắt, bảng process chỉ còn quét định kỳ.
+
+Đánh đổi: cách 1 attach sớm hơn (ngay khi tiến trình sinh ra, trước cả kết nối đầu) nhưng phụ thuộc sự kiện tới kịp; cách 2 xét đúng lúc mở kết nối và chỉ tốn 1 handle thay vì mỗi pid một handle, nhưng lớp SOCKET chỉ nghe được chứ không giữ được nên SYN vẫn có thể ra trước quyết định — lúc đó `TryReconcileFromKernel` tra bảng kernel để bắt lại.
+
+**Bẫy đã sửa cùng đợt**: `AttachChild` tạo tiến trình con với `includeChildren = false`, nên **cháu không bao giờ được nhận** — cây con dừng đúng một tầng, dù `AdoptChildren` tự mô tả là đi hết cây. Con nay kế thừa `IncludeChildren` của cha.

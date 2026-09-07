@@ -10,6 +10,7 @@ using ProxyDivert.Core.DependencyInjection;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Logging;
 using ProxyDivert.Core.Processes;
+using ProxyDivert.Core.Processes.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn;
 
@@ -129,7 +130,8 @@ public sealed class AppServices : IDisposable
         // Before anything else asks: collecting is what makes starting the engine cheap, and the
         // first sweep is about thirty milliseconds, so it is done here rather than deferred.
         Processes = _provider.GetRequiredService<ProcessInventory>();
-        Processes.UseEventSource(Config.ProcessEventSource);
+        Processes.UseEventSource(
+            Config.ProcessDetection == ProcessDetectionMode.ProcessEvents ? Config.ProcessEventSource : null);
         Processes.Start();
 
         // Checked every minute rather than scheduled for the exact turn of the hour: SetFilePath

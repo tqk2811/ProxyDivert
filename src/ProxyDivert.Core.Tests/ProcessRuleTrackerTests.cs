@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -278,5 +278,88 @@ public class ProcessRuleTrackerTests
         // No filter claims it, so no filter edit can take it away.
         Assert.Empty(fixture.Detached);
         Assert.Equal(new[] { ProxyPolicy }, fixture.Tracker.BuildPolicyMap()[100]);
+    }
+
+    // ---- socket-sniffing mode: judged from a pid, not from a process event -------------------
+
+    // The mode's whole decision. Nothing has told the tracker this process exists; the only thing
+    // known about it is the pid that came off a socket event.
+    [Fact]
+    public void ShouldRedirect_says_yes_for_a_process_a_filter_describes()
+    {
+        using var fixture = new Fixture();
+        fixture.Tracker.Start(new[] { Rule("chrome.exe", DirectPolicy) }, attachFromProcessEvents: false);
+        fixture.Machine.Start(100, "chrome.exe");
+
+        Assert.True(fixture.Tracker.ShouldRedirect(100));
+        // Saying yes attaches it, so the engine hears about it exactly as it would have from an event.
+        Assert.Equal(new uint[] { 100 }, fixture.Attached.Select(pr => pr.ProcessId));
+    }
+
+    [Fact]
+    public void ShouldRedirect_says_no_for_a_process_no_filter_describes()
+    {
+        using var fixture = new Fixture();
+        fixture.Tracker.Start(new[] { Rule("chrome.exe", DirectPolicy) }, attachFromProcessEvents: false);
+        fixture.Machine.Start(100, "notepad.exe");
+
+        Assert.False(fixture.Tracker.ShouldRedirect(100));
+        Assert.Empty(fixture.Attached);
+    }
+
+    // A pid the machine has never had. Answering "no" would be a lie that sticks: the caller caches
+    // it, and a process created a moment ago would be written off for the rest of its life.
+    [Fact]
+    public void ShouldRedirect_says_dont_know_for_a_process_it_cannot_read()
+    {
+        using var fixture = new Fixture();
+        fixture.Tracker.Start(new[] { Rule("chrome.exe", DirectPolicy) }, attachFromProcessEvents: false);
+
+        Assert.Null(fixture.Tracker.ShouldRedirect(4242));
+    }
+
+    // The browser tab that connects before anything has looked at it: its own name matches nothing,
+    // and the grandparent is what makes it ours.
+    [Fact]
+    public void ShouldRedirect_follows_the_parent_chain_to_a_tracked_ancestor()
+    {
+        using var fixture = new Fixture();
+        fixture.Machine
+            .Start(100, "chrome.exe")
+            .Start(200, "chrome_helper.exe", parentPid: 100)
+            .Start(300, "chrome_tab.exe", parentPid: 200);
+        fixture.Inventory.Refresh();
+        fixture.Tracker.Start(new[] { Rule("chrome.exe", DirectPolicy) }, attachFromProcessEvents: false);
+
+        // The root has to be ours first — in the real thing that happens when IT opens a socket.
+        Assert.True(fixture.Tracker.ShouldRedirect(100));
+
+        Assert.True(fixture.Tracker.ShouldRedirect(300));
+        Assert.Equal(new[] { DirectPolicy }, fixture.Tracker.BuildPolicyMap()[300]);
+        // Adopted down the chain, so the middle process is ours too rather than being skipped over.
+        Assert.Contains(200u, fixture.Tracker.BuildPolicyMap().Keys);
+    }
+
+    [Fact]
+    public void ShouldRedirect_never_says_yes_to_this_process()
+    {
+        using var fixture = new Fixture();
+        fixture.Tracker.Start(new[] { Rule("*", DirectPolicy) }, attachFromProcessEvents: false);
+
+        Assert.False(fixture.Tracker.ShouldRedirect((uint)Environment.ProcessId));
+    }
+
+    // In this mode the table's start events are not what attaches anything — the socket is. A
+    // process that merely starts must therefore stay untouched until it connects.
+    [Fact]
+    public void In_sniffing_mode_a_process_starting_attaches_nothing()
+    {
+        using var fixture = new Fixture();
+        fixture.Tracker.Start(new[] { Rule("chrome.exe", DirectPolicy) }, attachFromProcessEvents: false);
+
+        fixture.Machine.Start(100, "chrome.exe");
+        fixture.Inventory.Refresh();
+
+        Assert.Empty(fixture.Attached);
     }
 }

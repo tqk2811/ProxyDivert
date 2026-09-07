@@ -126,6 +126,14 @@
     <sys:String x:Key="Str.Settings.WireProxyHint">Chỉ cần cho đường ra VPN: wireproxy chạy đường hầm WireGuard ở tầng ứng dụng, không tạo card mạng ảo. Bỏ trống thì tìm cạnh ProxyDivert.exe rồi tới PATH.</sys:String>
     <sys:String x:Key="Str.Settings.EventSource">Cách phát hiện tiến trình</sys:String>
     <sys:String x:Key="Str.Settings.EventSourceHint">Cách công cụ biết một tiến trình vừa khởi động, tức thứ quyết định traffic của nó được chuyển hướng sớm hay muộn. Khoá khi WinDivert đang bật.</sys:String>
+    <sys:String x:Key="Str.Settings.DetectionProcessEvents">Sự kiện tiến trình</sys:String>
+    <sys:String x:Key="Str.Settings.DetectionProcessEventsTip">Chờ được báo là có tiến trình vừa khởi động, rồi đối chiếu bộ lọc.
+Lợi: tiến trình khớp luật được đặt dưới chuyển hướng trước khi nó kịp làm gì, nên bắt được cả kết nối đầu tiên.
+Hại: phụ thuộc vào việc sự kiện tới kịp. Chương trình vừa chạy đã kết nối ngay có thể nhanh hơn thông báo, và kết nối đầu của nó đi ra bằng địa chỉ thật của máy cho tới khi luồng bị reset.</sys:String>
+    <sys:String x:Key="Str.Settings.DetectionNetworkSniff">Nghe socket (lớp SOCKET của WinDivert)</sys:String>
+    <sys:String x:Key="Str.Settings.DetectionNetworkSniffTip">Nghe mọi socket trên máy và xét theo process id mà mỗi sự kiện mang sẵn.
+Lợi: không cần ai báo trước — tiến trình được xét đúng lúc nó mở kết nối, tức đúng thời điểm có ý nghĩa; và chỉ tốn một handle WinDivert thay vì mỗi tiến trình một handle. Mode này không cần sự kiện tiến trình nên WMI và ETW đều tắt.
+Hại: công cụ thấy sự kiện socket của mọi chương trình trên máy (chỉ metadata, không có dữ liệu gói), và kết nối đầu tiên vẫn là một cuộc đua — lớp SOCKET chỉ nghe được chứ không giữ được, nên SYN có thể ra tới mạng trước khi quyết định xong; lúc đó phải tra bảng kernel để bắt lại.</sys:String>
     <sys:String x:Key="Str.Settings.EventSourceEtw">ETW (nguồn của kernel)</sys:String>
     <sys:String x:Key="Str.Settings.EventSourceEtwTip">Đọc thẳng Microsoft-Windows-Kernel-Process.
 Lợi: sự kiện tới trong khoảng một mili giây kể từ lúc kernel tạo tiến trình, ngay trong tiến trình này, không qua dịch vụ trung gian — nên kết nối đầu tiên của chương trình dễ bắt được hơn.

@@ -239,3 +239,5 @@ tầng dựng trên nó.
 - **x64 only**, cần Administrator, Windows 10/11.
 - **GitVersion trong submodule Proxy** khi build Release: kiểm chứng ở bước 0.
 - **Xung đột `Directory.Packages.props`**: mỗi submodule có file riêng trong `src/`, tool đặt file của mình trong `src/` của tool; không đặt ở gốc.
+
+**Hai cách phát hiện tiến trình ĐÃ XONG (07/09/2026).** Trước đó chỉ có một đường: WMI báo tiến trình mới → khớp bộ lọc → attach. Nay người dùng chọn ở tab Cài đặt (khoá khi engine bật): **sự kiện tiến trình** với nguồn ETW hoặc WMI đứng sau `IProcessEventSource`, hoặc **nghe socket** — một handle WinDivert lớp SOCKET cho cả máy, xét từng pid ngay khi nó mở kết nối rồi lần ngược chuỗi cha. Chi tiết, đánh đổi và bẫy `includeChildren` ở [Hai cách phát hiện tiến trình](Glossary-vi.md#L357).

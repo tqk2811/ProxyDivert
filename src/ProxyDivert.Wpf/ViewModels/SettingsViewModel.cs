@@ -42,6 +42,37 @@ public sealed partial class SettingsViewModel : ObservableObject
         _language = LocalizationManager.Parse(services.Config.Language);
         _startWithWindows = services.Config.StartWithWindows;
         _eventSource = services.Config.ProcessEventSource;
+        _detection = services.Config.ProcessDetection;
+    }
+
+    // How a process is found at all. The event source below only means anything under the first of
+    // these; the second hears the machine's sockets instead and needs no process events, which is
+    // why picking it stops them.
+    private ProcessDetectionMode _detection;
+
+    public bool UsesProcessEvents
+    {
+        get => _detection == ProcessDetectionMode.ProcessEvents;
+        set { if (value) SetDetection(ProcessDetectionMode.ProcessEvents); }
+    }
+
+    public bool UsesNetworkSniff
+    {
+        get => _detection == ProcessDetectionMode.NetworkSniff;
+        set { if (value) SetDetection(ProcessDetectionMode.NetworkSniff); }
+    }
+
+    private void SetDetection(ProcessDetectionMode mode)
+    {
+        if (_detection == mode) return;
+
+        _detection = mode;
+        _services.Config.ProcessDetection = mode;
+        _services.Save();
+        ApplyEventSource();
+
+        OnPropertyChanged(nameof(UsesProcessEvents));
+        OnPropertyChanged(nameof(UsesNetworkSniff));
     }
 
     // Which source the process table listens to. Two booleans rather than the enum itself because
@@ -78,11 +109,18 @@ public sealed partial class SettingsViewModel : ObservableObject
         _eventSource = kind;
         _services.Config.ProcessEventSource = kind;
         _services.Save();
-        _services.Processes.UseEventSource(kind);
+        ApplyEventSource();
 
         OnPropertyChanged(nameof(UsesEtw));
         OnPropertyChanged(nameof(UsesWmi));
     }
+
+    // Null while sniffing: the table then keeps itself current by sweeping, which is all it is
+    // needed for there — the sweep is what retires a process that has exited, and the path and
+    // parent of a new one are read on demand when its first connection asks about it.
+    private void ApplyEventSource()
+        => _services.Processes.UseEventSource(
+            _detection == ProcessDetectionMode.ProcessEvents ? _eventSource : null);
 
     [ObservableProperty]
     private DnsMode _dnsMode;

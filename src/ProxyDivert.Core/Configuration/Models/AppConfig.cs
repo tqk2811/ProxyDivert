@@ -39,6 +39,11 @@ public sealed class AppConfig
     // it is the same binary whichever tunnel it runs.
     public string? WireProxyPath { get; set; }
 
+    // How a process is found in the first place: from a process event, or from the socket it
+    // opens. See ProcessDetectionMode — the second one judges a pid at the moment it connects,
+    // which is later than a process event but tells us about a process that connects immediately.
+    public ProcessDetectionMode ProcessDetection { get; set; } = ProcessDetectionMode.ProcessEvents;
+
     // Where the process table hears about processes starting and stopping. ETW is the kernel's own
     // provider and the shortest path; WMI is the same events after a service has repackaged them,
     // kept for a machine where a trace session cannot be created. A source that will not start

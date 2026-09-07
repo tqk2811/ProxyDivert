@@ -33,16 +33,33 @@
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,8" TextWrapping="Wrap"
                                Text="{DynamicResource Str.Settings.EventSourceHint}"/>
 
-                    <RadioButton GroupName="ProcessEventSource" Margin="0,0,0,4"
-                                 Content="{DynamicResource Str.Settings.EventSourceEtw}"
+                    <RadioButton GroupName="ProcessDetection" Margin="0,0,0,4"
+                                 Content="{DynamicResource Str.Settings.DetectionProcessEvents}"
                                  ToolTipService.ShowDuration="30000"
-                                 ToolTip="{DynamicResource Str.Settings.EventSourceEtwTip}"
-                                 IsChecked="{Binding UsesEtw}"/>
-                    <RadioButton GroupName="ProcessEventSource"
-                                 Content="{DynamicResource Str.Settings.EventSourceWmi}"
+                                 ToolTip="{DynamicResource Str.Settings.DetectionProcessEventsTip}"
+                                 IsChecked="{Binding UsesProcessEvents}"/>
+
+                    <!-- Indented because they are a choice INSIDE the one above, and dimmed while
+                         the other mode is picked: sniffing needs no process events at all, so the
+                         question of which one to use stops applying rather than changing answer. -->
+                    <StackPanel Margin="26,0,0,6" IsEnabled="{Binding UsesProcessEvents}">
+                        <RadioButton GroupName="ProcessEventSource" Margin="0,0,0,4"
+                                     Content="{DynamicResource Str.Settings.EventSourceEtw}"
+                                     ToolTipService.ShowDuration="30000"
+                                     ToolTip="{DynamicResource Str.Settings.EventSourceEtwTip}"
+                                     IsChecked="{Binding UsesEtw}"/>
+                        <RadioButton GroupName="ProcessEventSource"
+                                     Content="{DynamicResource Str.Settings.EventSourceWmi}"
+                                     ToolTipService.ShowDuration="30000"
+                                     ToolTip="{DynamicResource Str.Settings.EventSourceWmiTip}"
+                                     IsChecked="{Binding UsesWmi}"/>
+                    </StackPanel>
+
+                    <RadioButton GroupName="ProcessDetection"
+                                 Content="{DynamicResource Str.Settings.DetectionNetworkSniff}"
                                  ToolTipService.ShowDuration="30000"
-                                 ToolTip="{DynamicResource Str.Settings.EventSourceWmiTip}"
-                                 IsChecked="{Binding UsesWmi}"/>
+                                 ToolTip="{DynamicResource Str.Settings.DetectionNetworkSniffTip}"
+                                 IsChecked="{Binding UsesNetworkSniff}"/>
                 </StackPanel>
             </Border>
 

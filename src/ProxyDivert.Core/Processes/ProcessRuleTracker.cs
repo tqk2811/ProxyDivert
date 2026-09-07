@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -44,6 +44,7 @@ public sealed class ProcessRuleTracker : IDisposable
 
     private IReadOnlyList<ProcessRule> _rules = Array.Empty<ProcessRule>();
     private bool _started;
+    private bool _attachFromProcessEvents = true;
 
     /// <summary>A matched (or inherited) process appeared and should be redirected.</summary>
     public event Action<TrackedProcess>? ProcessAttached;
@@ -81,15 +82,22 @@ public sealed class ProcessRuleTracker : IDisposable
     /// already attached, and attaching twice does nothing. The other order would let a process slip
     /// through the gap.
     /// </remarks>
-    public void Start(IReadOnlyList<ProcessRule> rules)
+    /// <param name="attachFromProcessEvents">
+    /// Attach a process the moment the table reports it. False for the socket-sniffing mode, where
+    /// a process is judged from its own first connection instead — see <see cref="ShouldRedirect"/>.
+    /// Processes ENDING are always listened for either way: a tracked process that exits has to be
+    /// detached whichever way it was attached.
+    /// </param>
+    public void Start(IReadOnlyList<ProcessRule> rules, bool attachFromProcessEvents = true)
     {
         if (_started) throw new InvalidOperationException("Already started");
         _started = true;
+        _attachFromProcessEvents = attachFromProcessEvents;
 
         SetRules(rules);
-        MatchEverything();
+        if (attachFromProcessEvents) MatchEverything();
 
-        _inventory.ProcessStarted += OnProcessStarted;
+        if (attachFromProcessEvents) _inventory.ProcessStarted += OnProcessStarted;
         _inventory.ProcessStopped += OnProcessStopped;
     }
 
@@ -114,6 +122,70 @@ public sealed class ProcessRuleTracker : IDisposable
     /// Runs every process in the table past the filters. Nothing is read from the operating system:
     /// the table already holds the name, the path and the command line.
     /// </summary>
+    /// <summary>
+    /// Decides, for one process, whether its traffic belongs to us — reading the machine for it if
+    /// the table has never heard of it. True attaches it (raising <see cref="ProcessAttached"/>),
+    /// false leaves it alone, and null means the process could not be read at all, so the caller
+    /// should ask again rather than write it off.
+    /// </summary>
+    /// <remarks>
+    /// This is the socket-sniffing mode's whole decision: a pid arrives on a socket event, and the
+    /// answer is the same one a process event would have produced — the filters first, then the
+    /// tracked parents, so "and its children" still works for a browser tab that opens a connection
+    /// before anything has noticed the tab exists.
+    ///
+    /// Called on the redirector's pump thread, once per process rather than per connection.
+    /// </remarks>
+    public bool? ShouldRedirect(uint processId)
+    {
+        if (processId == 0 || processId == CurrentProcessId) return false;
+        if (_tracked.ContainsKey(processId)) return true;
+
+        ProcessSnapshot? process = _inventory.EnsureKnown(processId);
+        if (process is null) return null;
+
+        if (TryAttach(process)) return true;
+
+        // Not matched by a filter of its own: it may still be the child of something that was.
+        // The parent chain is walked here rather than trusted one level deep, because the process
+        // that opened the socket can be a grandchild nobody has looked at yet.
+        if (AttachToTrackedAncestor(process)) return true;
+
+        return false;
+    }
+
+    // Walks up from a process to the nearest tracked ancestor and adopts down from it, so a
+    // grandchild inherits even when its own parent was never examined. Bounded by the same pass
+    // limit as the tree walk: a pid handed out again can fake a cycle.
+    private bool AttachToTrackedAncestor(ProcessSnapshot process)
+    {
+        var chain = new List<ProcessSnapshot>();
+        ProcessSnapshot current = process;
+
+        for (int step = 0; step < MaxTreePasses; step++)
+        {
+            if (current.ParentProcessId == 0) return false;
+            if (!IsPlausibleParent(current)) return false;
+
+            chain.Add(current);
+            if (_tracked.ContainsKey(current.ParentProcessId)) break;
+
+            ProcessSnapshot? parent = _inventory.Get(current.ParentProcessId);
+            if (parent is null) return false;
+            current = parent;
+        }
+
+        if (chain.Count == 0 || !_tracked.ContainsKey(chain[chain.Count - 1].ParentProcessId))
+            return false;
+
+        // From the tracked ancestor downwards, so each step's parent is already tracked by the
+        // time AttachChild asks about it.
+        for (int i = chain.Count - 1; i >= 0; i--)
+            AttachChild(chain[i].ProcessId, chain[i].ParentProcessId);
+
+        return _tracked.ContainsKey(process.ProcessId);
+    }
+
     public void MatchEverything()
     {
         foreach (ProcessSnapshot process in _inventory.All) TryAttach(process);
@@ -174,7 +246,11 @@ public sealed class ProcessRuleTracker : IDisposable
             info?.ExecutablePath,
             matchedRule: null,               // inherited, not matched
             policyIds: parent.PolicyIds,
-            parentProcessId: parentPid);
+            parentProcessId: parentPid,
+            // The filter said "and its children", and a grandchild is one. Without passing this on
+            // an adopted process claimed no children of its own, so a tree stopped one level down:
+            // a launcher's browser was redirected and the browser's tabs were not.
+            includeChildren: parent.IncludeChildren);
 
         if (!_tracked.TryAdd(childPid, child)) return;
         _logger.LogInformation(
@@ -375,7 +451,7 @@ public sealed class ProcessRuleTracker : IDisposable
 
     public void Dispose()
     {
-        _inventory.ProcessStarted -= OnProcessStarted;
+        if (_attachFromProcessEvents) _inventory.ProcessStarted -= OnProcessStarted;
         _inventory.ProcessStopped -= OnProcessStopped;
         _tracked.Clear();
     }

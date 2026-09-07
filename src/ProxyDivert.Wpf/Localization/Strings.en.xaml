@@ -126,6 +126,14 @@
     <sys:String x:Key="Str.Settings.WireProxyHint">Needed only by VPN outbounds: wireproxy runs the WireGuard tunnel in user space, with no TUN adapter. Leave empty to look next to ProxyDivert.exe and then on PATH.</sys:String>
     <sys:String x:Key="Str.Settings.EventSource">Process detection</sys:String>
     <sys:String x:Key="Str.Settings.EventSourceHint">How the tool learns that a process has started, which is what decides how soon its traffic can be redirected. Locked while WinDivert is on.</sys:String>
+    <sys:String x:Key="Str.Settings.DetectionProcessEvents">Process events</sys:String>
+    <sys:String x:Key="Str.Settings.DetectionProcessEventsTip">Waits to be told that a process started, then reads the filters against it.
+Upside: a matching process is under redirection before it has done anything, so even its very first connection is captured.
+Downside: it depends on that event arriving in time. A program that connects the instant it starts can beat the notification, and its first connection then goes out with the machine's own address until the flow is reset.</sys:String>
+    <sys:String x:Key="Str.Settings.DetectionNetworkSniff">Network sniff (WinDivert SOCKET layer)</sys:String>
+    <sys:String x:Key="Str.Settings.DetectionNetworkSniffTip">Watches every socket on the machine and judges the process id each event carries.
+Upside: nothing has to announce the process first — it is judged the moment it connects, which is the moment that actually matters, and it costs one WinDivert handle instead of one per redirected process. Process events are not needed at all in this mode, so WMI and ETW are both switched off.
+Downside: the tool sees the socket events of every program on the machine (metadata only, no packet data), and the very first connection is still a race — the SOCKET layer can only sniff, so a SYN may reach the network before the decision is made; the kernel table is then consulted to catch it.</sys:String>
     <sys:String x:Key="Str.Settings.EventSourceEtw">ETW (kernel provider)</sys:String>
     <sys:String x:Key="Str.Settings.EventSourceEtwTip">Reads Microsoft-Windows-Kernel-Process directly.
 Upside: the event arrives within about a millisecond of the process being created, in this process, with no service in between — so a program's very first connection is more likely to be caught.

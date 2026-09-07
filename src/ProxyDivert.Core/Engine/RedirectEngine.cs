@@ -12,6 +12,7 @@ using ProxyDivert.Core.Engine.Models;
 using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Outbounds.Extensions;
 using ProxyDivert.Core.Processes;
+using ProxyDivert.Core.Processes.Enums;
 using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing;
 using ProxyDivert.Core.Routing.Enums;
@@ -143,6 +144,12 @@ public sealed class RedirectEngine : IDisposable
                 TcpConnectionHandler = HandleTcpAsync,
                 UdpDatagramHandler = HandleUdpDatagram,
                 ShouldRedirectUdp = ShouldRedirectUdpFlow,
+                // Socket-sniffing mode: the redirector listens to every process on the machine and
+                // asks this about each pid it has not seen. Left null in process-event mode, where
+                // the tracker names the pids instead.
+                ShouldTrackProcess = config.ProcessDetection == ProcessDetectionMode.NetworkSniff
+                    ? ShouldRedirectProcess
+                    : null,
             };
 
             _redirector = _redirectorFactory.Create(options);
@@ -155,7 +162,9 @@ public sealed class RedirectEngine : IDisposable
             _tracker = new ProcessRuleTracker(_loggerFactory.CreateLogger<ProcessRuleTracker>(), _inventory);
             _tracker.ProcessAttached += OnProcessAttached;
             _tracker.ProcessDetached += OnProcessDetached;
-            _tracker.Start(config.ProcessRules);
+            _tracker.Start(
+                config.ProcessRules,
+                attachFromProcessEvents: config.ProcessDetection == ProcessDetectionMode.ProcessEvents);
 
             IsRunning = true;
             _logger.LogInformation(
@@ -268,6 +277,10 @@ public sealed class RedirectEngine : IDisposable
             _cts = null;
         }
     }
+
+    // Asked by the redirector's socket pump, once per process. The tracker does the deciding; this
+    // only exists because the options are built before the tracker is.
+    private bool? ShouldRedirectProcess(uint processId) => _tracker?.ShouldRedirect(processId);
 
     // Rebuilds only the outbound instances the configuration has actually changed, and tells
     // everything keyed by outbound that theirs is gone. Shared by Start and ApplyConfig: an edit

@@ -68,6 +68,12 @@ public sealed class ProcessInventory : IDisposable
     // already done.
     private readonly object _reconcileLock = new object();
 
+    // Rate limit for EnsureKnown's sweeps. A sweep is ~12ms and answers for every process at once,
+    // so asking again a moment later would learn nothing new at the price of another 12ms on a
+    // thread that is holding up socket events.
+    private const int OnDemandSweepMinIntervalMs = 50;
+    private int _lastOnDemandTicks = int.MinValue;
+
     private readonly IProcessEventSourceFactory _eventSources;
 
     private IProcessEventSource? _events;
@@ -89,7 +95,12 @@ public sealed class ProcessInventory : IDisposable
     /// then to polling, so this says what was ASKED for and <see cref="ActiveEventSource"/> says
     /// what answered.
     /// </summary>
-    public ProcessEventSourceKind EventSource { get; private set; } = ProcessEventSourceKind.Etw;
+    /// <remarks>
+    /// Null means the table listens to nothing and is kept current by the sweep alone. That is not
+    /// a failure: it is what the socket-sniffing detection mode asks for, where a process is judged
+    /// from its own connection rather than from a process event.
+    /// </remarks>
+    public ProcessEventSourceKind? EventSource { get; private set; } = ProcessEventSourceKind.Etw;
 
     /// <summary>The source actually delivering events, or null while the table is polled.</summary>
     public ProcessEventSourceKind? ActiveEventSource { get; private set; }
@@ -111,15 +122,15 @@ public sealed class ProcessInventory : IDisposable
     /// the current source is torn down and the new one subscribed, and the table is reconciled
     /// afterwards so nothing that happened during the swap is lost.
     /// </summary>
-    public void UseEventSource(ProcessEventSourceKind kind)
+    public void UseEventSource(ProcessEventSourceKind? kind)
     {
-        if (EventSource == kind && (!_started || IsUsingEvents)) return;
+        if (EventSource == kind && (!_started || IsUsingEvents == kind.HasValue)) return;
 
         EventSource = kind;
         if (!_started) return;
 
         StopEvents();
-        IsUsingEvents = TryStartEvents();
+        IsUsingEvents = kind.HasValue && TryStartEvents();
         Reconcile();
     }
 
@@ -155,7 +166,7 @@ public sealed class ProcessInventory : IDisposable
         // and without it every process of another user reads as pathless and argumentless.
         new DebugPrivilege(_logger).TryEnable();
 
-        IsUsingEvents = TryStartEvents();
+        IsUsingEvents = EventSource.HasValue && TryStartEvents();
 
         Reconcile();
         _logger.LogDebug("the process table starts with {Count} processes", _processes.Count);
@@ -165,6 +176,30 @@ public sealed class ProcessInventory : IDisposable
 
     /// <summary>Compares the table against the machine as it is right now. Safe from any thread.</summary>
     public void Refresh() => Reconcile();
+
+    /// <summary>
+    /// The entry for one process, reading the machine first if the table has never heard of it.
+    /// Null when it is still unknown afterwards — it exited, or it is a protected process.
+    /// </summary>
+    /// <remarks>
+    /// For the caller that learns of a process from something other than a process event — a
+    /// socket opening, say — and needs its path, its command line and its parent right now, before
+    /// deciding whether to redirect it. The sweep is throttled because such a caller is on a pump
+    /// thread and a burst of new processes would otherwise mean one machine-wide read each.
+    /// </remarks>
+    public ProcessSnapshot? EnsureKnown(uint processId)
+    {
+        if (processId == 0) return null;
+        if (_processes.TryGetValue(processId, out ProcessSnapshot? known)) return known;
+
+        int now = Environment.TickCount;
+        int last = Volatile.Read(ref _lastOnDemandTicks);
+        if (last != int.MinValue && now - last < OnDemandSweepMinIntervalMs) return null;
+        if (Interlocked.CompareExchange(ref _lastOnDemandTicks, now, last) != last) return null;
+
+        Reconcile();
+        return _processes.TryGetValue(processId, out ProcessSnapshot? found) ? found : null;
+    }
 
     // One pass: everything running goes into the table, everything in the table that is no longer
     // running comes out, and a pid handed to a different program counts as the old process ending
@@ -278,9 +313,10 @@ public sealed class ProcessInventory : IDisposable
     // poll interval after it started, by which time its first connection may already be out.
     private bool TryStartEvents()
     {
-        if (TryStartEventSource(EventSource)) return true;
+        ProcessEventSourceKind wanted = EventSource!.Value;
+        if (TryStartEventSource(wanted)) return true;
 
-        ProcessEventSourceKind fallback = EventSource == ProcessEventSourceKind.Etw
+        ProcessEventSourceKind fallback = wanted == ProcessEventSourceKind.Etw
             ? ProcessEventSourceKind.Wmi
             : ProcessEventSourceKind.Etw;
 
@@ -288,7 +324,7 @@ public sealed class ProcessInventory : IDisposable
         {
             _logger.LogWarning(
                 "{Wanted} could not be started, so the process table is following {Fallback} instead",
-                EventSource, fallback);
+                wanted, fallback);
             return true;
         }
 
