@@ -1,5 +1,8 @@
+using System;
+using System.ComponentModel;
 using System.Windows;
 using ProxyDivert.Wpf.ViewModels;
+using ProxyDivert.Wpf.Views.Enums;
 
 namespace ProxyDivert.Wpf.Views;
 
@@ -29,10 +32,39 @@ public partial class ProcessFilterWindow : Window
     }
 
     // The system caption is replaced here as it is on the main window, so its buttons are ours.
-    // Closing from the title bar leaves DialogResult alone, which is what discards the edit — the
-    // X on a dialog means cancel.
     private void Maximize_Click(object sender, RoutedEventArgs e)
         => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+    /// <remarks>
+    /// Every way out of the window comes through here — the X, Cancel, Esc, Alt+F4 — which is why
+    /// the question is asked here and not on the buttons. Saving is the one exception: it has
+    /// already said what to do with the edit.
+    /// </remarks>
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        base.OnClosing(e);
+
+        if (e.Cancel || DialogResult == true) return;
+        if (DataContext is not ProcessFilterViewModel viewModel || !viewModel.IsDirty) return;
+
+        switch (UnsavedChangesWindow.Ask(this))
+        {
+            case UnsavedChangesChoice.Save:
+                // Not DialogResult here: setting it closes the window, and closing a window that is
+                // already inside its own Closing throws. The close is called off and asked for again
+                // once this one has unwound, and by then DialogResult says not to ask twice.
+                e.Cancel = true;
+                Dispatcher.BeginInvoke(new Action(() => DialogResult = true));
+                break;
+
+            case UnsavedChangesChoice.Discard:
+                break;
+
+            default:
+                e.Cancel = true;
+                break;
+        }
+    }
 }

@@ -24,6 +24,8 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
     {
         if (rule is null) throw new ArgumentNullException(nameof(rule));
 
+        // The fields, not the properties: assigning through the properties before the window is
+        // even on screen would mark the filter as edited by the act of opening it.
         _name = rule.Name;
         _includeChildren = rule.IncludeChildren;
 
@@ -50,11 +52,27 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
     /// </remarks>
     public ObservableCollection<PolicyChoice> Policies { get; } = new ObservableCollection<PolicyChoice>();
 
+    /// <summary>
+    /// True once the user has changed anything in the window. What the close button asks about:
+    /// closing a filter that was only looked at must not stop to ask.
+    /// </summary>
+    /// <remarks>
+    /// Set by the edits themselves rather than worked out by comparing the filter with what it was.
+    /// A change put back by hand still counts as an edit, which is the answer every editor gives
+    /// and the safe one: the question it leads to is one the user can answer with "don't save".
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isDirty;
+
     [ObservableProperty]
     private string _name;
 
     [ObservableProperty]
     private bool _includeChildren;
+
+    partial void OnNameChanged(string value) => IsDirty = true;
+
+    partial void OnIncludeChildrenChanged(bool value) => IsDirty = true;
 
     /// <summary>The policies the user ticked, in priority order, read back as one line.</summary>
     [ObservableProperty]
@@ -110,8 +128,15 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
             if (!Policies.Any(c => c.Policy.Id == policy.Id))
                 Policies.Add(new PolicyChoice(policy));
 
+        // Only the tick: Rank is written by RenumberPolicies itself, and reacting to it would both
+        // loop back into it and call opening the window an edit.
         foreach (PolicyChoice choice in Policies)
-            choice.PropertyChanged += (_, _) => RenumberPolicies();
+            choice.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName != nameof(PolicyChoice.IsSelected)) return;
+                RenumberPolicies();
+                IsDirty = true;
+            };
 
         RenumberPolicies();
     }
@@ -132,6 +157,7 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
 
         Policies.Move(index, target);
         RenumberPolicies();
+        IsDirty = true;
     }
 
     // The number shown against a ticked row, and the sentence under the list. Both are derived from
@@ -164,7 +190,11 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
         private int _rank;
     }
 
-    private void OnTreeChanged() => Summary = ConditionTextBuilder.Describe(Root.ToModel());
+    private void OnTreeChanged()
+    {
+        Summary = ConditionTextBuilder.Describe(Root.ToModel());
+        IsDirty = true;
+    }
 
     // A filter with no name is still a row in a list that has to say something. The first thing
     // the user typed is what they would have called it anyway.

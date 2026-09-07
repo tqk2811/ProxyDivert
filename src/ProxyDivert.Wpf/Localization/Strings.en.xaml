@@ -17,6 +17,7 @@
     <sys:String x:Key="Str.App.Clear">Clear</sys:String>
     <sys:String x:Key="Str.App.Test">Test</sys:String>
     <sys:String x:Key="Str.App.Cancel">Cancel</sys:String>
+    <sys:String x:Key="Str.App.DontSave">Don't save</sys:String>
     <sys:String x:Key="Str.App.Enabled">Enabled</sys:String>
     <sys:String x:Key="Str.App.Name">Name</sys:String>
     <sys:String x:Key="Str.App.Pattern">Pattern</sys:String>
@@ -39,6 +40,8 @@
     <sys:String x:Key="Str.Process.FilterName">Filter name</sys:String>
     <sys:String x:Key="Str.Process.FilterNameHint">e.g. Minecraft, Chrome work profile</sys:String>
     <sys:String x:Key="Str.Process.UnnamedFilter">Unnamed filter</sys:String>
+    <sys:String x:Key="Str.Process.UnsavedTitle">Unsaved changes</sys:String>
+    <sys:String x:Key="Str.Process.UnsavedQuestion">This filter has changes that have not been saved. Closing the window now loses them.</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildrenLong">Follow the processes it starts</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Children</sys:String>
     <sys:String x:Key="Str.Process.Policy">Policy</sys:String>

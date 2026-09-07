@@ -17,6 +17,7 @@
     <sys:String x:Key="Str.App.Clear">Xoá hết</sys:String>
     <sys:String x:Key="Str.App.Test">Thử</sys:String>
     <sys:String x:Key="Str.App.Cancel">Huỷ</sys:String>
+    <sys:String x:Key="Str.App.DontSave">Không lưu</sys:String>
     <sys:String x:Key="Str.App.Enabled">Bật</sys:String>
     <sys:String x:Key="Str.App.Name">Tên</sys:String>
     <sys:String x:Key="Str.App.Pattern">Mẫu</sys:String>
@@ -39,6 +40,8 @@
     <sys:String x:Key="Str.Process.FilterName">Tên bộ lọc</sys:String>
     <sys:String x:Key="Str.Process.FilterNameHint">vd Minecraft, Chrome hồ sơ công việc</sys:String>
     <sys:String x:Key="Str.Process.UnnamedFilter">Bộ lọc chưa đặt tên</sys:String>
+    <sys:String x:Key="Str.Process.UnsavedTitle">Chưa lưu thay đổi</sys:String>
+    <sys:String x:Key="Str.Process.UnsavedQuestion">Bộ lọc này có thay đổi chưa lưu. Đóng cửa sổ bây giờ là mất hết.</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildrenLong">Bám theo cả tiến trình con nó sinh ra</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Cả tiến trình con</sys:String>
     <sys:String x:Key="Str.Process.Policy">Bộ luật</sys:String>
