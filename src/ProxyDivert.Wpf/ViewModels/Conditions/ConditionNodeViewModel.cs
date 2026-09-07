@@ -1,7 +1,6 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models.Conditions;
 
 namespace ProxyDivert.Wpf.ViewModels.Conditions;
@@ -9,9 +8,8 @@ namespace ProxyDivert.Wpf.ViewModels.Conditions;
 /// <summary>One row of the filter editor: a group, or a single condition.</summary>
 /// <remarks>
 /// The editor works on view models rather than on the model tree directly, for two reasons. It
-/// carries things the saved filter must not — which rows are ticked for grouping, how each row
-/// answered the last time the filter was tried against a running process — and it lets Cancel
-/// throw the whole thing away, because the model is only rebuilt when the user presses Save.
+/// carries things the saved filter must not — which rows are ticked for grouping — and it lets
+/// Cancel throw the whole thing away, because the model is only rebuilt when the user presses Save.
 /// </remarks>
 public abstract partial class ConditionNodeViewModel : ObservableObject
 {
@@ -38,13 +36,6 @@ public abstract partial class ConditionNodeViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSelected;
 
-    /// <summary>
-    /// How this row answered the last time the filter was tried against a running process; null
-    /// before anything has been tried. Never saved.
-    /// </summary>
-    [ObservableProperty]
-    private ConditionResult? _testResult;
-
     [RelayCommand]
     private void ToggleNegate() => Negate = !Negate;
 
@@ -59,9 +50,6 @@ public abstract partial class ConditionNodeViewModel : ObservableObject
 
     /// <summary>Rebuilds the saved form of this row.</summary>
     public abstract ProcessCondition ToModel();
-
-    /// <summary>Clears the colouring left by a previous try, on this row and everything under it.</summary>
-    public virtual void ClearTestResult() => TestResult = null;
 
     public static ConditionNodeViewModel FromModel(ProcessCondition condition) => condition switch
     {

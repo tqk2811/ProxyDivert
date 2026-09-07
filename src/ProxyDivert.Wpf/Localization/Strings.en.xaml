@@ -58,7 +58,6 @@
     <sys:String x:Key="Str.Cond.Reads">This filter reads as</sys:String>
     <sys:String x:Key="Str.Cond.Nothing">no conditions yet</sys:String>
     <sys:String x:Key="Str.Cond.Action">Then</sys:String>
-    <sys:String x:Key="Str.Cond.TryWith">Try it with</sys:String>
     <sys:String x:Key="Str.Cond.Not">NOT</sys:String>
     <sys:String x:Key="Str.Cond.NotHint">Invert this row</sys:String>
     <sys:String x:Key="Str.Cond.NotGroupHint">Invert this whole group</sys:String>
@@ -182,10 +181,6 @@
     <sys:String x:Key="Enum.ConditionSubject.CommandLine">Argument</sys:String>
     <sys:String x:Key="Enum.ConditionOperator.All">Match ALL of</sys:String>
     <sys:String x:Key="Enum.ConditionOperator.Any">Match ANY of</sys:String>
-    <sys:String x:Key="Enum.ConditionResult.Ignored">nothing filled in</sys:String>
-    <sys:String x:Key="Enum.ConditionResult.Match">MATCHES</sys:String>
-    <sys:String x:Key="Enum.ConditionResult.NoMatch">does not match</sys:String>
-    <sys:String x:Key="Enum.ConditionResult.Unknown">could not read the data</sys:String>
 
     <sys:String x:Key="Enum.OutboundKind.Direct">Direct</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Block">Block</sys:String>

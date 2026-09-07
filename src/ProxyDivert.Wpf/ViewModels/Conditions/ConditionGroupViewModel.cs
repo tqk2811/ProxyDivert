@@ -55,12 +55,6 @@ public sealed partial class ConditionGroupViewModel : ConditionNodeViewModel
         Children = Children.Select(child => child.ToModel()).ToList(),
     };
 
-    public override void ClearTestResult()
-    {
-        base.ClearTestResult();
-        foreach (ConditionNodeViewModel child in Children) child.ClearTestResult();
-    }
-
     // ==== what the buttons on a group row do ====
 
     [RelayCommand]

@@ -58,7 +58,6 @@
     <sys:String x:Key="Str.Cond.Reads">Bộ lọc này đọc là</sys:String>
     <sys:String x:Key="Str.Cond.Nothing">chưa có điều kiện nào</sys:String>
     <sys:String x:Key="Str.Cond.Action">Hành động</sys:String>
-    <sys:String x:Key="Str.Cond.TryWith">Thử với</sys:String>
     <sys:String x:Key="Str.Cond.Not">KHÔNG</sys:String>
     <sys:String x:Key="Str.Cond.NotHint">Đảo ngược dòng này</sys:String>
     <sys:String x:Key="Str.Cond.NotGroupHint">Đảo ngược cả nhóm này</sys:String>
@@ -182,10 +181,6 @@
     <sys:String x:Key="Enum.ConditionSubject.CommandLine">Argument</sys:String>
     <sys:String x:Key="Enum.ConditionOperator.All">Khớp TẤT CẢ</sys:String>
     <sys:String x:Key="Enum.ConditionOperator.Any">Khớp BẤT KỲ</sys:String>
-    <sys:String x:Key="Enum.ConditionResult.Ignored">chưa điền gì</sys:String>
-    <sys:String x:Key="Enum.ConditionResult.Match">KHỚP</sys:String>
-    <sys:String x:Key="Enum.ConditionResult.NoMatch">không khớp</sys:String>
-    <sys:String x:Key="Enum.ConditionResult.Unknown">không đọc được dữ liệu</sys:String>
 
     <sys:String x:Key="Enum.OutboundKind.Direct">Đi thẳng</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Block">Chặn</sys:String>

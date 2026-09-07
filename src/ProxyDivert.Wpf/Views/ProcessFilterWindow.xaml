@@ -47,7 +47,6 @@
         <DataTemplate DataType="{x:Type cvm:ConditionLeafViewModel}">
             <Grid Margin="0,3">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="4"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="132"/>
@@ -56,33 +55,28 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Filled in by "try it against a running process": this row said yes, no, or
-                     could not tell. -->
-                <Border Grid.Column="0" CornerRadius="2" Margin="0,1,6,1"
-                        Background="{Binding TestResult, Converter={StaticResource ConditionResultBrush}}"/>
-
-                <CheckBox Grid.Column="1" VerticalAlignment="Center" Margin="0,0,6,0"
+                <CheckBox Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"
                           IsChecked="{Binding IsSelected}"
                           ToolTip="{DynamicResource Str.Cond.SelectHint}"/>
 
-                <Button Grid.Column="2" Style="{StaticResource NotButton}" Margin="0,0,6,0"
+                <Button Grid.Column="1" Style="{StaticResource NotButton}" Margin="0,0,6,0"
                         Content="{DynamicResource Str.Cond.Not}"
                         Command="{Binding ToggleNegateCommand}"
                         ToolTip="{DynamicResource Str.Cond.NotHint}"/>
 
-                <ComboBox Grid.Column="3" Margin="0,0,6,0"
+                <ComboBox Grid.Column="2" Margin="0,0,6,0"
                           ItemsSource="{Binding Subjects}"
                           SelectedItem="{Binding Subject}"
                           ItemTemplate="{StaticResource EnumItemTemplate}"/>
 
-                <ComboBox Grid.Column="4" Margin="0,0,6,0"
+                <ComboBox Grid.Column="3" Margin="0,0,6,0"
                           ItemsSource="{Binding Matchers}"
                           SelectedItem="{Binding Matcher}"
                           ItemTemplate="{StaticResource EnumItemTemplate}"/>
 
                 <!-- Enter adds the next condition to the same group, so a run of them can be typed
                      without going back to the mouse. -->
-                <TextBox Grid.Column="5" Margin="0,0,6,0"
+                <TextBox Grid.Column="4" Margin="0,0,6,0"
                          Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
                          b:FocusBehavior.FocusWhen="{Binding IsNew, Mode=TwoWay}">
                     <TextBox.Style>
@@ -100,7 +94,7 @@
                     </TextBox.InputBindings>
                 </TextBox>
 
-                <StackPanel Grid.Column="6" Orientation="Horizontal">
+                <StackPanel Grid.Column="5" Orientation="Horizontal">
                     <Button Style="{StaticResource RowButton}" Content="▲"
                             Command="{Binding MoveUpCommand}" ToolTip="{DynamicResource Str.App.Up}"/>
                     <Button Style="{StaticResource RowButton}" Content="▼"
@@ -122,32 +116,28 @@
                 <StackPanel>
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="4"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <Border Grid.Column="0" CornerRadius="2" Margin="0,1,6,1"
-                                Background="{Binding TestResult, Converter={StaticResource ConditionResultBrush}}"/>
-
-                        <CheckBox Grid.Column="1" VerticalAlignment="Center" Margin="0,0,6,0"
+                        <CheckBox Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"
                                   IsChecked="{Binding IsSelected}"
                                   ToolTip="{DynamicResource Str.Cond.SelectHint}"
                                   Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
 
-                        <Button Grid.Column="2" Style="{StaticResource NotButton}" Margin="0,0,6,0"
+                        <Button Grid.Column="1" Style="{StaticResource NotButton}" Margin="0,0,6,0"
                                 Content="{DynamicResource Str.Cond.Not}"
                                 Command="{Binding ToggleNegateCommand}"
                                 ToolTip="{DynamicResource Str.Cond.NotGroupHint}"/>
 
-                        <ComboBox Grid.Column="3" Width="176"
+                        <ComboBox Grid.Column="2" Width="176"
                                   ItemsSource="{Binding Operators}"
                                   SelectedItem="{Binding Operator}"
                                   ItemTemplate="{StaticResource EnumItemTemplate}"/>
 
-                        <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.AddCondition}"
                                     Command="{Binding AddConditionCommand}"/>
                             <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.AddGroup}"
@@ -220,7 +210,6 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
@@ -323,24 +312,7 @@
                 </StackPanel>
             </Border>
 
-            <!-- ==== try it against something that is running ==== -->
-            <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,10,0,0">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{DynamicResource Str.Cond.TryWith}" VerticalAlignment="Center"
-                               Width="110"/>
-                    <ComboBox Width="260" ItemsSource="{Binding TestProcesses}"
-                              SelectedItem="{Binding SelectedTestProcess}" DisplayMemberPath="Display"/>
-                    <Button Margin="8,0,0,0" MinWidth="80" Content="{DynamicResource Str.App.Test}"
-                            Command="{Binding RunTestCommand}"/>
-                    <Border Width="10" Height="10" CornerRadius="5" Margin="16,0,6,0"
-                            VerticalAlignment="Center"
-                            Background="{Binding TestResult, Converter={StaticResource ConditionResultBrush}}"/>
-                    <ContentControl VerticalAlignment="Center" Content="{Binding TestResult}"
-                                    ContentTemplate="{StaticResource EnumItemTemplate}"/>
-                </StackPanel>
-            </Border>
-
-            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
                 <Button MinWidth="96" Content="{DynamicResource Str.App.Cancel}" IsCancel="True"/>
                 <Button MinWidth="96" Margin="8,0,0,0" Style="{StaticResource AccentButton}"
                         Content="{DynamicResource Str.App.Save}" Click="Save_Click"/>

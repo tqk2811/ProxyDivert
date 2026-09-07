@@ -352,11 +352,10 @@ public class DataGridColumnBindingTests
             window.Close();
         });
 
-        // Eight in the tree — an operator picker on the root and on the nested group, plus the
-        // subject and comparison pickers on each of the three condition rows — and one below it,
-        // for the process to try the filter against. The policies are a ticked list now, not a
-        // picker: their order is what they mean.
-        Assert.Equal(9, combos);
+        // Eight, all of them in the tree — an operator picker on the root and on the nested group,
+        // plus the subject and comparison pickers on each of the three condition rows. The policies
+        // are a ticked list, not a picker: their order is what they mean.
+        Assert.Equal(8, combos);
         Assert.True(empty.Count == 0, $"{empty.Count} pickers in the filter editor resolved no ItemsSource.");
 
         // The name box, plus one value box per condition — including the two inside the group.
