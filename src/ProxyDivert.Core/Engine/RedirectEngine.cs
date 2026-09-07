@@ -78,6 +78,14 @@ public sealed class RedirectEngine : IDisposable
     public event Action<TrackedProcess>? ProcessDetached;
 
     /// <summary>
+    /// Raised once after <see cref="ApplyConfig"/> has taken effect on a running engine. A rule edit
+    /// that only changes how an already-redirected process is routed raises neither of the two
+    /// events above — nothing was attached or detached — so a view showing that routing listens
+    /// here. Raised on the caller's thread, outside the engine's lock.
+    /// </summary>
+    public event Action? ConfigurationApplied;
+
+    /// <summary>
     /// Raised when a VPN outbound's tunnel changes state, from the thread supervising it. A UI
     /// handler must marshal asynchronously — see <see cref="VpnConnectionKeeper.StatusChanged"/>.
     /// </summary>
@@ -188,6 +196,9 @@ public sealed class RedirectEngine : IDisposable
             RebuildResolver();
             _logger.LogInformation("configuration applied");
         }
+
+        try { ConfigurationApplied?.Invoke(); }
+        catch (Exception ex) { _logger.LogWarning(ex, "a ConfigurationApplied subscriber threw"); }
     }
 
     /// <summary>

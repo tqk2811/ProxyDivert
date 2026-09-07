@@ -1,7 +1,9 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.Configuration;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.DependencyInjection;
@@ -27,8 +29,11 @@ public sealed class AppServices : IDisposable
     public ConfigStore ConfigStore { get; }
 
     /// <summary>
-    /// The live configuration. View models edit this instance and call <see cref="SaveAndApply"/>
-    /// when the user is done, so an edit is never half-applied to the engine.
+    /// The configuration as the window shows it. View models edit this instance freely; nothing
+    /// reaches the engine until <see cref="SaveAndApply"/>, which writes the file and hands the
+    /// engine a snapshot of its own (<see cref="ConfigStore.Clone"/>). Three layers, then: this
+    /// one, the engine's, and the file — an edit in progress is never half-applied, and the engine
+    /// never enumerates a list the grid is adding to.
     /// </summary>
     public AppConfig Config { get; private set; }
 
@@ -42,6 +47,15 @@ public sealed class AppServices : IDisposable
     public InMemoryLogStore Logs { get; }
 
     private readonly AppLoggerProvider _loggerProvider;
+    private readonly ILogger<AppServices> _logger;
+
+    // Everything that takes the engine's lock — a save, a start, a stop — runs off the window's
+    // thread, and one after another in the order it was asked for. Applying a configuration
+    // re-reads every redirected process and every open connection; starting opens driver handles
+    // and WMI; stopping waits for pumps and tunnels to unwind. None of it belongs on the thread
+    // that paints the window, and none of it may overlap with the rest.
+    private readonly object _workLock = new object();
+    private Task _lastWork = Task.CompletedTask;
 
     // True while auto-save is on. The path itself is derived from the clock rather than stored,
     // because it names an HOUR: everything logged between 14:00 and 15:00 belongs in one file, no
@@ -85,6 +99,7 @@ public sealed class AppServices : IDisposable
 
         Logs = _provider.GetRequiredService<InMemoryLogStore>();
         _loggerProvider = _provider.GetRequiredService<AppLoggerProvider>();
+        _logger = _provider.GetRequiredService<ILoggerFactory>().CreateLogger<AppServices>();
         Engine = _provider.GetRequiredService<RedirectEngine>();
 
         // Checked every minute rather than scheduled for the exact turn of the hour: SetFilePath
@@ -116,23 +131,72 @@ public sealed class AppServices : IDisposable
         _loggerProvider.SetFilePath(EffectiveLogPath);
     }
 
-    // Persist and push to the running engine in one step — the two must not drift apart.
-    public void SaveAndApply()
+    /// <summary>
+    /// Persists the configuration and pushes it to the running engine, in one step — the two must
+    /// not drift apart. The snapshot is taken here, on the caller's thread, while the grids are
+    /// quiet; the file write and the engine's re-evaluation of every process and connection run on
+    /// the thread pool. The returned task completes when the engine has taken the configuration;
+    /// callers that only want it done may ignore it, a failure is logged either way.
+    /// </summary>
+    public Task SaveAndApply()
     {
-        Save();
+        AppConfig snapshot = ConfigStore.Clone(Config);
         // The log path is the one setting the engine does not own, because logging is set up before
         // the engine exists. Applying it here is what makes it take effect without a restart.
         _loggerProvider.SetFilePath(EffectiveLogPath);
-        if (Engine.IsRunning) Engine.ApplyConfig(Config);
+
+        return Enqueue(() =>
+        {
+            try
+            {
+                ConfigStore.Save(snapshot);
+                if (Engine.IsRunning) Engine.ApplyConfig(snapshot);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "saving and applying the configuration failed");
+            }
+        });
     }
 
-    public void StartEngine() => Engine.Start(Config);
+    /// <summary>Starts the engine on a snapshot of the configuration, off the caller's thread.</summary>
+    public Task StartEngineAsync()
+    {
+        AppConfig snapshot = ConfigStore.Clone(Config);
+        return Enqueue(() => Engine.Start(snapshot));
+    }
 
-    public void StopEngine() => Engine.Stop();
+    public Task StopEngineAsync() => Enqueue(Engine.Stop);
+
+    /// <summary>
+    /// Completes once everything queued so far — saves, starts, stops — has run. For code that
+    /// must see the outcome of a save it did not await, and for shutdown.
+    /// </summary>
+    public Task WhenIdleAsync()
+    {
+        lock (_workLock) return _lastWork;
+    }
+
+    // Chains the work behind whatever is already queued. The task handed back carries the work's
+    // own outcome, exception included; the chain itself never faults, so the next piece of work
+    // runs whatever happened to the previous one.
+    private Task Enqueue(Action work)
+    {
+        lock (_workLock)
+        {
+            Task next = _lastWork.ContinueWith(
+                _ => work(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            _lastWork = next.ContinueWith(_ => { }, TaskScheduler.Default);
+            return next;
+        }
+    }
 
     public void Dispose()
     {
         _logRollTimer.Dispose();
+        // A save the user made a moment before closing the window must still reach the disk, and
+        // an engine stop in progress must finish before the engine is torn down under it.
+        try { WhenIdleAsync().Wait(TimeSpan.FromSeconds(10)); } catch { }
         Engine.Dispose();
         _provider.Dispose();
     }

@@ -137,6 +137,8 @@ public class PolicyRenameTests
                     .Select(text => text.Text ?? string.Empty));
 
                 window.Close();
+                // The save runs off the window's thread; the file is only there once it has.
+                services.WhenIdleAsync().Wait(TimeSpan.FromSeconds(10));
                 savedFile = System.IO.File.ReadAllText(path);
             }
 

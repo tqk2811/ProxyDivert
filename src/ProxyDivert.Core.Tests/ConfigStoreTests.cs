@@ -44,6 +44,32 @@ public class ConfigStoreTests : IDisposable
         Assert.Equal(250, new ConfigStore(ConfigPath).Load().ProcessEventBacklogMs);
     }
 
+    // The engine runs on a snapshot. A rule added to the window's list after the snapshot was
+    // taken must not appear in it, and the secret an outbound needs to dial must survive the copy.
+    [Fact]
+    public void Clone_shares_nothing_with_the_original_and_keeps_secrets_readable()
+    {
+        AppConfig config = AppConfig.CreateDefault();
+        config.Outbounds.Add(new Outbound
+        {
+            Id = Guid.NewGuid(),
+            Name = "work",
+            Kind = OutboundKind.Socks5,
+            Url = "socks5://127.0.0.1:1080",
+            Password = "hunter2",
+        });
+        config.ProcessRules.Add(new ProcessRule { Id = Guid.NewGuid(), Name = "chrome", PolicyIds = { config.Policies[0].Id } });
+
+        AppConfig snapshot = ConfigStore.Clone(config);
+        config.ProcessRules.Add(new ProcessRule { Id = Guid.NewGuid(), Name = "added later" });
+        config.Policies[0].Name = "renamed later";
+
+        Assert.Single(snapshot.ProcessRules);
+        Assert.NotSame(config.ProcessRules[0], snapshot.ProcessRules[0]);
+        Assert.Equal("Default", snapshot.Policies[0].Name);
+        Assert.Equal("hunter2", snapshot.Outbounds.Single(o => o.Name == "work").Password);
+    }
+
     [Fact]
     public void Round_trips_rules_and_policies()
     {

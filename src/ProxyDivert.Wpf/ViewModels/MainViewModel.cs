@@ -1,5 +1,6 @@
 using System;
 using System.Security.Principal;
+using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -54,10 +55,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Log = new LogViewModel(services);
         Settings = new SettingsViewModel(services);
 
-        services.Engine.ProcessAttached += _ => Application.Current?.Dispatcher.BeginInvoke(
-            () => Processes.RefreshApplied());
-        services.Engine.ProcessDetached += _ => Application.Current?.Dispatcher.BeginInvoke(
-            () => Processes.RefreshApplied());
+        // One rebuild of the process tree per burst of events, not one per event: the engine
+        // reports sixty processes one at a time, and the tree only needs to be read once after.
+        // A save that merely re-routes processes attaches and detaches nothing, so it is reported
+        // separately and refreshes the same way.
+        var refreshApplied = new CoalescedDispatcherAction(() => Processes.RefreshApplied());
+        services.Engine.ProcessAttached += _ => refreshApplied.Request();
+        services.Engine.ProcessDetached += _ => refreshApplied.Request();
+        services.Engine.ConfigurationApplied += () => refreshApplied.Request();
 
         // The button's tooltip is composed in code rather than written in XAML, so it is one of the
         // few things a dictionary swap does not reach on its own.
@@ -89,24 +94,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     // One switch rather than two buttons, so there is one command: what it does is decided by what
-    // the engine is doing now, not by which control was pressed.
+    // the engine is doing now, not by which control was pressed. Asynchronous because starting
+    // opens the driver and stopping waits for it to let go — neither belongs on the thread that
+    // paints the window — and the command stays disabled until the switch has actually moved.
     [RelayCommand]
-    private void ToggleEngine()
+    private async Task ToggleEngine()
     {
-        if (IsRunning) Stop();
-        else Start();
+        if (IsRunning) await StopAsync();
+        else await StartAsync();
 
         // The switch moved itself the moment it was clicked. If Start threw, IsRunning never
         // changed and nothing would push the knob back — so say so explicitly either way.
         OnPropertyChanged(nameof(IsRunning));
     }
 
-    private void Start()
+    private async Task StartAsync()
     {
         if (IsRunning) return;
         try
         {
-            _services.StartEngine();
+            await _services.StartEngineAsync();
             IsRunning = true;
             StatusMessage = null;
             Processes.RefreshApplied();
@@ -115,15 +122,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             StatusMessage = $"{ex.GetType().Name}: {ex.Message}";
             // Leave nothing half-started: a failed Start must not leave WinDivert handles open.
-            try { _services.StopEngine(); } catch { }
+            try { await _services.StopEngineAsync(); } catch { }
             IsRunning = false;
         }
     }
 
-    private void Stop()
+    private async Task StopAsync()
     {
         if (!IsRunning) return;
-        _services.StopEngine();
+        await _services.StopEngineAsync();
         IsRunning = false;
         // Nothing is being redirected any more, so the tree must not keep claiming otherwise.
         Processes.RefreshApplied();

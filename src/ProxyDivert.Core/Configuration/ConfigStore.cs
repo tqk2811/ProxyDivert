@@ -116,12 +116,29 @@ public sealed class ConfigStore
         }
     }
 
+    /// <summary>
+    /// A deep copy that shares nothing with <paramref name="config"/> — not a list, not a rule.
+    /// </summary>
+    /// <remarks>
+    /// This is what the engine runs on. The configuration has three layers: the instance the view
+    /// models edit, the snapshot the engine holds, and the file. Handing the engine the edited
+    /// instance itself meant a rule added in the grid was already being matched against new
+    /// processes before the user pressed Save, on a list the watcher was enumerating from another
+    /// thread. A snapshot taken at Save is the whole edit or none of it.
+    ///
+    /// Round-tripping through JSON is the cheapest correct deep copy here: the model is plain
+    /// data, and this runs once per save, not per connection. Secrets stay in the clear.
+    /// </remarks>
+    public static AppConfig Clone(AppConfig config)
+    {
+        if (config is null) throw new ArgumentNullException(nameof(config));
+        string json = JsonSerializer.Serialize(config, SerializerOptions);
+        return JsonSerializer.Deserialize<AppConfig>(json, SerializerOptions)!;
+    }
+
     private static AppConfig CloneWithEncryptedSecrets(AppConfig config)
     {
-        // Round-tripping through JSON is the cheapest correct deep copy here: the model is plain
-        // data, and this runs once per save, not per connection.
-        string json = JsonSerializer.Serialize(config, SerializerOptions);
-        AppConfig clone = JsonSerializer.Deserialize<AppConfig>(json, SerializerOptions)!;
+        AppConfig clone = Clone(config);
         foreach (Outbound outbound in clone.Outbounds)
         {
             outbound.Password = SecretProtector.Protect(outbound.Password);
