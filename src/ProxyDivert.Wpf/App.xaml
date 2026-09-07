@@ -10,6 +10,7 @@
                      below references its brushes via DynamicResource so the swap is live. -->
                 <ResourceDictionary Source="pack://application:,,,/ProxyDivert;component/Themes/Colors.Dark.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/ProxyDivert;component/Localization/Strings.en.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/ProxyDivert;component/Themes/Logo.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/ProxyDivert;component/Themes/Controls.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/ProxyDivert;component/Themes/Controls.ListBox.xaml"/>
             </ResourceDictionary.MergedDictionaries>

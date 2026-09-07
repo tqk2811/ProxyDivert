@@ -1,0 +1,44 @@
+<!-- Nguồn vector duy nhất của logo: dùng cho icon exe (tools/logo/Generate-AppIcon.ps1 render file
+     này ra Assets/app.ico), cho icon cửa sổ, cho icon khay hệ thống, và cho hình trên thanh tiêu đề.
+     Sửa ở đây rồi chạy lại script là cả bốn chỗ đổi theo.
+
+     Hai đường: một đi thẳng từ trái qua phải, một bị bẻ chéo lên ở giữa. Đường bị bẻ vẽ đậm vì
+     đó là việc chương trình làm; đường đi thẳng để mờ, nó chỉ ở đó để thấy có gì đã đổi. -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <DrawingImage x:Key="Img.Logo">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+
+                <GeometryDrawing>
+                    <GeometryDrawing.Brush>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Offset="0" Color="#25D6C3"/>
+                            <GradientStop Offset="1" Color="#0C7F75"/>
+                        </LinearGradientBrush>
+                    </GeometryDrawing.Brush>
+                    <GeometryDrawing.Geometry>
+                        <RectangleGeometry Rect="0,0,256,256" RadiusX="56" RadiusY="56"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- Đi thẳng. -->
+                <GeometryDrawing Geometry="M 40,184 L 216,184">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#5CFFFFFF" Thickness="26" StartLineCap="Round" EndLineCap="Round"/>
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+
+                <!-- Bẻ chéo lên ở giữa. -->
+                <GeometryDrawing Geometry="M 40,132 L 128,132 L 216,72">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FFFFFF" Thickness="26" StartLineCap="Round" EndLineCap="Round" LineJoin="Round"/>
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+</ResourceDictionary>

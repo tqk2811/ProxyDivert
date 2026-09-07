@@ -6,6 +6,9 @@
 		<RootNamespace>ProxyDivert.Cli</RootNamespace>
 		<AssemblyName>ProxyDivert.Cli</AssemblyName>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<!-- Cùng một icon với cửa sổ: hai file thi hành của cùng một công cụ, không lý do gì để
+		     chúng trông khác nhau trong Explorer hay trong Task Manager. -->
+		<ApplicationIcon>..\ProxyDivert.Wpf\Assets\app.ico</ApplicationIcon>
 		<!-- Native WinDivert is win-x64 only; without a RID the .dll/.sys never reach the output. -->
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<SelfContained>false</SelfContained>

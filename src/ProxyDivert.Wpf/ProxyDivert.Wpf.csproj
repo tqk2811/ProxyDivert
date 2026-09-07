@@ -7,11 +7,20 @@
 		<RootNamespace>ProxyDivert.Wpf</RootNamespace>
 		<AssemblyName>ProxyDivert</AssemblyName>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<!-- Sinh lại bằng tools/logo/Generate-AppIcon.ps1 từ Themes/Logo.xaml; file .ico được commit
+		     nên bản build không cần chạy script. -->
+		<ApplicationIcon>Assets\app.ico</ApplicationIcon>
 		<!-- Native WinDivert chỉ có win-x64; cần RID để asset runtimes/win-x64/native được copy ra output. -->
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<SelfContained>false</SelfContained>
 		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Cũng nhúng làm Resource, không chỉ làm icon của exe: cửa sổ và icon khay đọc nó qua
+		     pack URI, và thư viện khay đòi đúng một file .ico chứ không nhận vector. -->
+		<Resource Include="Assets\app.ico" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\ProxyDivert.Core\ProxyDivert.Core.csproj" />

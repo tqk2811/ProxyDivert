@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:ProxyDivert.Wpf.Views"
         Title="{DynamicResource Str.App.Title}"
+        Icon="pack://application:,,,/ProxyDivert;component/Assets/app.ico"
         Height="720" Width="1180" MinHeight="520" MinWidth="900"
         WindowStartupLocation="Manual"
         Background="{DynamicResource Brush.Window.Background}"
@@ -40,6 +41,11 @@
 
                             <StackPanel Grid.Column="0" Orientation="Horizontal"
                                         VerticalAlignment="Center" Margin="16,0,18,0">
+                                <!-- Vector chứ không phải .ico: thanh tiêu đề tự vẽ nên nó phải sắc
+                                     ở mọi mức DPI mà không cần thêm một cỡ ảnh nào. -->
+                                <Image Source="{StaticResource Img.Logo}" Width="20" Height="20"
+                                       VerticalAlignment="Center" Margin="0,0,9,0"/>
+
                                 <TextBlock Text="{DynamicResource Str.App.Title}"
                                            FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
 
