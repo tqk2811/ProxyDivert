@@ -320,3 +320,13 @@ Bài học đứng sau: chặn QUIC bằng cách **thả gói im lặng** khiế
 ## Hàng đợi gói của driver WinDivert (QueueLength / QueueTime / QueueSize)
 
 Gói driver đã bắt nằm trong hàng đợi chờ pump `WinDivertRecv`. Mặc định 4096 gói / 2000 ms / 4 MB; gói nằm quá lâu **bị thả**. Pump NETWORK là một luồng duy nhất, nên một cú nghẽn (đọc bảng kernel cho một loạt SYN, hay bất kỳ việc đồng bộ nào trong middleware) dài hơn hạn thời gian là mất SYN hoặc SYN-ACK của relay ⇒ tiến trình chỉ bắt tay xong sau khi bộ đếm phát lại nổ: 1 s, rồi 3 s, rồi 7 s. `ProcessRedirector.OpenNetworkHandle` đặt 16384 gói / 8000 ms / 16 MB (tối đa driver cho phép là 16384 / 16000 / 32 MB) để cú nghẽn thành **chậm** chứ không thành **mất**. Muốn biết pump có nghẽn không: dòng log `accepted {ms}ms after its SYN` của `TcpRelayServer` và `handshake …ms` trong dòng `tcp pid=… up via …` của engine.
+
+## MTU / MSS của tunnel và hố đen MTU (MTU black hole)
+
+**MTU** là kích thước gói lớn nhất một chặng mạng chở được; **MSS** là phần dữ liệu TCP lớn nhất trong một gói, bằng `MTU − 40` (IPv4) hoặc `MTU − 60` (IPv6). Userspace TCP/IP stack của tunnel lấy MTU từ kênh (`TcpIpStack` → `TcpConnection(linkMtu: _channel.Mtu)`), suy ra `_localMss` và quảng cáo nó trong SYN để phía kia không gửi segment to hơn.
+
+MTU **bên trong** tunnel phải nhỏ hơn MTU đường truyền thật đủ để chứa toàn bộ vỏ ngoài. Với L2TP/IPsec NAT‑T, vỏ ngoài là IP(20) + UDP(8) + ESP header/IV(24) + padding/trailer + ICV(12) + L2TP(6–8) + PPP(4) ≈ 80–95 byte. PPP mặc định MTU 1400 ⇒ gói ngoài ≈ 1480–1495 byte: vừa đủ trên Ethernet 1500, nhưng **vượt** trên đường PPPoE (1492) hay bất kỳ chặng nào nhỏ hơn.
+
+Khi đó sinh **hố đen MTU**: gói nhỏ (SYN, SYN‑ACK, ACK) qua được nên `connect` báo thành công, còn gói lớn đầu tiên (thường là ServerHello + chuỗi chứng chỉ TLS) bị router thả im lặng. Phát lại cũng đúng kích thước đó nên **thả tiếp** — kết nối treo tới khi ứng dụng bỏ cuộc, không bao giờ tự khỏi. Dấu vân tay trên log: `TcpRelayServer: connection srcPort=… closed, up=~1900B down=0B 30.0s` — gửi đi đúng một ClientHello, nhận về **0 byte**.
+
+Trên lý thuyết ICMP "fragmentation needed" sẽ báo path MTU thật và `TcpConnection.OnIcmpPacketTooBig` hạ `_sendMss` (PMTUD, RFC 1191); thực tế nhiều mạng chặn sạch ICMP nên không bao giờ có tin báo — vì thế cách chữa là **hạ MTU của tunnel** cho chắc, không trông vào PMTUD.
