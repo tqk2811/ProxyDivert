@@ -370,3 +370,65 @@ Nguồn nào không khởi động được thì tự lùi sang nguồn kia, r�
 Đánh đổi: cách 1 attach sớm hơn (ngay khi tiến trình sinh ra, trước cả kết nối đầu) nhưng phụ thuộc sự kiện tới kịp; cách 2 xét đúng lúc mở kết nối và chỉ tốn 1 handle thay vì mỗi pid một handle, nhưng lớp SOCKET chỉ nghe được chứ không giữ được nên SYN vẫn có thể ra trước quyết định — lúc đó `TryReconcileFromKernel` tra bảng kernel để bắt lại.
 
 **Bẫy đã sửa cùng đợt**: `AttachChild` tạo tiến trình con với `includeChildren = false`, nên **cháu không bao giờ được nhận** — cây con dừng đúng một tầng, dù `AdoptChildren` tự mô tả là đi hết cây. Con nay kế thừa `IncludeChildren` của cha.
+
+## Khay hệ thống (system tray / notification area)
+
+Vùng biểu tượng nhỏ cạnh đồng hồ. Một tiến trình đăng ký biểu tượng của mình bằng `Shell_NotifyIcon`; WPF không có sẵn thứ này, ở đây dùng gói `Hardcodet.NotifyIcon.Wpf` (`TaskbarIcon`). Điểm phải nhớ: **`TaskbarIcon` gắn tay vào sự kiện của `Application` ngay trong constructor**, nên nếu đặt nó vào `Application.Resources` thì bất kỳ ai duyệt qua tài nguyên của ứng dụng — kể cả một test chạy trên luồng khác — cũng dựng ra một biểu tượng khay thật và ném `InvalidOperationException` vì sai luồng dispatcher. Vì thế `Views/TrayIcon.xaml` KHÔNG merge vào `App.xaml`, mà `App.OnStartup` tự nạp đúng một lần. Menu chuột phải là `ContextMenu` WPF thường: nó không nằm trong cây trực quan nào nên `DynamicResource` và style ngầm tự rơi về `Application.Resources`, tức là ăn sẵn theme và bản dịch.
+
+Windows 11 mặc định giấu biểu tượng của ứng dụng mới vào ngăn tràn ("Show Hidden Icons"); không thấy biểu tượng ngay không có nghĩa là nó chưa được đăng ký.
+
+## Scheduled Task và RunLevel HighestAvailable
+
+Cách cho một chương trình **cần quyền Administrator** tự chạy lúc đăng nhập mà không hiện UAC. Khoá `Run` trong registry KHÔNG làm được: Windows **bỏ qua im lặng** mọi entry `Run` trỏ tới file thi hành có manifest `requireAdministrator` — không lỗi, không log, chỉ là không chạy. Thay bằng một task của Task Scheduler với `<LogonTrigger>` và `<Principal><RunLevel>HighestAvailable</RunLevel><LogonType>InteractiveToken</LogonType></Principal>`.
+
+`ProxyDivert` đăng ký task qua `schtasks.exe /Create /TN … /XML … /F`. Bẫy: file XML phải là **UTF-16 có BOM**; đưa UTF-8 vào thì schtasks báo "The task XML contains a value which is incorrectly formatted or out of range", một thông điệp không hề nhắc tới encoding. Muốn kiểm XML mà không đụng vào máy: `$svc = New-Object -ComObject Schedule.Service; $svc.Connect(); $t = $svc.NewTask(0); $t.XmlText = $xml` — gán mà không ném là XML hợp lệ.
+
+Các mặc định `DisallowStartIfOnBatteries`, `StopIfGoingOnBatteries`, `RunOnlyIfIdle`, `RunOnlyIfNetworkAvailable` đều phải đặt `false`: chúng sinh ra để hoãn việc có thể hoãn, còn một bộ lọc mạng thì không — traffic đi ra trước khi engine kịp bật là traffic không được chuyển hướng.
+
+## ICO đa kích thước
+
+File `.ico` là một bảng mục lục (`ICONDIR` 6 byte + mỗi ảnh một `ICONDIRENTRY` 16 byte) rồi tới dữ liệu từng ảnh. Mỗi ảnh có thể ở **hai dạng**: DIB (BITMAPINFOHEADER + pixel BGRA xếp từ dưới lên + mặt nạ AND, và `biHeight` phải ghi gấp đôi chiều cao thật vì tính cả mặt nạ), hoặc PNG nhúng nguyên khối (hợp lệ từ Vista).
+
+`tools/logo/Generate-AppIcon.ps1` ghi cỡ nhỏ (16–48) dạng DIB và cỡ lớn (từ 64) dạng PNG. Lý do không dùng PNG cho tất cả: `System.Drawing.Icon.ToBitmap()` ném `ArgumentOutOfRangeException` trên mục PNG, mà đó chính là đường mà thư viện khay đi qua để lấy `HICON`. Ngược lại không dùng DIB cho tất cả vì cỡ 256 dạng DIB tốn 270 KB một mình.
+
+Một bẫy nữa khi render: `RenderTargetBitmap` chỉ dựng được `Pbgra32` (alpha đã nhân trước), còn ICO cần alpha thẳng — phải đi qua `FormatConvertedBitmap` sang `Bgra32`, bỏ bước này thì mọi pixel bán trong suốt bị tối đi.
+
+## Cờ dòng lệnh khi khởi động (argument flag)
+
+Cùng một file thi hành, hai cách vào: người dùng bấm thì hiện cửa sổ, task đăng nhập chạy thì không. Phân biệt bằng một tham số dòng lệnh — ở đây là `--minimized`, do `AppArguments.Parse` đọc từ `StartupEventArgs.Args`. Khác với `CliOptions` của bản console, parser này **bỏ qua tham số lạ thay vì báo lỗi**: một cửa sổ chạy lúc đăng nhập không có chỗ nào để in lời than, và từ chối chạy vì một chữ gõ sai thì trông y hệt như công cụ bị hỏng.
+
+Kéo theo: khi cửa sổ có thể không bao giờ được `Show()`, `ShutdownMode` mặc định `OnLastWindowClose` là sai — phải chuyển sang `OnExplicitShutdown` và tự gọi `Shutdown()` ở đúng hai chỗ (mục Thoát trên menu khay, và nút X khi người dùng chọn "đóng là thoát").
+
+## UIPI và thử nghiệm ứng dụng chạy quyền Administrator
+
+**UIPI** (User Interface Privilege Isolation) chặn tiến trình có mức toàn vẹn thấp gửi thông điệp cửa sổ hoặc input tổng hợp vào tiến trình mức cao hơn. Hệ quả khi tự động kiểm thử `ProxyDivert` (manifest `requireAdministrator`) từ một shell **không** nâng quyền: `SendMessage(WM_CLOSE)` không có tác dụng gì, `SetCursorPos`/`mouse_event` không di chuyển được con trỏ vào cửa sổ của nó, cây UI Automation của nó không đọc được, và `Stop-Process` trả về "Access is denied".
+
+Việc vẫn làm được: đọc danh sách biểu tượng khay bằng UI Automation (chúng thuộc `explorer.exe`, mức trung bình), và **bấm chuột vào chính biểu tượng khay đó** — cú double-click được shell chuyển tiếp nên đây là đường duy nhất điều khiển được ứng dụng elevated từ ngoài. Muốn kiểm phần còn lại thì phải chạy shell nâng quyền, hoặc bấm tay.
+
+## God class (lớp ôm đồm)
+
+Một lớp gánh nhiều mối quan tâm không liên quan (vòng đời, định tuyến, đo thời gian, chính sách IPv6, test tĩnh...) nên mỗi lần sửa một việc phải đọc lại và có nguy cơ làm hỏng các việc còn lại. Dấu hiệu: hàng trăm dòng, nhiều field nullable cùng bật/tắt theo trạng thái, constructor tự `new` các cộng sự nên không thay bằng bản giả để test được. Trong repo: `RedirectEngine` (641 dòng, 7 mối quan tâm), `SocketTracker` (578 dòng, 8 mối quan tâm), `NatRedirectMiddleware`, `ProcessRedirector`, `OutboundSourceFactory`.
+
+## Strategy (mẫu chiến lược) thay cho switch
+
+Khi một enum (`OutboundKind`, `VpnProtocol`, `ProcessDetectionMode`, address family v4/v6, tcp/udp) bị `switch`/`if` ở nhiều file, thêm một giá trị mới nghĩa là phải sửa tất cả các chỗ đó và dễ sót. Mẫu chiến lược đưa mỗi giá trị thành một lớp implement chung một interface (`IOutboundSourceBuilder`, `IVpnProtocolDescriptor`, `IProcessDetectionStrategy`, `ITransportFlowPolicy`), chọn một lần qua registry/dictionary, phần còn lại của code chỉ gọi interface. Chỉ đáng làm khi switch xuất hiện ở từ 2 nơi trở lên hoặc chủ dự án đã dự định mở rộng; một switch duy nhất, đầy đủ nhánh, có `default: throw` thì giữ nguyên.
+
+## Aggregate (gốc tập hợp) cho cấu hình
+
+Một đối tượng gốc sở hữu các đối tượng con và là nơi **duy nhất** được sửa chúng, để mọi ràng buộc toàn vẹn (xoá policy thì gỡ khỏi mọi filter, xoá outbound thì policy trỏ về Block, built-in không được đổi `Kind/Url`) nằm ở một chỗ thay vì được vá ở từng ViewModel, `ConfigStore.Load` và resolver. Với ProxyDivert đó là `AppConfig` với các method `RemovePolicy`, `RemoveOutbound`, `Normalize`. Hệ quả: CLI, import/export, menu tray đều đi qua cùng luật.
+
+## Value object (đối tượng giá trị)
+
+Kiểu nhỏ, bất biến, so sánh theo giá trị, dùng để thay chuỗi/số thô đa nghĩa (primitive obsession). Ví dụ `Outbound.Url` hiện là một `string` mang 4 hình dạng (proxy URL, file `.conf`, endpoint `sstp://`, ini `.vpn`) và bị parse ở 4 nơi; một `OutboundAddress` với `TryParse` cho phép báo lỗi ngay trong ô nhập thay vì lúc kết nối đầu tiên trên luồng relay. Tương tự `RelayEndpoint(protocol, family, port)` thay cho 4 int + 2 bool trong WinDivert.
+
+## IAsyncDisposable và chuỗi dispose đồng bộ
+
+`IDisposable.Dispose()` là đồng bộ; một thành phần bên dưới chỉ có `DisposeAsync()` (như `VpnTunnel`) buộc tầng trên phải `.Wait(timeout)`. Khi chuỗi có nhiều tầng (`VpnClientProxySource` → `OutboundSourceFactory` → `KeptVpnTunnel` → `VpnConnectionKeeper` → `AppServices`), các timeout cộng dồn (5s + 2s + ...) và block đúng luồng đang Save. Cách đúng: `IAsyncDisposable` từ dưới lên trên, chỉ chấp nhận `Wait` ở đúng một chỗ ngoài cùng (lúc app thoát), hoặc giao việc drop cho thread pool và chỉ await lúc shutdown.
+
+## Job Object (Windows)
+
+Đối tượng kernel gom nhiều tiến trình; với cờ `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, khi handle job đóng (kể cả vì tiến trình cha bị kill hoặc crash) mọi tiến trình con trong job bị kết thúc theo. Không có nó, `wireproxy.exe`/`ssh.exe` do app spawn sẽ sống mãi sau khi app chết vì `Dispose` không kịp chạy. Tạo bằng `CreateJobObject` + `SetInformationJobObject` + `AssignProcessToJobObject` ngay sau `Process.Start()`.
+
+## Single-writer và Channel<T>
+
+Mô hình một thread duy nhất được phép ghi vào một bảng trạng thái; mọi nguồn sự kiện (socket pump, reconcile từ bảng kernel, Add/Remove từ UI) chỉ đẩy yêu cầu vào `Channel<T>`, consumer đọc tuần tự và áp dụng. Lợi ích chính là **hợp đồng rõ** (sự kiện bắn ra từ đúng một thread, không cần `Interlocked` throttle hay cặp `TryAdd/else overwrite`), không hẳn là hiệu năng; đọc từ thread khác vẫn cần `ConcurrentDictionary`. Áp dụng cho `FlowTable` tách từ `SocketTracker` và cho chuỗi attach/detach của `ProcessRuleTracker`.

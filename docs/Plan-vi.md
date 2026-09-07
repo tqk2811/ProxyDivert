@@ -241,3 +241,12 @@ tầng dựng trên nó.
 - **Xung đột `Directory.Packages.props`**: mỗi submodule có file riêng trong `src/`, tool đặt file của mình trong `src/` của tool; không đặt ở gốc.
 
 **Hai cách phát hiện tiến trình ĐÃ XONG (07/09/2026).** Trước đó chỉ có một đường: WMI báo tiến trình mới → khớp bộ lọc → attach. Nay người dùng chọn ở tab Cài đặt (khoá khi engine bật): **sự kiện tiến trình** với nguồn ETW hoặc WMI đứng sau `IProcessEventSource`, hoặc **nghe socket** — một handle WinDivert lớp SOCKET cho cả máy, xét từng pid ngay khi nó mở kết nối rồi lần ngược chuỗi cha. Chi tiết, đánh đổi và bẫy `includeChildren` ở [Hai cách phát hiện tiến trình](Glossary-vi.md#L357).
+
+**Logo, khay hệ thống và tự chạy lúc đăng nhập ĐÃ XONG (08/09/2026).** Ba việc đi cùng nhau vì chúng cùng phục vụ một kiểu dùng: công cụ chạy thường trực, không phải mở ra rồi tắt.
+
+- **Logo**: hai đường — một đi thẳng từ trái qua phải, một bị bẻ chéo lên ở giữa. Nguồn duy nhất là vector trong `Themes/Logo.xaml`; `tools/logo/Generate-AppIcon.ps1` render nó ra `Assets/app.ico` 9 cỡ, còn thanh tiêu đề vẽ thẳng vector nên sắc ở mọi mức DPI. Chi tiết định dạng và bẫy alpha ở [ICO đa kích thước](Glossary-vi.md#L400).
+- **Khay hệ thống**: chuột phải có hiện/ẩn cửa sổ, bật/tắt chuyển hướng, thoát; double-click gọi cửa sổ về. Mục bật/tắt dùng lại đúng lệnh của công tắc trên thanh tiêu đề chứ không viết lại. Đóng cửa sổ nay là **thu vào khay**, có ô trong Cài đặt để đổi thành thoát hẳn. Bẫy `TaskbarIcon` trong `Application.Resources` ở [Khay hệ thống](Glossary-vi.md#L386).
+- **Tự chạy lúc đăng nhập**: ô "Chạy cùng Windows" trước đây ghi khoá `Run` trong registry và **chưa từng chạy được** — manifest là `requireAdministrator` nên Windows bỏ qua entry đó. Nay đăng ký task đăng nhập với `RunLevel HighestAvailable`, chạy kèm cờ `--minimized`, và xoá khoá `Run` cũ lúc khởi động. Xem [Scheduled Task](Glossary-vi.md#L392) và [Cờ dòng lệnh](Glossary-vi.md#L408).
+- **Nhớ trạng thái engine**: công tắc ghi `EngineEnabled` vào cấu hình ngay khi gạt, lần chạy sau tự bật lại. Cùng với hai việc trên, khởi động lại máy là công cụ trở về đúng chỗ nó đang đứng, không cửa sổ nào hiện ra.
+
+Giới hạn khi kiểm thử tự động: [UIPI](Glossary-vi.md#L414) chặn mọi thao tác từ shell không nâng quyền vào cửa sổ của công cụ, nên phần bấm nút phải kiểm bằng tay.
