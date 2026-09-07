@@ -621,6 +621,49 @@
         </Setter>
     </Style>
 
+    <!-- The check box's twin, round and without the tick: one of a set rather than a switch of its
+         own. Without this a RadioButton falls back to the system template, which paints its label
+         in the system's own colour — black text on the dark theme's dark card, which reads as the
+         control not being there at all. The tab strip's NavButton is a RadioButton too, but it
+         names its style explicitly and so keeps its own look. -->
+    <Style TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <StackPanel Orientation="Horizontal" Background="Transparent">
+                        <Border x:Name="box" Width="18" Height="18" CornerRadius="9" VerticalAlignment="Center"
+                                Background="{DynamicResource Brush.Control.Background}"
+                                BorderBrush="{DynamicResource Brush.Control.BorderBrush}" BorderThickness="1"
+                                SnapsToDevicePixels="True">
+                            <Ellipse x:Name="dot" Width="8" Height="8" VerticalAlignment="Center"
+                                     HorizontalAlignment="Center"
+                                     Fill="{DynamicResource Brush.Accent.Foreground}"
+                                     Visibility="Collapsed"/>
+                        </Border>
+                        <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="box" Property="Background" Value="{DynamicResource Brush.Accent}"/>
+                            <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+                            <Setter TargetName="dot" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ===================== SCROLLBAR (slim) ===================== -->
     <Style x:Key="ScrollBarThumb" TargetType="Thumb">
         <Setter Property="OverridesDefaultStyle" Value="True"/>
