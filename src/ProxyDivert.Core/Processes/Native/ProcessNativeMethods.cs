@@ -128,6 +128,13 @@ internal static class ProcessNativeMethods
     internal static extern bool QueryFullProcessImageName(
         IntPtr process, uint flags, [Out] char[] exeName, ref uint size);
 
+    // Four FILETIMEs, of which only the first is wanted: it is the one fact about a process that
+    // can identify it across a pid being handed out again. Free next to the handle already open.
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetProcessTimes(
+        IntPtr process, out long creationTime, out long exitTime, out long kernelTime, out long userTime);
+
     [DllImport("kernel32.dll")]
     internal static extern IntPtr GetCurrentProcess();
 

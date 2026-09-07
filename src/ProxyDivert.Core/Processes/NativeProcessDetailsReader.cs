@@ -47,12 +47,21 @@ public sealed class NativeProcessDetailsReader : IProcessDetailsReader
 
         try
         {
-            return new ProcessDetails(ReadPath(handle), ReadCommandLine(handle));
+            return new ProcessDetails(ReadPath(handle), ReadCommandLine(handle), ReadStartTime(handle));
         }
         finally
         {
             ProcessNativeMethods.CloseHandle(handle);
         }
+    }
+
+    // The one fact that survives a pid being reissued, so it is read whether or not the rest could be.
+    private static DateTime ReadStartTime(IntPtr handle)
+    {
+        if (!ProcessNativeMethods.GetProcessTimes(handle, out long created, out _, out _, out _)) return DateTime.MinValue;
+        if (created <= 0) return DateTime.MinValue;
+        try { return DateTime.FromFileTimeUtc(created); }
+        catch (ArgumentOutOfRangeException) { return DateTime.MinValue; }
     }
 
     private static string? ReadPath(IntPtr handle)

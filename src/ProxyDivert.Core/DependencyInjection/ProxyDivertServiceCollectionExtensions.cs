@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Logging;
+using ProxyDivert.Core.Processes;
 using TqkLibrary.WinDivert.ProcessControl.DependencyInjection;
 using TqkLibrary.WinDivert.Redirect.DependencyInjection;
 
@@ -48,6 +49,11 @@ public static class ProxyDivertServiceCollectionExtensions
 
         services.AddWinDivertRedirect();
         services.AddWinDivertProcessControl();
+
+        // The process table is a singleton because it describes the MACHINE, not a run: the host
+        // starts it when the application opens and it keeps itself current whether or not anything
+        // is being redirected, so starting the engine costs a read rather than a rediscovery.
+        services.TryAddSingleton<ProcessInventory>();
 
         // ConfigStore is deliberately absent: a host has to read its configuration BEFORE building
         // this container, because the configuration is what says where the trace file goes.

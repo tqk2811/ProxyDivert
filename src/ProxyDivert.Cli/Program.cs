@@ -9,6 +9,7 @@ using ProxyDivert.Cli;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Engine.Models;
+using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Vpn.Enums;
@@ -181,6 +182,12 @@ using ServiceProvider services = new ServiceCollection()
     .AddProxyDivert(config.DiagnosticLogPath, options.Verbose ? LogLevel.Debug : LogLevel.Information)
     .BuildServiceProvider();
 
+// The process table has to be collecting before the engine reads it — the engine matches filters
+// against the table rather than going to the operating system itself.
+using ProcessInventory processes = services.GetRequiredService<ProcessInventory>();
+processes.EventBacklogMs = config.ProcessEventBacklogMs;
+processes.Start();
+
 RedirectEngine engine = services.GetRequiredService<RedirectEngine>();
 
 engine.ProcessAttached += p => Console.WriteLine($"  [proc +] {Describe(p)}");
@@ -211,13 +218,12 @@ if (options.Verbose)
 // ---- what to redirect -------------------------------------------------------------------------
 
 ISuspendedProcessLauncher launcher = services.GetRequiredService<ISuspendedProcessLauncher>();
-IProcessFinder processFinder = services.GetRequiredService<IProcessFinder>();
 ISuspendedProcess? launched = null;
 try
 {
     foreach (uint pid in options.Pids)
     {
-        ProcessInfo? info = processFinder.FindById(pid);
+        ProcessSnapshot? info = processes.Get(pid);
         if (info is null)
         {
             Console.Error.WriteLine($"No process with id {pid}.");

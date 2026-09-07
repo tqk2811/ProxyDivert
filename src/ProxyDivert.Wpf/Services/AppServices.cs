@@ -9,6 +9,7 @@ using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.DependencyInjection;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Logging;
+using ProxyDivert.Core.Processes;
 
 namespace ProxyDivert.Wpf.Services;
 
@@ -38,6 +39,13 @@ public sealed class AppServices : IDisposable
     public AppConfig Config { get; private set; }
 
     public RedirectEngine Engine { get; }
+
+    /// <summary>
+    /// Every process running on this machine, with its path, its arguments and its parent. Started
+    /// when the window opens and kept current for as long as the application lives, so the engine
+    /// has the answer ready the moment it is switched on rather than going and finding it then.
+    /// </summary>
+    public ProcessInventory Processes { get; }
 
     /// <summary>
     /// Every log line, from the packet path up. Unlike before, this lives as long as the
@@ -101,6 +109,12 @@ public sealed class AppServices : IDisposable
         _loggerProvider = _provider.GetRequiredService<AppLoggerProvider>();
         _logger = _provider.GetRequiredService<ILoggerFactory>().CreateLogger<AppServices>();
         Engine = _provider.GetRequiredService<RedirectEngine>();
+
+        // Before anything else asks: collecting is what makes starting the engine cheap, and the
+        // first sweep is about thirty milliseconds, so it is done here rather than deferred.
+        Processes = _provider.GetRequiredService<ProcessInventory>();
+        Processes.EventBacklogMs = Config.ProcessEventBacklogMs;
+        Processes.Start();
 
         // Checked every minute rather than scheduled for the exact turn of the hour: SetFilePath
         // is a no-op when the path has not changed, so the cost of asking is nothing and there is
@@ -198,6 +212,7 @@ public sealed class AppServices : IDisposable
         // an engine stop in progress must finish before the engine is torn down under it.
         try { WhenIdleAsync().Wait(TimeSpan.FromSeconds(10)); } catch { }
         Engine.Dispose();
+        Processes.Dispose();
         _provider.Dispose();
     }
 }

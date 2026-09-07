@@ -49,7 +49,7 @@ public sealed class RedirectEngine : IDisposable
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<RedirectEngine> _logger;
     private readonly IProcessRedirectorFactory _redirectorFactory;
-    private readonly IProcessTreeMonitorFactory _treeMonitorFactory;
+    private readonly ProcessInventory _inventory;
     private readonly IHostNameInspector _hostNameInspector;
     private readonly object _stateLock = new object();
     // What we have learned about which outbounds can actually reach IPv6. Lives across Start/Stop
@@ -59,13 +59,12 @@ public sealed class RedirectEngine : IDisposable
     private AppConfig _config = AppConfig.CreateDefault();
     private RoutingPolicyResolver _resolver;
     private OutboundSourceFactory? _outboundFactory;
-    private ProcessWatcher? _watcher;
+    private ProcessRuleTracker? _tracker;
     private IProcessRedirector? _redirector;
     private IConnectionHostNameResolver? _hostNames;
     private UdpProxyForwarder? _udpForwarder;
     private VpnConnectionKeeper? _vpnKeeper;
     private CancellationTokenSource? _cts;
-    private readonly Dictionary<uint, IProcessTreeMonitor> _treeMonitors = new Dictionary<uint, IProcessTreeMonitor>();
 
     public ConnectionTracker Connections { get; } = new ConnectionTracker();
 
@@ -76,7 +75,7 @@ public sealed class RedirectEngine : IDisposable
 
     /// <summary>Processes currently under redirection.</summary>
     public IReadOnlyCollection<TrackedProcess> TrackedProcesses
-        => _watcher?.Tracked ?? Array.Empty<TrackedProcess>();
+        => _tracker?.Tracked ?? Array.Empty<TrackedProcess>();
 
     public event Action<TrackedProcess>? ProcessAttached;
     public event Action<TrackedProcess>? ProcessDetached;
@@ -98,14 +97,18 @@ public sealed class RedirectEngine : IDisposable
     /// <summary>The tunnels currently held up, or an empty list when the engine is not running.</summary>
     public IReadOnlyList<VpnStatus> VpnStatuses => _vpnKeeper?.Statuses ?? Array.Empty<VpnStatus>();
 
+    /// <param name="inventory">
+    /// The machine-wide process table. It is started by the host and outlives every engine run, so
+    /// it is NOT owned here and never disposed by Stop.
+    /// </param>
     public RedirectEngine(
         IProcessRedirectorFactory redirectorFactory,
-        IProcessTreeMonitorFactory treeMonitorFactory,
+        ProcessInventory inventory,
         IHostNameInspector hostNameInspector,
         ILoggerFactory loggerFactory)
     {
         _redirectorFactory = redirectorFactory ?? throw new ArgumentNullException(nameof(redirectorFactory));
-        _treeMonitorFactory = treeMonitorFactory ?? throw new ArgumentNullException(nameof(treeMonitorFactory));
+        _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
         _hostNameInspector = hostNameInspector ?? throw new ArgumentNullException(nameof(hostNameInspector));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<RedirectEngine>();
@@ -146,11 +149,13 @@ public sealed class RedirectEngine : IDisposable
             _hostNames = new ConnectionHostNameResolver(_hostNameInspector, _redirector.ReverseDns);
             _udpForwarder = new UdpProxyForwarder(_redirector, _loggerFactory.CreateLogger<UdpProxyForwarder>(), _cts.Token);
 
-            _watcher = new ProcessWatcher(_loggerFactory.CreateLogger<ProcessWatcher>());
-            _watcher.ProcessAttached += OnProcessAttached;
-            _watcher.ProcessDetached += OnProcessDetached;
-            _watcher.EventBacklogMs = config.ProcessEventBacklogMs;
-            _watcher.Start(config.ProcessRules);
+            // The process table is already running and already knows every process on the machine,
+            // so starting is a matter of reading it rather than of discovering anything.
+            _inventory.EventBacklogMs = config.ProcessEventBacklogMs;
+            _tracker = new ProcessRuleTracker(_loggerFactory.CreateLogger<ProcessRuleTracker>(), _inventory);
+            _tracker.ProcessAttached += OnProcessAttached;
+            _tracker.ProcessDetached += OnProcessDetached;
+            _tracker.Start(config.ProcessRules);
 
             // VPN tunnels come up now, in the background, rather than when a request first needs
             // one: dialling on demand would put the subprocess launch and the WireGuard handshake
@@ -195,8 +200,8 @@ public sealed class RedirectEngine : IDisposable
             _vpnKeeper?.Sync(config.Outbounds, config.WireProxyPath);
             // Takes effect on the next process event, with no restart — it only tunes how the
             // watcher reads command lines, not what it watches.
-            if (_watcher != null) _watcher.EventBacklogMs = config.ProcessEventBacklogMs;
-            _watcher?.ApplyRules(config.ProcessRules);
+            _inventory.EventBacklogMs = config.ProcessEventBacklogMs;
+            _tracker?.ApplyRules(config.ProcessRules);
             RebuildResolver();
 
             // The connections already running are read against the new rules as well. One the new
@@ -232,12 +237,7 @@ public sealed class RedirectEngine : IDisposable
     {
         if (!IsRunning) throw new InvalidOperationException("Engine is not running");
 
-        TrackedProcess? tracked = _watcher?.AttachProcessId(processId, policyId, includeChildren);
-        // The tree monitor is normally only needed when WMI is unavailable, but an explicitly
-        // attached process is usually one just launched suspended: its children appear within
-        // milliseconds of the resume, and the poller is what catches them either way.
-        if (tracked != null && includeChildren) StartTreeMonitor(processId);
-        return tracked;
+        return _tracker?.AttachProcessId(processId, policyId, includeChildren);
     }
 
     /// <summary>
@@ -245,7 +245,13 @@ public sealed class RedirectEngine : IDisposable
     /// The "launch suspended" flow needs this: the process must be adopted while it is still
     /// frozen, otherwise its first connection is out before the redirect attaches.
     /// </summary>
-    public void ForceProcessScan() => _watcher?.ScanOnce();
+    public void ForceProcessScan()
+    {
+        // The table first, then the filters against it: a process frozen a moment ago is not in the
+        // table yet, and matching a table that does not contain it would attach nothing.
+        _inventory.Refresh();
+        _tracker?.MatchEverything();
+    }
 
     public void Stop()
     {
@@ -256,15 +262,13 @@ public sealed class RedirectEngine : IDisposable
 
             try { _cts?.Cancel(); } catch { }
 
-            foreach (var kv in _treeMonitors) kv.Value.Dispose();
-            _treeMonitors.Clear();
-
-            if (_watcher != null)
+            // The table it read stays running: it belongs to the application, not to this run.
+            if (_tracker != null)
             {
-                _watcher.ProcessAttached -= OnProcessAttached;
-                _watcher.ProcessDetached -= OnProcessDetached;
-                _watcher.Dispose();
-                _watcher = null;
+                _tracker.ProcessAttached -= OnProcessAttached;
+                _tracker.ProcessDetached -= OnProcessDetached;
+                _tracker.Dispose();
+                _tracker = null;
             }
 
             // Before the factory: the keeper would otherwise see its tunnels disposed underneath it
@@ -306,11 +310,6 @@ public sealed class RedirectEngine : IDisposable
         {
             _redirector?.AddTrackedProcessId(process.ProcessId);
             RebuildResolver();
-
-            // WMI already reports parent/child, so the poller is only needed when WMI is
-            // unavailable — running both would double the work for nothing.
-            if (process.MatchedRule?.IncludeChildren == true && _watcher?.IsUsingWmi == false)
-                StartTreeMonitor(process.ProcessId);
         }
         catch (Exception ex)
         {
@@ -325,7 +324,6 @@ public sealed class RedirectEngine : IDisposable
         {
             _redirector?.RemoveTrackedProcessId(process.ProcessId);
             RebuildResolver();
-            StopTreeMonitor(process.ProcessId);
         }
         catch (Exception ex)
         {
@@ -334,32 +332,10 @@ public sealed class RedirectEngine : IDisposable
         ProcessDetached?.Invoke(process);
     }
 
-    private void StartTreeMonitor(uint rootPid)
-    {
-        lock (_treeMonitors)
-        {
-            if (_treeMonitors.ContainsKey(rootPid)) return;
-            IProcessTreeMonitor monitor = _treeMonitorFactory.Create(rootPid);
-            monitor.ChildSpawned += (childPid, parentPid) => _watcher?.AttachChild(childPid, parentPid);
-            monitor.Start();
-            _treeMonitors[rootPid] = monitor;
-        }
-    }
-
-    private void StopTreeMonitor(uint rootPid)
-    {
-        lock (_treeMonitors)
-        {
-            if (!_treeMonitors.TryGetValue(rootPid, out IProcessTreeMonitor? monitor)) return;
-            _treeMonitors.Remove(rootPid);
-            monitor.Dispose();
-        }
-    }
-
     private void RebuildResolver()
     {
         IReadOnlyDictionary<uint, IReadOnlyList<Guid>> policyMap
-            = _watcher?.BuildPolicyMap() ?? new Dictionary<uint, IReadOnlyList<Guid>>();
+            = _tracker?.BuildPolicyMap() ?? new Dictionary<uint, IReadOnlyList<Guid>>();
         _resolver = BuildResolver(_config, policyMap);
     }
 
@@ -374,7 +350,7 @@ public sealed class RedirectEngine : IDisposable
 
     private async Task HandleTcpAsync(RedirectedTcpConnection connection, CancellationToken ct)
     {
-        string processName = _watcher != null && _watcher.TryGetTracked(connection.ProcessId, out TrackedProcess? tracked)
+        string processName = _tracker != null && _tracker.TryGetTracked(connection.ProcessId, out TrackedProcess? tracked)
             ? tracked!.Name
             : $"pid {connection.ProcessId}";
 
