@@ -93,6 +93,8 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
         rule.Condition = Root.ToModel();
         rule.IncludeChildren = IncludeChildren;
         rule.PolicyIds = ChosenPolicyIds();
+        // The whole list, not just the ticked part: that is what the window has to come back up as.
+        rule.PolicyOrder = Policies.Select(c => c.Policy.Id).ToList();
     }
 
     // Ticking nothing would leave the filter catching processes and then having no rules to route
@@ -105,18 +107,25 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
         return chosen;
     }
 
-    // The rule's own list first, in its own order — that is the priority the user arranged — then
-    // everything else, so the whole set is there to be ticked without a second list to go to.
+    // The order the rule was left in — every row, ticked or not — then everything it does not
+    // mention, so the whole set is there to be ticked without a second list to go to.
+    //
+    // The ticked ids follow the saved order rather than lead it: a filter saved before the order
+    // was kept has none, and then they are the order, which is how the window used to open.
+    // Anything still missing is a policy created since, and it goes at the end.
     private void BuildPolicyList(ProcessRule rule, IEnumerable<RoutingPolicy> policies)
     {
         List<RoutingPolicy> all = policies.ToList();
+        var chosen = new HashSet<Guid>(rule.PolicyIds);
 
-        foreach (Guid id in rule.PolicyIds)
+        foreach (Guid id in rule.PolicyOrder.Concat(rule.PolicyIds))
         {
             RoutingPolicy? policy = all.FirstOrDefault(p => p.Id == id);
-            if (policy != null) Policies.Add(new PolicyChoice(policy) { IsSelected = true });
+            if (policy != null && !Policies.Any(c => c.Policy.Id == id))
+                Policies.Add(new PolicyChoice(policy) { IsSelected = chosen.Contains(id) });
         }
 
+        // Whatever is left is a policy the filter has never named, so it comes up unticked.
         foreach (RoutingPolicy policy in all)
             if (!Policies.Any(c => c.Policy.Id == policy.Id))
                 Policies.Add(new PolicyChoice(policy));

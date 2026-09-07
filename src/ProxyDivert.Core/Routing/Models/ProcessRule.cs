@@ -42,6 +42,20 @@ public sealed class ProcessRule
     /// </remarks>
     public List<Guid> PolicyIds { get; set; } = new List<Guid>();
 
+    /// <summary>
+    /// The order the editor lists the policies in — the ticked ones and the unticked ones alike —
+    /// as the user arranged it. <see cref="PolicyIds"/> is the part of it that is turned on, in the
+    /// same order, and stays the only thing routing reads.
+    /// </summary>
+    /// <remarks>
+    /// Kept because unticking a policy would otherwise throw its place away: the list was rebuilt
+    /// ticked-first every time the window opened, so a row put back came up somewhere else than
+    /// where it was left. A hint rather than a second source of truth — ids that no longer exist
+    /// are ignored, and a policy missing from it is listed after the ones that are in it, so it
+    /// never needs repairing and a filter written before it existed still opens as it used to.
+    /// </remarks>
+    public List<Guid> PolicyOrder { get; set; } = new List<Guid>();
+
     /// <summary>The policy whose own settings apply, or <see cref="Guid.Empty"/> when there is none.</summary>
     [JsonIgnore]
     public Guid PrimaryPolicyId => PolicyIds.Count > 0 ? PolicyIds[0] : Guid.Empty;

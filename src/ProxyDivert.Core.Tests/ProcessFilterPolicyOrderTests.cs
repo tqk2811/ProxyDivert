@@ -23,8 +23,9 @@ public class ProcessFilterPolicyOrderTests
     private static ProcessRule Filter(params Guid[] policyIds)
         => new ProcessRule { Id = Guid.NewGuid(), Name = "test", PolicyIds = policyIds.ToList() };
 
-    // The list opens with the filter's own policies first, in its own order — not in the order the
-    // configuration happens to store the policies in.
+    // A filter saved before the arrangement was kept: it names its policies and nothing more.
+    // The list opens with those first, in its own order — not in the order the configuration
+    // happens to store the policies in.
     [Fact]
     public void The_chosen_policies_come_first_in_the_order_the_filter_named_them()
     {
@@ -53,10 +54,13 @@ public class ProcessFilterPolicyOrderTests
 
         Assert.Equal(new[] { Work.Id, Games.Id }, rule.PolicyIds);
         Assert.Equal("Work → Games", model.PolicySummary);
+
+        // The whole arrangement is saved, not only the ticked part of it.
+        Assert.Equal(new[] { Work.Id, Games.Id, Streaming.Id }, rule.PolicyOrder);
     }
 
     [Fact]
-    public void Ticking_one_more_puts_it_last_until_it_is_moved()
+    public void Ticking_one_more_gives_it_the_place_it_is_already_standing_in()
     {
         var rule = Filter(Work.Id);
         var model = new ProcessFilterViewModel(rule, All);
@@ -65,6 +69,68 @@ public class ProcessFilterPolicyOrderTests
         model.ApplyTo(rule);
 
         Assert.Equal(new[] { Work.Id, Games.Id }, rule.PolicyIds);
+    }
+
+    // The one the user complained about: unticking a policy used to throw its place away, because
+    // the window rebuilt the list ticked-first every time it opened. A row put back then came up
+    // somewhere else than where it was left, and so did every row under it.
+    [Fact]
+    public void Unticking_a_policy_leaves_it_where_it_was()
+    {
+        var rule = Filter(Work.Id, Streaming.Id, Games.Id);
+        var model = new ProcessFilterViewModel(rule, All);
+
+        model.Policies.Single(p => p.Name == "Work").IsSelected = false;
+        model.ApplyTo(rule);
+
+        Assert.Equal(new[] { Streaming.Id, Games.Id }, rule.PolicyIds);
+
+        var reopened = new ProcessFilterViewModel(rule, All);
+
+        Assert.Equal(
+            new[] { "Work", "Streaming", "Games" },
+            reopened.Policies.Select(p => p.Name));
+        Assert.Equal(new[] { false, true, true }, reopened.Policies.Select(p => p.IsSelected));
+        Assert.Equal(new[] { 0, 1, 2 }, reopened.Policies.Select(p => p.Rank));
+    }
+
+    // Arranging and ticking are two different things, and the arrangement is the one that has to
+    // survive: a policy moved to the top while unticked is at the top when it is ticked later.
+    [Fact]
+    public void An_unticked_policy_keeps_the_place_it_was_moved_to()
+    {
+        var rule = Filter(Work.Id);
+        var model = new ProcessFilterViewModel(rule, All);
+
+        model.MovePolicyUpCommand.Execute(model.Policies.Single(p => p.Name == "Games"));
+        model.ApplyTo(rule);
+
+        var reopened = new ProcessFilterViewModel(rule, All);
+
+        Assert.Equal(
+            new[] { "Work", "Games", "Streaming" },
+            reopened.Policies.Select(p => p.Name));
+
+        reopened.Policies.Single(p => p.Name == "Games").IsSelected = true;
+        reopened.ApplyTo(rule);
+
+        Assert.Equal(new[] { Work.Id, Games.Id }, rule.PolicyIds);
+    }
+
+    // A policy created after the filter was last saved is not in its arrangement, so it goes at
+    // the end rather than nowhere.
+    [Fact]
+    public void A_policy_the_arrangement_never_saw_is_listed_last()
+    {
+        var rule = Filter(Games.Id);
+        var model = new ProcessFilterViewModel(rule, new[] { Work, Games });
+        model.ApplyTo(rule);
+
+        var reopened = new ProcessFilterViewModel(rule, All);
+
+        Assert.Equal(
+            new[] { "Games", "Work", "Streaming" },
+            reopened.Policies.Select(p => p.Name));
     }
 
     // Nothing ticked would leave the filter catching processes with no rules to route them by, and

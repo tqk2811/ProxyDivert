@@ -155,10 +155,16 @@ public sealed partial class RulesViewModel : ObservableObject
         // rules at all would send them out direct, which is the one outcome that must not happen
         // by accident.
         RoutingPolicy fallback = Policies[0];
-        foreach (ProcessRule rule in _services.Config.ProcessRules.Where(r => r.PolicyIds.Contains(policy.Id)))
+        foreach (ProcessRule rule in _services.Config.ProcessRules)
         {
-            rule.PolicyIds.Remove(policy.Id);
-            if (rule.PolicyIds.Count == 0) rule.PolicyIds.Add(fallback.Id);
+            // Out of the arrangement too, ticked or not — a filter that never used this policy
+            // still has it in the order it was left in.
+            rule.PolicyOrder.Remove(policy.Id);
+
+            if (!rule.PolicyIds.Remove(policy.Id) || rule.PolicyIds.Count > 0) continue;
+
+            rule.PolicyIds.Add(fallback.Id);
+            if (!rule.PolicyOrder.Contains(fallback.Id)) rule.PolicyOrder.Insert(0, fallback.Id);
         }
 
         SelectedPolicy = fallback;
