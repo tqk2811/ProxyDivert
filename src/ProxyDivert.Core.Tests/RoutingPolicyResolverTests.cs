@@ -194,15 +194,75 @@ public class RoutingPolicyResolverTests
         Assert.Equal(OutboundKind.Direct, decision.Outbound.Kind);
     }
 
+    // The browser's TCP to this destination is tunnelled, so its QUIC must not go round the tunnel.
     [Fact]
     public void Quic_is_blocked_when_the_policy_says_so()
     {
-        RoutingPolicy policy = Policy();
+        RoutingPolicy policy = Policy(Rule(HostMatcherType.Wildcard, "*"));
         policy.UdpMode = UdpMode.Direct;
         policy.BlockQuic = true;
         var resolver = Resolver(policy, Socks5());
 
         RouteDecision decision = resolver.ResolveUdp(Target("www.google.com", port: 443, isUdp: true));
+
+        Assert.Equal(OutboundKind.Block, decision.Outbound.Kind);
+    }
+
+    // The regression behind "every site takes five seconds to open": a policy whose outbound is
+    // Direct still blocked QUIC, so the browser spent its QUIC retries before falling back to a
+    // TCP that was going direct anyway. With nothing to protect, the datagram goes where TCP goes.
+    [Fact]
+    public void Quic_goes_direct_when_tcp_would_go_direct_too()
+    {
+        RoutingPolicy policy = PolicyTo(Outbound.DirectId, Rule(HostMatcherType.Wildcard, "*"));
+        policy.UdpMode = UdpMode.Direct;
+        policy.BlockQuic = true;
+        var resolver = Resolver(policy, Socks5());
+
+        RouteDecision decision = resolver.ResolveUdp(Target("www.google.com", port: 443, isUdp: true));
+
+        Assert.Equal(OutboundKind.Direct, decision.Outbound.Kind);
+    }
+
+    // Same reasoning when the policy tunnels SOME destinations: QUIC to a host no rule claims is
+    // not bypassing anything, because that host's TCP is not tunnelled either.
+    [Fact]
+    public void Quic_to_a_destination_no_rule_claims_goes_direct()
+    {
+        RoutingPolicy policy = Policy(Rule(HostMatcherType.Wildcard, "*.google.com"));
+        policy.UdpMode = UdpMode.Direct;
+        policy.BlockQuic = true;
+        var resolver = Resolver(policy, Socks5());
+
+        Assert.Equal(OutboundKind.Direct, resolver.ResolveUdp(Target("example.com", port: 443, isUdp: true)).Outbound.Kind);
+        Assert.Equal(OutboundKind.Block, resolver.ResolveUdp(Target("www.google.com", port: 443, isUdp: true)).Outbound.Kind);
+    }
+
+    // An outbound that carries UDP carries QUIC: the block is for QUIC that would escape the
+    // tunnel, not for QUIC as such.
+    [Fact]
+    public void Quic_rides_the_tunnel_when_the_outbound_carries_udp()
+    {
+        RoutingPolicy policy = Policy(Rule(HostMatcherType.Wildcard, "*"));
+        policy.UdpMode = UdpMode.ThroughOutbound;
+        policy.BlockQuic = true;
+        var resolver = Resolver(policy, Socks5());
+
+        RouteDecision decision = resolver.ResolveUdp(Target("www.google.com", port: 443, isUdp: true));
+
+        Assert.Equal(OutboundKind.Socks5, decision.Outbound.Kind);
+    }
+
+    // A rule that sends a destination to Block sends its UDP there too, whatever the UDP mode.
+    [Fact]
+    public void Udp_to_a_blocked_destination_is_blocked()
+    {
+        RoutingPolicy policy = PolicyTo(Outbound.BlockId, Rule(HostMatcherType.Wildcard, "*"));
+        policy.UdpMode = UdpMode.Direct;
+        policy.BlockQuic = false;
+        var resolver = Resolver(policy, Socks5());
+
+        RouteDecision decision = resolver.ResolveUdp(Target("example.com", port: 12345, isUdp: true));
 
         Assert.Equal(OutboundKind.Block, decision.Outbound.Kind);
     }

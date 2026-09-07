@@ -104,33 +104,47 @@ public sealed class RoutingPolicyResolver
         return new RouteDecision(_outbounds[Outbound.DirectId], policies[0], null);
     }
 
-    // UDP that is not DNS: the UdpMode decides, but an outbound that cannot carry UDP downgrades
-    // ThroughOutbound to Block instead of letting the datagram out with the real source IP on it.
+    // UDP that is not DNS. The datagram follows the SAME decision its TCP twin would get, and only
+    // when that decision is a proxy or a VPN do the UDP settings come into it:
     //
-    // Read off the first policy, like the other settings that are not rules: a filter listing three
-    // policies would otherwise have three answers to "is QUIC blocked" and no way to say which.
+    //   * TCP would go Direct — nothing claimed the destination, or the policy's outbound is Direct
+    //     — then the datagram goes direct too, QUIC included. BlockQuic exists to stop a browser
+    //     from slipping past the proxy over UDP/443 while its TCP is tunnelled; with no proxy in the
+    //     picture there is nothing to slip past, and blocking it only makes the browser spend
+    //     seconds retrying QUIC before it falls back to the TCP that was going to work all along.
+    //   * TCP would be tunnelled: UdpMode decides. ThroughOutbound rides the tunnel when the
+    //     outbound can carry UDP; otherwise the QUIC block applies (a datagram that reaches the
+    //     destination direct carries the real source address), then Direct or Block as configured.
+    //
+    // The UDP settings are read off the first policy, like every setting that is not a rule: a
+    // filter listing three policies would otherwise have three answers to "is QUIC blocked".
     public RouteDecision ResolveUdp(RouteTarget target)
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
         RoutingPolicy policy = GetPolicy(target.ProcessId);
 
-        if (policy.BlockQuic && target.Port == 443)
+        if (policy.UdpMode == UdpMode.Block)
             return new RouteDecision(_outbounds[Outbound.BlockId], policy, null);
+
+        RouteDecision tcpDecision = Resolve(target);
+        switch (tcpDecision.Outbound.Kind)
+        {
+            case OutboundKind.Block:
+            case OutboundKind.Direct:
+                return tcpDecision;
+        }
 
         switch (policy.UdpMode)
         {
-            case UdpMode.Block:
-                return new RouteDecision(_outbounds[Outbound.BlockId], policy, null);
+            case UdpMode.ThroughOutbound when tcpDecision.Outbound.SupportsUdp:
+                return tcpDecision;
+
+            case UdpMode.ThroughOutbound:
+            case UdpMode.Direct when policy.BlockQuic && target.Port == 443:
+                return new RouteDecision(_outbounds[Outbound.BlockId], policy, tcpDecision.MatchedRule);
 
             case UdpMode.Direct:
                 return new RouteDecision(_outbounds[Outbound.DirectId], policy, null);
-
-            case UdpMode.ThroughOutbound:
-            {
-                RouteDecision tcpDecision = Resolve(target);
-                if (tcpDecision.Outbound.SupportsUdp) return tcpDecision;
-                return new RouteDecision(_outbounds[Outbound.BlockId], policy, tcpDecision.MatchedRule);
-            }
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(target), policy.UdpMode, "Unknown UdpMode");
