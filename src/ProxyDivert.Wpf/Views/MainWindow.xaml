@@ -4,7 +4,7 @@
         xmlns:views="clr-namespace:ProxyDivert.Wpf.Views"
         Title="{DynamicResource Str.App.Title}"
         Height="720" Width="1180" MinHeight="520" MinWidth="900"
-        WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="Manual"
         Background="{DynamicResource Brush.Window.Background}"
         TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
 
