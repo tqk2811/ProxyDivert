@@ -108,6 +108,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsRunning));
     }
 
+    /// <summary>
+    /// Puts the switch back where the user left it at the end of the last run. Called once at
+    /// startup, and deliberately not through <see cref="ToggleEngineCommand"/>: this restores a
+    /// state rather than asking for a change, so a configuration that says "off" does nothing here.
+    /// </summary>
+    public async Task RestoreEngineAsync()
+    {
+        if (!_services.Config.EngineEnabled) return;
+
+        // Checked here rather than left to fail inside the driver: at logon there may be nobody
+        // looking, and the notice strip is the only place the reason can go.
+        if (!IsElevated)
+        {
+            StatusMessage = Loc.S("Str.App.RestoreNeedsAdmin");
+            return;
+        }
+
+        await StartAsync();
+        OnPropertyChanged(nameof(IsRunning));
+    }
+
     private async Task StartAsync()
     {
         if (IsRunning) return;
@@ -116,6 +137,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             await _services.StartEngineAsync();
             IsRunning = true;
             StatusMessage = null;
+            RememberEngineState();
             Processes.RefreshApplied();
             // A tunnel a filter routes through may not be disconnected while that filter is live,
             // so the Outbounds tab has to be told the moment redirection comes on.
@@ -137,12 +159,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (!IsRunning) return;
         await _services.StopEngineAsync();
         IsRunning = false;
+        RememberEngineState();
         // Nothing is being redirected any more, so the tree must not keep claiming otherwise.
         Processes.RefreshApplied();
         // The tunnels stay up — but nothing is routing through them now, so they may be
         // disconnected by hand again.
         Outbounds.RefreshVpnCommands();
         Settings.IsEngineRunning = false;
+    }
+
+    // Written the moment the switch moves rather than at the next Save, for the same reason the
+    // theme is: what is worth restoring is the state the user last chose, and a reboot must not be
+    // able to forget it. This persists the live configuration, edits in progress on the grids
+    // included — the appearance settings have always behaved this way, and two different meanings
+    // of "write the file" would be worse than the one shared meaning.
+    private void RememberEngineState()
+    {
+        _services.Config.EngineEnabled = IsRunning;
+        _services.Save();
     }
 
     [RelayCommand]

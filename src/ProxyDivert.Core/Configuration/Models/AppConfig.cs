@@ -55,6 +55,16 @@ public sealed class AppConfig
     public string? Theme { get; set; }
     public bool StartWithWindows { get; set; }
 
+    // Whether the switch was on when the application last closed. Restored on the next launch, so
+    // a machine that reboots overnight comes back redirecting rather than quietly not. Written by
+    // the switch itself, not by Save, so it records what the engine was doing rather than what the
+    // configuration tab happened to be showing.
+    public bool EngineEnabled { get; set; }
+
+    // Whether closing the window hides it to the tray instead of ending the process. On by default:
+    // the engine is meant to keep running, and the tray icon is there to say it still is.
+    public bool MinimizeToTrayOnClose { get; set; } = true;
+
     // A fresh install still needs something that works: the Direct outbound, and one policy that
     // has no rules yet — so nothing is claimed and nothing is redirected until the user says so.
     public static AppConfig CreateDefault()

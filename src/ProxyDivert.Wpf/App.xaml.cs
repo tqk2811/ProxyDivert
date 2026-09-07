@@ -25,8 +25,16 @@ public partial class App : Application
 
         _mainViewModel = new MainViewModel(_services);
         var window = new MainWindow { DataContext = _mainViewModel };
+        // Assigned even when it is never shown: the tray icon needs something to show later, and
+        // the window has to exist for the engine to have somewhere to report to.
         MainWindow = window;
-        window.Show();
+
+        AppArguments arguments = AppArguments.Parse(e.Args);
+        if (!arguments.Minimized) window.Show();
+
+        // Not awaited: starting the engine opens the driver and enumerates every process, and the
+        // window must be up and painting while that happens rather than after it.
+        _ = _mainViewModel.RestoreEngineAsync();
     }
 
     protected override void OnExit(ExitEventArgs e)
