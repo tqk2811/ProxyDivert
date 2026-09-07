@@ -258,3 +258,27 @@ Kiểu so khớp luật nhìn vào **giao thức tầng vận chuyển**, patter
 ## Luồng thoát (escaped flow)
 
 Kết nối TCP mà bắt tay (SYN) đã diễn ra **trước khi** công cụ kịp giành lấy nó — tiến trình được attach khi đã có socket mở, hoặc sự kiện tầng SOCKET thua cuộc đua với gói SYN (xem [rò rỉ SYN](#L37)). Luồng như vậy **không bao giờ được chuyển hướng giữa chừng**: nửa kết nối qua relay, nửa đi thẳng là chết kết nối. `NatRedirectMiddleware` chỉ có hai lựa chọn cho nó: **cho qua** (mặc định — kết nối sống nhưng lộ IP thật tới đích đó, ghi cảnh báo "passing escaped flow" một lần mỗi luồng) hoặc **thả** (`RedirectOptions.BlockEscapedFlows` = true — không rò rỉ gì, ứng dụng thấy kết nối chết và mở kết nối mới, kết nối mới được bắt từ SYN).
+
+## Ba tầng cấu hình (giao diện → snapshot RAM → file json)
+
+Cấu hình sống ở ba nơi, và chỉ đi theo một chiều. **Tầng giao diện** là `AppServices.Config` — thứ các ViewModel bind và sửa thẳng, kể cả khi đang gõ dở. **Tầng snapshot** là bản deep-copy (`ConfigStore.Clone`, JSON round-trip) được lấy đúng lúc bấm Save và giao cho engine (`RedirectEngine.Start/ApplyConfig`); engine, `ProcessWatcher` và `RoutingPolicyResolver` chỉ nhìn bản này, không chia sẻ một `List` nào với giao diện. **Tầng file** là `proxydivert.config.json`, ghi từ cùng snapshot đó (mật khẩu được DPAPI bọc lại trên một bản copy nữa). Lúc mở app: file → tầng giao diện; snapshot chỉ xuất hiện khi bật tool hoặc Save.
+
+Lý do tách: trước đây engine giữ CÙNG tham chiếu với giao diện, nên một luật vừa thêm vào lưới đã được so khớp với tiến trình mới trước khi bấm Save, và luồng WMI duyệt `_rules` đúng lúc lưới đang `Add` vào cùng danh sách. Save, ghi file và `ApplyConfig` chạy trên thread pool, xếp hàng tuần tự (`AppServices.Enqueue`), không bao giờ trên UI thread.
+
+## Save áp lên kết nối đang chạy (đóng kết nối lệch outbound, reset luồng thoát)
+
+Sau khi engine nhận snapshot mới, ba việc xảy ra với những gì ĐANG chạy, ngoài việc tiến trình/kết nối mới đi theo snapshot:
+
+1. **Tiến trình đã track**: luật vẫn khớp thì entry được thay tại chỗ (`TrackedProcess.WithRule`) — không Detach/Attach, không đóng handle SOCKET, con theo cha (`ProcessWatcher.ReconcileTrackedWithRules`). Luật hết khớp mới Detach.
+2. **Kết nối TCP đang qua relay** (`LiveTcpConnectionRegistry`): resolve lại từng kết nối bằng resolver mới; outbound KHÁC (kể cả Block, kể cả "không policy nào nhận nữa" ⇒ Direct) thì **đóng** — huỷ token forward và đóng socket phía tiến trình, ứng dụng thấy đứt và tự mở lại, kết nối mới được bắt từ SYN. Cùng outbound thì giữ nguyên.
+3. **Luồng thoát** (xem [Luồng thoát](#L258)): `IProcessRedirector.ResetEscapedFlows` đánh dấu mọi flow TCP đang track mà không có bản ghi NAT; gói tiếp theo của flow đó bị thả và tiến trình được bơm một gói **RST** (`TcpResetPacketBuilder`: seq = ack-number của gói vừa gửi, tức đúng byte tiến trình đang chờ, nên stack nhận ngay theo RFC 5961). Chỉ làm lúc Save; lúc bật tool luồng thoát vẫn được cho qua như cũ.
+
+## BlockQuic và UDP đi theo quyết định TCP
+
+`RoutingPolicy.BlockQuic` (mặc định bật) sinh ra để trình duyệt không lách qua proxy bằng QUIC (UDP/443) trong khi TCP của nó đang bị tunnel. `ResolveUdp` vì thế **resolve mục tiêu như TCP trước**: TCP ra Direct (policy Direct, hoặc không luật nào nhận) ⇒ UDP ra Direct luôn, kể cả QUIC — không có proxy nào để lách. TCP ra Block ⇒ Block. TCP qua proxy/VPN thì `UdpMode` mới lên tiếng: `ThroughOutbound` + outbound chở được UDP ⇒ đi cùng tunnel (QUIC cũng vậy); còn lại QUIC bị chặn nếu BlockQuic, UDP thường theo `UdpMode.Direct`/`Block`.
+
+Bài học đứng sau: chặn QUIC bằng cách **thả gói im lặng** khiến Chrome gửi lại Initial theo lũy thừa (đo trên log: 0,13 → 0,26 → 0,5 → 1 → 2 → 5 → 10 giây) và chỉ rơi về TCP sau vài giây. Với policy Direct, việc đó biến "mở trang mất 3–10 giây" thành triệu chứng của… một cờ mặc định. Hướng tốt hơn cho chế độ proxy (chưa làm): trả ICMP Port Unreachable để QUIC thất bại tức thì.
+
+## Hàng đợi gói của driver WinDivert (QueueLength / QueueTime / QueueSize)
+
+Gói driver đã bắt nằm trong hàng đợi chờ pump `WinDivertRecv`. Mặc định 4096 gói / 2000 ms / 4 MB; gói nằm quá lâu **bị thả**. Pump NETWORK là một luồng duy nhất, nên một cú nghẽn (đọc bảng kernel cho một loạt SYN, hay bất kỳ việc đồng bộ nào trong middleware) dài hơn hạn thời gian là mất SYN hoặc SYN-ACK của relay ⇒ tiến trình chỉ bắt tay xong sau khi bộ đếm phát lại nổ: 1 s, rồi 3 s, rồi 7 s. `ProcessRedirector.OpenNetworkHandle` đặt 16384 gói / 8000 ms / 16 MB (tối đa driver cho phép là 16384 / 16000 / 32 MB) để cú nghẽn thành **chậm** chứ không thành **mất**. Muốn biết pump có nghẽn không: dòng log `accepted {ms}ms after its SYN` của `TcpRelayServer` và `handshake …ms` trong dòng `tcp pid=… up via …` của engine.
