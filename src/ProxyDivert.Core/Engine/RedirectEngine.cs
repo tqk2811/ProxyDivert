@@ -69,6 +69,9 @@ public sealed class RedirectEngine : IDisposable
 
     public ConnectionTracker Connections { get; } = new ConnectionTracker();
 
+    // The TCP connections being tunnelled right now, so a configuration change reaches them too.
+    private readonly LiveTcpConnectionRegistry _liveConnections = new LiveTcpConnectionRegistry();
+
     public bool IsRunning { get; private set; }
 
     /// <summary>Processes currently under redirection.</summary>
@@ -195,7 +198,25 @@ public sealed class RedirectEngine : IDisposable
             if (_watcher != null) _watcher.EventBacklogMs = config.ProcessEventBacklogMs;
             _watcher?.ApplyRules(config.ProcessRules);
             RebuildResolver();
-            _logger.LogInformation("configuration applied");
+
+            // The connections already running are read against the new rules as well. One the new
+            // configuration would route somewhere else is closed — the application reconnects, and
+            // the reconnect is captured and routed afresh. One still routed the same way is left
+            // alone: a download in progress does not restart over an unrelated edit.
+            int closed = _liveConnections.CloseWhereRouteChanged(_resolver, (live, now) =>
+                _logger.LogInformation(
+                    "tcp pid={Pid} {Target} is being closed: the configuration now routes it via {New} instead of {Old}",
+                    live.Target.ProcessId, live.Target, now.Outbound.Name, live.OutboundName));
+
+            // Connections that were open before their process was attached have been passing
+            // through untouched, with the real address on them. Saving is the moment the user
+            // asks for the configuration to hold for everything, so they are reset now; the
+            // reconnects are captured from their SYN like any new connection.
+            int reset = _redirector?.ResetEscapedFlows() ?? 0;
+
+            _logger.LogInformation(
+                "configuration applied: {Closed} connection(s) closed for a changed route, {Reset} pre-existing flow(s) reset",
+                closed, reset);
         }
 
         try { ConfigurationApplied?.Invoke(); }
@@ -361,6 +382,7 @@ public sealed class RedirectEngine : IDisposable
             connection.ProcessId, processName, connection.OriginalDestination, connection.Statistics);
         Connections.Open(info);
 
+        LiveTcpConnection? live = null;
         try
         {
             // Name first: SNI / Host header, then whatever DNS taught us about this IP.
@@ -390,11 +412,22 @@ public sealed class RedirectEngine : IDisposable
                 return;
             }
 
-            await TunnelAsync(connection, decision.Outbound, host, info, nameTime, ct).ConfigureAwait(false);
+            // From here the connection can be closed by a configuration change: the tunnel runs
+            // on the registry's token, and the registry knows what would have to change.
+            live = _liveConnections.Register(target, decision.Outbound, info, closeClient: connection.ClientTcp.Close, ct);
+            await TunnelAsync(connection, decision.Outbound, host, info, nameTime, live.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            // Engine stopping, or the connection was cancelled — nothing to report.
+            // Engine stopping, or the connection was cancelled — nothing to report, unless it was
+            // the configuration that ended it: that one the user asked for and may look for.
+            if (live?.ClosedForChangedRoute == true)
+                _logger.LogInformation("tcp pid={Pid} -> {Destination} {Reason}", connection.ProcessId, connection.OriginalDestination, info.Error);
+        }
+        catch (Exception) when (live?.ClosedForChangedRoute == true)
+        {
+            // The socket was closed under the copy loop; whatever it threw is that closure.
+            _logger.LogInformation("tcp pid={Pid} -> {Destination} {Reason}", connection.ProcessId, connection.OriginalDestination, info.Error);
         }
         catch (Exception ex)
         {
@@ -403,6 +436,7 @@ public sealed class RedirectEngine : IDisposable
         }
         finally
         {
+            if (live != null) _liveConnections.Unregister(live);
             Connections.Close(info);
         }
     }
