@@ -1,4 +1,4 @@
-<UserControl x:Class="ProxyDivert.Wpf.Views.SettingsView"
+﻿<UserControl x:Class="ProxyDivert.Wpf.Views.SettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -39,14 +39,6 @@
                     </StackPanel>
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
                                Text="{DynamicResource Str.Settings.WireProxyHint}"/>
-
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                        <TextBlock Text="{DynamicResource Str.Settings.EventBacklog}" VerticalAlignment="Center" MinWidth="120"/>
-                        <TextBox Text="{Binding ProcessEventBacklogMs, UpdateSourceTrigger=PropertyChanged}" Width="80"/>
-                        <TextBlock Text="{DynamicResource Str.Settings.Milliseconds}" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                    </StackPanel>
-                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
-                               Text="{DynamicResource Str.Settings.EventBacklogHint}"/>
 
                     <CheckBox Content="{DynamicResource Str.Settings.AutoSaveLog}"
                               IsChecked="{Binding AutoSaveLog}" Margin="0,0,0,4"/>

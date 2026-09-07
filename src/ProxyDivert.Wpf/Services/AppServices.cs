@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -129,7 +129,6 @@ public sealed class AppServices : IDisposable
         // Before anything else asks: collecting is what makes starting the engine cheap, and the
         // first sweep is about thirty milliseconds, so it is done here rather than deferred.
         Processes = _provider.GetRequiredService<ProcessInventory>();
-        Processes.EventBacklogMs = Config.ProcessEventBacklogMs;
         Processes.Start();
 
         // Checked every minute rather than scheduled for the exact turn of the hour: SetFilePath

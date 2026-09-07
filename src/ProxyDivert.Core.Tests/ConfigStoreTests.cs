@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using ProxyDivert.Core.Configuration;
 using ProxyDivert.Core.Configuration.Models;
@@ -27,21 +27,6 @@ public class ConfigStoreTests : IDisposable
 
         Assert.NotEmpty(config.Policies);
         Assert.Contains(config.Outbounds, o => o.Kind == OutboundKind.Direct);
-    }
-
-    // The one setting on this page with a number rather than a path or a mode behind it, and the
-    // engine reads it on every process event — a value that silently reverted to the default on
-    // restart would look like the tuning simply not working.
-    [Fact]
-    public void Round_trips_the_process_event_backlog_threshold()
-    {
-        var store = new ConfigStore(ConfigPath);
-        AppConfig config = AppConfig.CreateDefault();
-        config.ProcessEventBacklogMs = 250;
-
-        store.Save(config);
-
-        Assert.Equal(250, new ConfigStore(ConfigPath).Load().ProcessEventBacklogMs);
     }
 
     // The engine runs on a snapshot. A rule added to the window's list after the snapshot was

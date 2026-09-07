@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -37,7 +37,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         _wireProxyPath = services.Config.WireProxyPath ?? string.Empty;
         _diagnosticLogPath = services.Config.DiagnosticLogPath ?? string.Empty;
         _autoSaveLog = services.Config.AutoSaveLog;
-        _processEventBacklogMs = services.Config.ProcessEventBacklogMs;
         _theme = ThemeManager.Parse(services.Config.Theme);
         _language = LocalizationManager.Parse(services.Config.Language);
         _startWithWindows = services.Config.StartWithWindows;
@@ -63,9 +62,6 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>Where this run's trace is being written, for the view to show under the switch.</summary>
     public string CurrentLogPath => _services.EffectiveLogPath ?? string.Empty;
-
-    [ObservableProperty]
-    private int _processEventBacklogMs;
 
     [ObservableProperty]
     private ThemeMode _theme;
@@ -98,11 +94,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         _services.SetAutoSaveLog(value);
         OnPropertyChanged(nameof(CurrentLogPath));
     }
-
-    // A negative value has no meaning — 0 already says "never catch up" — so it is clamped rather
-    // than stored, which keeps a typo in the box from reaching the engine.
-    partial void OnProcessEventBacklogMsChanged(int value)
-        => _services.Config.ProcessEventBacklogMs = value < 0 ? 0 : value;
 
     // Appearance is the one pair of settings that takes effect the moment it is picked, so it is
     // also written out at once: a theme that reverts on the next launch because Save was never

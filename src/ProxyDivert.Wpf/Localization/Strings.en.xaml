@@ -1,4 +1,4 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
@@ -124,9 +124,6 @@
     <sys:String x:Key="Str.Settings.Ipv6Hint">Redirect sends the IPv6 traffic through the rules like IPv4. Block drops it so the application falls back to IPv4 — use it when the way out has no IPv6 route. Ignore lets it leave untouched, bypassing the proxy.</sys:String>
     <sys:String x:Key="Str.Settings.WireProxy">wireproxy.exe</sys:String>
     <sys:String x:Key="Str.Settings.WireProxyHint">Needed only by VPN outbounds: wireproxy runs the WireGuard tunnel in user space, with no TUN adapter. Leave empty to look next to ProxyDivert.exe and then on PATH.</sys:String>
-    <sys:String x:Key="Str.Settings.EventBacklog">Catch up after</sys:String>
-    <sys:String x:Key="Str.Settings.Milliseconds">ms</sys:String>
-    <sys:String x:Key="Str.Settings.EventBacklogHint">Only matters for filters that look at arguments. Windows reports new processes one at a time, and reading one command line costs about 210ms, so a program that starts thirty processes at once queues up. When an event arrives this far behind, every command line on the machine is read in a single query instead. Lower catches up sooner; 0 turns it off and reads one process at a time.</sys:String>
     <sys:String x:Key="Str.Settings.AutoSaveLog">Save the log to a file automatically</sys:String>
     <sys:String x:Key="Str.Settings.AutoSaveLogHint">Each run writes its own Logs\yyyyMMdd-HHmmss.log next to the program, starting the moment this is ticked.</sys:String>
     <sys:String x:Key="Str.Settings.LogPath">Diagnostic log file</sys:String>

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
@@ -152,7 +152,6 @@ public sealed class RedirectEngine : IDisposable
 
             // The process table is already running and already knows every process on the machine,
             // so starting is a matter of reading it rather than of discovering anything.
-            _inventory.EventBacklogMs = config.ProcessEventBacklogMs;
             _tracker = new ProcessRuleTracker(_loggerFactory.CreateLogger<ProcessRuleTracker>(), _inventory);
             _tracker.ProcessAttached += OnProcessAttached;
             _tracker.ProcessDetached += OnProcessDetached;
@@ -182,9 +181,6 @@ public sealed class RedirectEngine : IDisposable
             // every save is what used to kill a running VPN tunnel — and make the next request
             // re-handshake it — because the user ticked a checkbox on another tab.
             ReconcileOutbounds(config);
-            // Takes effect on the next process event, with no restart — it only tunes how the
-            // watcher reads command lines, not what it watches.
-            _inventory.EventBacklogMs = config.ProcessEventBacklogMs;
             _tracker?.ApplyRules(config.ProcessRules);
             RebuildResolver();
 

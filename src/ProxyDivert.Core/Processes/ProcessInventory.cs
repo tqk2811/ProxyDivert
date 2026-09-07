@@ -58,7 +58,6 @@ public sealed class ProcessInventory : IDisposable
     private readonly ILogger<ProcessInventory> _logger;
     private readonly IProcessLister _lister;
     private readonly IProcessDetailsReader _detailsReader;
-    private readonly ProcessEventBacklog _backlog = new ProcessEventBacklog();
     private readonly ConcurrentDictionary<uint, ProcessSnapshot> _processes
         = new ConcurrentDictionary<uint, ProcessSnapshot>();
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
@@ -81,17 +80,6 @@ public sealed class ProcessInventory : IDisposable
 
     /// <summary>True while process events come from WMI; false while the table is polled.</summary>
     public bool IsUsingWmi { get; private set; }
-
-    /// <summary>
-    /// How far behind a process event may fall, in milliseconds, before the whole table is rebuilt
-    /// instead of the sequence of events being trusted. 0 or less turns that off. Comes from the
-    /// configuration and can be changed while running.
-    /// </summary>
-    public int EventBacklogMs
-    {
-        get => _backlog.ThresholdMs;
-        set => _backlog.ThresholdMs = value;
-    }
 
     public ProcessInventory(
         ILogger<ProcessInventory> logger,
@@ -287,16 +275,6 @@ public sealed class ProcessInventory : IDisposable
         {
             uint pid = Convert.ToUInt32(e.NewEvent.Properties["ProcessID"].Value);
             if (pid == 0) return;
-
-            // Events are handed over strictly in turn, so one that arrives already stale means more
-            // are queued behind it — and a backlog is exactly when the table drifts. Reading the
-            // machine once answers for every event still queued.
-            if (_backlog.ShouldCatchUp(TryReadProperty(e.NewEvent, "TIME_CREATED")))
-            {
-                _logger.LogDebug("process events are running behind; rebuilding the table in one pass");
-                Reconcile();
-                return;
-            }
 
             uint parentPid = Convert.ToUInt32(e.NewEvent.Properties["ParentProcessID"].Value);
             string name = e.NewEvent.Properties["ProcessName"].Value?.ToString() ?? $"pid {pid}";

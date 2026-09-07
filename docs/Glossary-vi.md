@@ -1,4 +1,4 @@
-# Thuật ngữ dùng trong ProxyDivert
+﻿# Thuật ngữ dùng trong ProxyDivert
 
 Mỗi mục là một heading `##`. Tài liệu khác dẫn link tới đây theo **số dòng** (`#Lxx`), nên khi chèn mục mới hãy thêm vào **cuối file** để không lệch link cũ.
 
@@ -269,13 +269,13 @@ Cái được:
 * **Bỏ được `ProcessTreeMonitor`** (mỗi tiến trình gốc một luồng poll BFS 500ms): bảng biết parent_pid của **mọi** tiến trình, kể cả tiến trình đã chạy từ trước. Nhờ vậy mở app khi Chrome đang mở sẵn thì 30 tab của nó **được nhận làm con** — điều mà poller cũ không bao giờ làm được, vì nó chỉ thấy tiến trình sinh ra sau khi nó bắt đầu canh.
 * **Cha giả bị loại**: Windows không xoá parent_pid khi cha chết, nên một pid đã được cấp lại có thể bị nhận nhầm làm cha. Cha mà `StartedUtc` **muộn hơn** con thì chắc chắn không phải cha.
 
-## Quét bù khi sự kiện dồn (`ProcessEventBacklog`)
+## Quét bù khi sự kiện dồn (`ProcessEventBacklog`, ĐÃ GỠ 07/09/2026)
 
-WMI giao sự kiện của **một** watcher lần lượt từng cái, không bao giờ song song — đo thật: 60 handler trong một đợt, không cặp nào chồng nhau. Nên một handler tốn 210ms (đọc command line) làm mọi tiến trình phía sau xếp hàng: một trình duyệt mở 30 tiến trình con thì tiến trình cuối phải chờ vài giây mới được redirect, và trong lúc chờ thì traffic của nó đi thẳng ra ngoài.
+WMI giao sự kiện của **một** watcher lần lượt từng cái, không bao giờ song song — đo thật: 60 handler trong một đợt, không cặp nào chồng nhau. Hồi bảng process còn đọc command line **bằng WMI** (~210ms mỗi tiến trình), một trình duyệt mở 30 tiến trình con làm cái cuối chờ vài giây mới được redirect. Cơ chế chữa cháy là đo **tuổi của chính sự kiện** (`TIME_CREATED`, thuộc tính mọi lớp sự kiện WMI đều có): trong một đợt burst, tuổi tăng đúng bằng chi phí handler — 5ms → 263 → 528 → 790 → … → 15.459ms — tức nó nói thẳng chiều dài hàng chờ bằng mili giây thật. Quá ngưỡng thì đọc cả máy một lượt thay vì từng cái.
 
-Dấu hiệu để biết đang dồn là **tuổi của chính sự kiện** — `TIME_CREATED`, thuộc tính mà mọi lớp sự kiện WMI đều có. Đo trong một đợt burst, tuổi sự kiện đang xử lý tăng đúng bằng chi phí của handler: 5ms → 263 → 528 → 790 → … → 15.459ms. Tức nó nói thẳng chiều dài hàng chờ bằng mili giây thật, không phải một con số đếm tự đặt.
+Đã gỡ cùng ô `Quét bù khi trễ` ở tab Cài đặt vì lý do sinh ra nó không còn: WMI nay **chỉ báo sự kiện** start/stop, còn số liệu (đường dẫn, command line, thời điểm khởi động) đọc bằng WinAPI trong `ProcessInventory.WithDetails` — dưới một mili giây mỗi tiến trình — nên hàng chờ không kịp hình thành. Lưới an toàn còn lại là vòng reconcile 5 giây, vốn cũng chữa được sự kiện WMI bị rơi.
 
-Khi sự kiện tới tay đã cũ hơn ngưỡng (tab **Cài đặt** → `Quét bù khi trễ`, mặc định 500ms), công cụ đọc command line của **cả máy** trong một truy vấn thay vì từng cái; các sự kiện còn xếp hàng phía sau đều thành cache hit và hàng chờ tan. Hai lượt quét bù cách nhau tối thiểu 1 giây. Đặt 0 là tắt hẳn, quay về đọc từng tiến trình. Không đọc được `TIME_CREATED` thì cũng coi như không dồn — hành vi y như trước khi có cơ chế này.
+Bài học giữ lại: khi nghi một hàng đợi sự kiện bị dồn, **tuổi của sự kiện** là thước đo sẵn có và trung thực hơn mọi bộ đếm tự chế.
 
 ## Chặng đi và chặng về của UDP relay (egress leg / reply leg)
 
