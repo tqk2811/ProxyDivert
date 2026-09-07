@@ -330,3 +330,13 @@ MTU **bên trong** tunnel phải nhỏ hơn MTU đường truyền thật đủ 
 Khi đó sinh **hố đen MTU**: gói nhỏ (SYN, SYN‑ACK, ACK) qua được nên `connect` báo thành công, còn gói lớn đầu tiên (thường là ServerHello + chuỗi chứng chỉ TLS) bị router thả im lặng. Phát lại cũng đúng kích thước đó nên **thả tiếp** — kết nối treo tới khi ứng dụng bỏ cuộc, không bao giờ tự khỏi. Dấu vân tay trên log: `TcpRelayServer: connection srcPort=… closed, up=~1900B down=0B 30.0s` — gửi đi đúng một ClientHello, nhận về **0 byte**.
 
 Trên lý thuyết ICMP "fragmentation needed" sẽ báo path MTU thật và `TcpConnection.OnIcmpPacketTooBig` hạ `_sendMss` (PMTUD, RFC 1191); thực tế nhiều mạng chặn sạch ICMP nên không bao giờ có tin báo — vì thế cách chữa là **hạ MTU của tunnel** cho chắc, không trông vào PMTUD.
+
+## Cửa sổ gửi (SND.WND) và luật cập nhật cửa sổ theo thứ tự
+
+Bên nhận quảng cáo **cửa sổ nhận** trong mỗi gói TCP: "tôi còn chừng này chỗ trống". Bên gửi lưu con số đó thành **cửa sổ gửi** (`SND.WND`) và không bao giờ để số byte đang bay vượt quá nó. Cửa sổ về 0 nghĩa là "đừng gửi nữa"; bên gửi chuyển sang **zero-window persist** — mỗi lần chỉ bắn **1 byte** thăm dò, giãn dần theo cấp số nhân, cho tới khi bên kia báo còn chỗ.
+
+Gói tới có thể **đến sai thứ tự**, nên không phải gói nào cũng được quyền sửa cửa sổ: RFC 9293 giữ thêm `SND.WL1` (số thứ tự của gói đã cập nhật cửa sổ lần cuối) và `SND.WL2` (số ack của nó), chỉ nhận cập nhật khi gói **mới hơn**. So sánh số thứ tự TCP là so sánh **có dấu 32 bit** (`(int)(a - b) > 0`) vì không gian số thứ tự quay vòng.
+
+**Bẫy đã vấp** (`TcpConnection`, sửa 2026-09-07): SYN-ACK phải **gán thẳng** `SND.WND = SEG.WND`, `SND.WL1 = SEG.SEQ`, `SND.WL2 = SEG.ACK` (RFC 9293 §3.10.7.3, bước 5 của SYN-SENT), KHÔNG đi qua luật "mới hơn" ở trên. Nếu để nó đi qua, `SND.WL1` lúc đó vẫn là 0, mà so sánh có dấu với 0 thì **mọi ISN từ 2^31 trở lên đều bị coi là cũ** — và bị coi là cũ ở mọi gói sau đó luôn, vì WL1 không bao giờ được gán. Cửa sổ gửi kẹt ở 0 suốt đời kết nối: bắt tay xong, bên kia vẫn ACK, nhưng request chỉ rỉ ra 1 byte mỗi lần thăm dò rồi server bỏ cuộc. Server chọn ISN **ngẫu nhiên** ⇒ hỏng như tung đồng xu, mỗi kết nối một lần — nhìn từ ngoài y hệt "mạng phập phù" chứ không giống bug. Dấu vân tay trong log: dòng `ipstack` báo `sent=5 acked=5 rcvd=0 sndwnd=0` (5 = số lần thăm dò), còn `TcpRelayServer` báo `up≈1930B down=0B`.
+
+Bài học đo đạc: mọi test bắt tay sẵn có đều dùng ISN nhỏ (9000) nên không bao giờ chạm nửa còn lại của không gian số thứ tự. Test cho giao thức có so sánh quay vòng phải phủ **cả hai nửa** và hai mép của phép so sánh.
