@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -16,9 +17,6 @@ namespace ProxyDivert.Wpf.ViewModels;
 // next engine start, which the view says out loud rather than pretending otherwise.
 public sealed partial class SettingsViewModel : ObservableObject
 {
-    private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string RunValueName = "ProxyDivert";
-
     private readonly AppServices _services;
 
     public Array DnsModes { get; } = Enum.GetValues(typeof(DnsMode));
@@ -43,6 +41,33 @@ public sealed partial class SettingsViewModel : ObservableObject
         _startWithWindows = services.Config.StartWithWindows;
         _eventSource = services.Config.ProcessEventSource;
         _detection = services.Config.ProcessDetection;
+
+        VerifyStartWithWindows();
+    }
+
+    // The logon task can be gone without this tool knowing — removed by hand, or left behind on a
+    // machine that was rebuilt — so the file is only the opening guess and the scheduler has the
+    // final say. Asked on a background thread because schtasks is a process launch and this runs
+    // while the window is still being built; the answer almost always agrees with the file, so
+    // nothing visibly moves.
+    private async void VerifyStartWithWindows()
+    {
+        try
+        {
+            bool actual = await Task.Run(StartupRegistration.IsEnabled);
+            if (actual == StartWithWindows) return;
+
+            _applyingStartWithWindows = true;
+            try { StartWithWindows = actual; }
+            finally { _applyingStartWithWindows = false; }
+
+            _services.Config.StartWithWindows = actual;
+            _services.Save();
+        }
+        catch
+        {
+            // Nothing here is worth interrupting the user for: the box keeps what the file said.
+        }
     }
 
     // How a process is found at all. The event source below only means anything under the first of
@@ -192,10 +217,43 @@ public sealed partial class SettingsViewModel : ObservableObject
         _services.Save();
     }
 
+    // Applied at once like the appearance settings, and then read back: registering the logon task
+    // can fail on a machine whose policy forbids it, and a checkbox that stays ticked after a
+    // failure would be the tool lying about what it arranged. The guard is for that correction —
+    // putting the box back would otherwise re-enter here and ask the scheduler all over again.
+    private bool _applyingStartWithWindows;
+
     partial void OnStartWithWindowsChanged(bool value)
     {
-        _services.Config.StartWithWindows = value;
-        ApplyStartWithWindows(value);
+        if (_applyingStartWithWindows) return;
+        _ = ApplyStartWithWindowsAsync(value);
+    }
+
+    // Off the window's thread: registering a task means launching schtasks and waiting for the
+    // scheduler service to answer, which is not something a tick box should freeze the tab for.
+    private async Task ApplyStartWithWindowsAsync(bool enabled)
+    {
+        try
+        {
+            bool actual = await Task.Run(() =>
+            {
+                if (enabled) StartupRegistration.Enable();
+                else StartupRegistration.Disable();
+                return StartupRegistration.IsEnabled();
+            });
+
+            _services.Config.StartWithWindows = actual;
+            _services.Save();
+
+            if (actual == enabled) return;
+
+            _applyingStartWithWindows = true;
+            try { StartWithWindows = actual; }
+            finally { _applyingStartWithWindows = false; }
+        }
+        catch
+        {
+        }
     }
 
     [RelayCommand]
@@ -222,23 +280,5 @@ public sealed partial class SettingsViewModel : ObservableObject
             CheckFileExists = true,
         };
         if (dialog.ShowDialog() == true) WireProxyPath = dialog.FileName;
-    }
-
-    // Registry Run key rather than a scheduled task: the tool needs elevation anyway, and a Run
-    // entry is something the user can find and remove without this program's help.
-    private static void ApplyStartWithWindows(bool enabled)
-    {
-        try
-        {
-            using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
-            if (key is null) return;
-
-            if (enabled) key.SetValue(RunValueName, $"\"{Environment.ProcessPath}\"");
-            else key.DeleteValue(RunValueName, throwOnMissingValue: false);
-        }
-        catch
-        {
-            // A locked-down registry is the user's environment, not an error worth a dialog.
-        }
     }
 }

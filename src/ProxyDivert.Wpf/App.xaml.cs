@@ -18,6 +18,11 @@ public partial class App : Application
 
         _services = new AppServices();
 
+        // The Run-key entry an earlier version wrote never started anything — Windows skips a Run
+        // entry that needs elevation — so it is cleared here rather than left listed under the
+        // machine's startup apps as something that plainly does not work.
+        StartupRegistration.RemoveLegacyRunKey();
+
         // Appearance comes from the same config file as everything else, so the window opens the
         // way the user left it rather than flashing the default palette first.
         ThemeManager.Apply(ThemeManager.Parse(_services.Config.Theme));
