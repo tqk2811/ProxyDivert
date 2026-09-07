@@ -176,9 +176,7 @@ Cả `Ký tự đại diện` lẫn `Regex` đều chạy qua `Regex.IsMatch` v�
 
 Điều kiện soi toàn bộ command line, một loại lá trong cây điều kiện của bộ lọc. Dùng để tách một chương trình trong nhiều cái cùng chạy từ một tệp — `java.exe` thì có nhiều, nhưng chỉ cái có `minecraft` trong command line mới là game.
 
-Đọc command line của tiến trình khác tốn một truy vấn WMI (`Win32_Process.CommandLine`) — khoảng 210ms, gần đúng bằng giá đọc của **cả máy** trong một truy vấn. Command line không đổi trong đời một tiến trình, nên engine đọc mỗi tiến trình đúng một lần rồi nhớ trong [bảng command line](#L219). Command line không đọc được (tiến trình hệ thống, tiến trình của tài khoản khác) cho kết quả `Unknown`, và bộ lọc không áp dụng — hướng an toàn.
-
-`ProcessRuleMatcher.NeedsCommandLine` (duyệt cả cây) nay chỉ quyết định việc đọc có nằm trên đường ra quyết định hay không — tức có đáng **chờ** hay không; bảng thì được nuôi sẵn trong nền dù chưa có bộ lọc nào hỏi tới argument, để lúc người dùng viết bộ lọc đầu tiên là đã có dữ liệu.
+Command line không đổi trong đời một tiến trình, nên nó được đọc đúng một lần lúc tiến trình xuất hiện rồi nằm sẵn trong [bảng process](#L218) — bộ lọc theo argument vì thế không tốn một lời gọi hệ điều hành nào, kể cả khi sửa bộ lọc rồi Save. Command line không đọc được (tiến trình được bảo vệ, hoặc thiếu [SeDebugPrivilege](#L248)) cho kết quả `Unknown`, và bộ lọc không áp dụng — hướng an toàn.
 
 ## Bộ lọc tiến trình (tên → điều kiện → hành động)
 
@@ -217,19 +215,59 @@ Kiểu giao diện cho biểu thức boolean tuỳ ý: mỗi nút là một nhó
 
 Cách thứ ba: cho gõ thẳng chuỗi điều kiện (`exe = "java.exe" and args contains "minecraft" or exe = "chrome.exe"`), rồi parser dựng cây biểu thức (AST — abstract syntax tree) để so khớp. Gọn và mạnh nhất cho người dùng thạo, nhưng phải tự viết parser, tự báo lỗi cú pháp ở đúng vị trí, và người dùng phải học cú pháp — thường làm thêm ở "chế độ nâng cao" chứ không thay cho giao diện bấm chọn.
 
-## Bảng command line (`ProcessCommandLineCache`)
+## Bảng process (`ProcessInventory`)
 
-Bảng nhớ `pid → command line`, để một bộ lọc hỏi về argument được kiểm lại từ bộ nhớ thay vì từ WMI.
+Bảng `pid → {pid, path, argument, parent_pid}` giữ trong RAM, **chạy từ lúc mở app chứ không đợi bật engine**, và tự cập nhật suốt đời ứng dụng. Đây là nguồn duy nhất mà tầng khớp luật ([`ProcessRuleTracker`](#L254)) đọc — nó không bao giờ hỏi lại hệ điều hành.
+
+Ba nguồn dữ liệu, dựng theo đúng thứ tự này:
+
+1. **Sự kiện [WMI](#L65)** `Win32_ProcessStartTrace` / `StopTrace`, hook TRƯỚC — tiến trình sinh ra trong lúc quét lượt đầu không được rơi vào khe giữa hai bước.
+2. **Một lượt quét đầy đủ**, đồng bộ ngay trong `Start()`.
+3. **Đối chiếu định kỳ 5 giây**: so bảng với danh sách tươi. Đây là thứ làm bảng **tự lành** — một sự kiện WMI bị rơi, hay tiến trình sinh ra lúc máy ngủ, chỉ sai tối đa 5 giây thay vì sai vĩnh viễn. WMI hỏng hẳn thì vòng này chạy mỗi 750ms và thành nguồn duy nhất.
 
 Ba bất biến giữ cho nó đúng:
 
-* **Có khoá = đã hỏi rồi**, không hỏi lại.
-* **Giá trị `null` là một CÂU TRẢ LỜI** ("đã hỏi, không đọc được"), không phải chỗ trống. Đây là điều đắt giá nhất: khoảng một nửa số tiến trình trên máy là dịch vụ mà công cụ không có quyền mở; không ghi nhận được điều đó thì mỗi lượt quét lại hỏi lại toàn bộ chúng.
-* **Tên tiến trình đi kèm câu trả lời.** Windows cấp lại pid, nên câu trả lời chỉ được dùng khi tên vẫn khớp.
+* **Có khoá = đã hỏi rồi**, không hỏi lại. Command line không bao giờ đổi sau khi tiến trình khởi động, nên lý do duy nhất phải đọc lại là đã quên.
+* **Giá trị `null` là một CÂU TRẢ LỜI** ("đã hỏi, không đọc được"), không phải chỗ trống — trừ khi handle không mở được lần nào, thường là tiến trình còn non hơn cả sự kiện báo nó, và lượt đối chiếu sau thử lại.
+* **`(pid, StartedUtc)` mới là danh tính.** Windows cấp lại pid trong vài giây; hai tiến trình không thể cùng pid ở cùng một thời điểm, nên cặp này trả lời dứt khoát "còn đúng tiến trình cũ không?", chỗ mà so tên chỉ trả lời "có vẻ đúng".
 
-Xoá mục theo ba lớp: sự kiện tiến trình đóng (`Win32_ProcessStopTrace`), mỗi lượt quét (bỏ pid không còn sống hoặc đã đổi chủ), và ngay trước khi đọc cho một tiến trình vừa khởi động. Tiến trình chạy ở **session 0** (SYSTEM / LOCAL SERVICE / NETWORK SERVICE) được ghi thẳng là "không đọc được" mà không tốn truy vấn nào — đằng nào cũng không mở được.
+## API Windows dùng để đọc tiến trình
 
-Trước khi có bảng này, lưu cấu hình phải hỏi WMI một truy vấn cho **từng** tiến trình đang được redirect (30 tiến trình × 210ms) ngay trên luồng giao diện, nên bấm `Lưu` là đơ 5–10 giây.
+Ba lời gọi, chọn vì rẻ nhất cho đúng một dữ kiện. Đo thật trên máy 640 tiến trình:
+
+| Dữ kiện | API | Chi phí | Vì sao không dùng cách quen thuộc |
+|---|---|---|---|
+| pid + **parent_pid** + tên + session + thời điểm tạo, cho cả máy | `NtQuerySystemInformation(SystemProcessInformation)` | **11.7ms** | `Process.GetProcesses()` gọi đúng syscall này bên dưới rồi cấp phát một object cho từng tiến trình — và **không hề lộ parent_pid** ra ngoài |
+| full path | `QueryFullProcessImageNameW` | ~0.05ms | `Process.MainModule` cần quyền `PROCESS_VM_READ` và phải duyệt danh sách module để trả lời cùng câu hỏi |
+| **argument** (command line) | `NtQueryInformationProcess(ProcessCommandLineInformation)` | ~0.03ms | WMI `Win32_Process.CommandLine` mất **210ms cho MỘT tiến trình**; đọc PEB (Process Environment Block — vùng nhớ trong chính tiến trình đích) thủ công thì cần `PROCESS_VM_READ`, 3–4 lượt `ReadProcessMemory`, và một layout struct thứ hai cho tiến trình 32-bit |
+
+Đọc path + argument cho **toàn bộ** 640 tiến trình hết 19.2ms, tức quét đầy đủ cả máy đủ 4 giá trị ≈ **31ms**. Chính con số này cho phép quét lượt đầu chạy đồng bộ ngay trong `Start()` thay vì phải đẩy sang luồng nền như trước.
+
+`ProcessCommandLineInformation` có từ Windows 8.1; .NET 8 tối thiểu Windows 10 1607 nên luôn khả dụng. Hai information class này không có trong tài liệu chính thức nhưng ổn định suốt hai thập kỷ (ProcessHacker, Sysinternals dùng chúng) — dù vậy mọi lỗi ở đây đều được coi là "không đọc được", không bao giờ ném.
+
+## SeDebugPrivilege
+
+Chạy quyền administrator **không đồng nghĩa** với có đặc quyền này: nó nằm sẵn trong token nhưng ở trạng thái **DISABLED**, mà đặc quyền disabled thì không được tính khi kiểm tra quyền truy cập. Không bật nó thì `OpenProcess` trượt với mọi tiến trình ở **session 0** (SYSTEM / LOCAL SERVICE / NETWORK SERVICE) và của user khác ⇒ path và argument của chúng đọc ra `null`, và bộ lọc theo argument im lặng ngừng khớp với chúng.
+
+Bật bằng `OpenProcessToken` + `LookupPrivilegeValue` + `AdjustTokenPrivileges`, một lần lúc bảng process khởi động. Bẫy: `AdjustTokenPrivileges` trả về **thành công kể cả khi không bật được gì** — token không có đặc quyền thì nó vẫn `true` kèm `ERROR_NOT_ALL_ASSIGNED` (1300) ở `GetLastError`; đó là cách duy nhất phân biệt hai trường hợp.
+
+## Tách bảng process khỏi khớp luật (`ProcessInventory` / `ProcessRuleTracker`)
+
+Hai việc có **vòng đời khác hẳn nhau**, nên tách làm hai lớp:
+
+| | `ProcessInventory` | `ProcessRuleTracker` |
+|---|---|---|
+| Việc | thu thập: máy này đang chạy gì | quyết định: cái nào cần redirect |
+| Sống theo | **ứng dụng** (mở app là chạy) | **engine** (bật tool mới chạy) |
+| Phát sự kiện | `ProcessStarted` / `ProcessStopped` | `ProcessAttached` / `ProcessDetached` |
+| Nguồn đọc | hệ điều hành | bảng RAM của inventory |
+
+Cái được:
+
+* **Bật engine không phải đi khám phá lại cả máy** — chỉ đọc bảng đã có sẵn.
+* **Sửa bộ lọc rồi Save tốn một lượt tra từ điển cho mỗi tiến trình**, thay vì một truy vấn WMI 210ms cho mỗi tiến trình đang redirect (30 tiến trình = 5–10 giây đơ giao diện).
+* **Bỏ được `ProcessTreeMonitor`** (mỗi tiến trình gốc một luồng poll BFS 500ms): bảng biết parent_pid của **mọi** tiến trình, kể cả tiến trình đã chạy từ trước. Nhờ vậy mở app khi Chrome đang mở sẵn thì 30 tab của nó **được nhận làm con** — điều mà poller cũ không bao giờ làm được, vì nó chỉ thấy tiến trình sinh ra sau khi nó bắt đầu canh.
+* **Cha giả bị loại**: Windows không xoá parent_pid khi cha chết, nên một pid đã được cấp lại có thể bị nhận nhầm làm cha. Cha mà `StartedUtc` **muộn hơn** con thì chắc chắn không phải cha.
 
 ## Quét bù khi sự kiện dồn (`ProcessEventBacklog`)
 
@@ -245,7 +283,7 @@ Một luồng UDP bị chuyển hướng có hai nửa độc lập, khác hẳn
 
 ## Đi thẳng không chuyển hướng (UDP passthrough)
 
-Với UDP, "Direct" **không** thể làm bằng cách cho gói qua relay rồi relay gửi hộ — xem [chặng đi và chặng về](#L242). Nên khi một luồng UDP được định tuyến ra `Direct`, công cụ quyết định **ngay trên đường gói tin**, trước khi NAT chạm vào: trả `PacketDisposition.Pass` để gói đi ra nguyên trạng từ chính socket của tiến trình, y như khi tiến trình không bị theo dõi. Trả lời quay về đúng socket đó, không cần bảng NAT.
+Với UDP, "Direct" **không** thể làm bằng cách cho gói qua relay rồi relay gửi hộ — xem [chặng đi và chặng về](#L280). Nên khi một luồng UDP được định tuyến ra `Direct`, công cụ quyết định **ngay trên đường gói tin**, trước khi NAT chạm vào: trả `PacketDisposition.Pass` để gói đi ra nguyên trạng từ chính socket của tiến trình, y như khi tiến trình không bị theo dõi. Trả lời quay về đúng socket đó, không cần bảng NAT.
 
 Đổi lại, luồng đó mang **địa chỉ thật** của máy. Với DNS thì đây đúng bằng mức phơi bày mà chế độ `SystemSniff` đã tuyên bố sẵn. Muốn DNS đi qua outbound thì thêm một luật khớp được nó — luật `Protocol` = `udp`, hoặc `Port` = `53` — khi đó luồng ra một outbound thật chứ không còn là `Direct`, và nó quay lại đi qua relay như cũ.
 
@@ -261,7 +299,7 @@ Kết nối TCP mà bắt tay (SYN) đã diễn ra **trước khi** công cụ k
 
 ## Ba tầng cấu hình (giao diện → snapshot RAM → file json)
 
-Cấu hình sống ở ba nơi, và chỉ đi theo một chiều. **Tầng giao diện** là `AppServices.Config` — thứ các ViewModel bind và sửa thẳng, kể cả khi đang gõ dở. **Tầng snapshot** là bản deep-copy (`ConfigStore.Clone`, JSON round-trip) được lấy đúng lúc bấm Save và giao cho engine (`RedirectEngine.Start/ApplyConfig`); engine, `ProcessWatcher` và `RoutingPolicyResolver` chỉ nhìn bản này, không chia sẻ một `List` nào với giao diện. **Tầng file** là `proxydivert.config.json`, ghi từ cùng snapshot đó (mật khẩu được DPAPI bọc lại trên một bản copy nữa). Lúc mở app: file → tầng giao diện; snapshot chỉ xuất hiện khi bật tool hoặc Save.
+Cấu hình sống ở ba nơi, và chỉ đi theo một chiều. **Tầng giao diện** là `AppServices.Config` — thứ các ViewModel bind và sửa thẳng, kể cả khi đang gõ dở. **Tầng snapshot** là bản deep-copy (`ConfigStore.Clone`, JSON round-trip) được lấy đúng lúc bấm Save và giao cho engine (`RedirectEngine.Start/ApplyConfig`); engine, `ProcessRuleTracker` và `RoutingPolicyResolver` chỉ nhìn bản này, không chia sẻ một `List` nào với giao diện. **Tầng file** là `proxydivert.config.json`, ghi từ cùng snapshot đó (mật khẩu được DPAPI bọc lại trên một bản copy nữa). Lúc mở app: file → tầng giao diện; snapshot chỉ xuất hiện khi bật tool hoặc Save.
 
 Lý do tách: trước đây engine giữ CÙNG tham chiếu với giao diện, nên một luật vừa thêm vào lưới đã được so khớp với tiến trình mới trước khi bấm Save, và luồng WMI duyệt `_rules` đúng lúc lưới đang `Add` vào cùng danh sách. Save, ghi file và `ApplyConfig` chạy trên thread pool, xếp hàng tuần tự (`AppServices.Enqueue`), không bao giờ trên UI thread.
 
@@ -269,9 +307,9 @@ Lý do tách: trước đây engine giữ CÙNG tham chiếu với giao diện, 
 
 Sau khi engine nhận snapshot mới, ba việc xảy ra với những gì ĐANG chạy, ngoài việc tiến trình/kết nối mới đi theo snapshot:
 
-1. **Tiến trình đã track**: luật vẫn khớp thì entry được thay tại chỗ (`TrackedProcess.WithRule`) — không Detach/Attach, không đóng handle SOCKET, con theo cha (`ProcessWatcher.ReconcileTrackedWithRules`). Luật hết khớp mới Detach.
+1. **Tiến trình đã track**: luật vẫn khớp thì entry được thay tại chỗ (`TrackedProcess.WithRule`) — không Detach/Attach, không đóng handle SOCKET, con theo cha (`ProcessRuleTracker.ReconcileTrackedWithRules`). Luật hết khớp mới Detach.
 2. **Kết nối TCP đang qua relay** (`LiveTcpConnectionRegistry`): resolve lại từng kết nối bằng resolver mới; outbound KHÁC (kể cả Block, kể cả "không policy nào nhận nữa" ⇒ Direct) thì **đóng** — huỷ token forward và đóng socket phía tiến trình, ứng dụng thấy đứt và tự mở lại, kết nối mới được bắt từ SYN. Cùng outbound thì giữ nguyên.
-3. **Luồng thoát** (xem [Luồng thoát](#L258)): `IProcessRedirector.ResetEscapedFlows` đánh dấu mọi flow TCP đang track mà không có bản ghi NAT; gói tiếp theo của flow đó bị thả và tiến trình được bơm một gói **RST** (`TcpResetPacketBuilder`: seq = ack-number của gói vừa gửi, tức đúng byte tiến trình đang chờ, nên stack nhận ngay theo RFC 5961). Chỉ làm lúc Save; lúc bật tool luồng thoát vẫn được cho qua như cũ.
+3. **Luồng thoát** (xem [Luồng thoát](#L296)): `IProcessRedirector.ResetEscapedFlows` đánh dấu mọi flow TCP đang track mà không có bản ghi NAT; gói tiếp theo của flow đó bị thả và tiến trình được bơm một gói **RST** (`TcpResetPacketBuilder`: seq = ack-number của gói vừa gửi, tức đúng byte tiến trình đang chờ, nên stack nhận ngay theo RFC 5961). Chỉ làm lúc Save; lúc bật tool luồng thoát vẫn được cho qua như cũ.
 
 ## BlockQuic và UDP đi theo quyết định TCP
 

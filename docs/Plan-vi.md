@@ -69,7 +69,10 @@ Thuật ngữ: [docs/Glossary-vi.md](Glossary-vi.md). Ngày lập: 2026-09-03.
 ### 3.1 Luồng chạy
 
 ```
-ProcessWatcher (WMI start/stop + quét ban đầu)
+ProcessInventory (bảng process trong RAM: pid, path, argument, parent_pid)
+   │ sống theo APP — chạy từ lúc mở cửa sổ, WMI start/stop + đối chiếu 5s
+   ▼
+ProcessRuleTracker (khớp ProcessRule với bảng, không hỏi lại hệ điều hành)
    │ tiến trình khớp ProcessRule
    ▼
 RedirectEngine  ── 1 ProcessRedirector chung ── AddTrackedProcessId / RemoveTrackedProcessId
@@ -150,10 +153,11 @@ ProxyDivert/
 2. `HostMatcher` tách từ ProxyRouterWpf (Wildcard/Suffix/Regex/Equals/CIDR, IsNot) + unit test.
 3. `RoutingPolicyResolver`: (pid, domain?, ip, port, proto) → `Outbound`.
 4. `OutboundSourceFactory` + cache `IProxySource` theo `OutboundId` (một instance mỗi outbound, dispose khi xoá/sửa).
-5. `ProcessWatcher`: quét ban đầu + [WMI](Glossary-vi.md#L65) `Win32_ProcessStartTrace/StopTrace`, fallback poll khi WMI lỗi; khớp `ProcessRule`; nuôi cây tiến trình con khi `IncludeChildren`.
-6. `RedirectEngine`: giữ một `ProcessRedirector`, đăng ký handler TCP/UDP theo mục 3.1, `Start/Stop/ApplyConfig` không cần attach lại khi đổi luật.
-7. `ConnectionTracker` + `TrafficLog` FIFO (mượn `InMemoryTunnelLogStore`).
-8. Test: matcher, SNI parser, DNS parser, resolver với policy mẫu.
+5. `ProcessInventory`: [bảng process](Glossary-vi.md#L218) trong RAM (pid, path, argument, parent_pid), chạy từ lúc mở app; [WMI](Glossary-vi.md#L65) `Win32_ProcessStartTrace/StopTrace` + đối chiếu định kỳ, fallback poll khi WMI lỗi.
+6. `ProcessRuleTracker`: khớp `ProcessRule` với bảng đó — [tách hẳn khỏi việc thu thập](Glossary-vi.md#L254); nuôi cây tiến trình con khi `IncludeChildren`, kể cả tiến trình đã chạy trước khi bật engine.
+7. `RedirectEngine`: giữ một `ProcessRedirector`, đăng ký handler TCP/UDP theo mục 3.1, `Start/Stop/ApplyConfig` không cần attach lại khi đổi luật.
+8. `ConnectionTracker` + `TrafficLog` FIFO (mượn `InMemoryTunnelLogStore`).
+9. Test: matcher, SNI parser, DNS parser, resolver với policy mẫu.
 
 ### Bước 3. ProxyDivert.Wpf — ĐÃ XONG 2026-09-03 (trừ title bar tự vẽ, kéo-thả rule, biểu đồ băng thông; chưa kiểm tra thủ công)
 
@@ -173,7 +177,7 @@ ProxyDivert/
 2. `Vpn/WireGuardConfigParser` đọc file `.conf` **nguyên bản của nhà cung cấp** (chỉ `[Interface]`/`[Peer]`) rồi để runner sinh bản có `[Socks5]` trên cổng loopback ngẫu nhiên + mật khẩu ngẫu nhiên; file nào đã có sẵn `[Socks5]` thì dùng nguyên trạng (đọc `BindAddress` để biết chỗ nối).
 3. `AppConfig.WireProxyPath` (một thiết lập cho cả máy) + ô chọn file trong tab Cài đặt; bỏ trống thì tìm cạnh exe rồi tới PATH.
 4. `Outbound.SupportsUdp` KHÔNG còn gồm Vpn — SOCKS5 của wireproxy chỉ có TCP, nên UDP qua đường ra VPN bị hạ xuống Block thay vì rò ra ngoài.
-5. `ProcessWatcher` từ chối attach chính tiến trình tool và `wireproxy.exe`: luật rộng kiểu `*.exe` mà tóm phải chúng thì mọi kết nối quay vòng lại relay.
+5. `ProcessRuleTracker` từ chối attach chính tiến trình tool và `wireproxy.exe`: luật rộng kiểu `*.exe` mà tóm phải chúng thì mọi kết nối quay vòng lại relay.
 
 **Duy trì kết nối ĐÃ XONG (04/09/2026).** Trước đó đường hầm dựng **lười**: `wireproxy` chỉ khởi động ở request đầu tiên, nên request đó gánh cả spawn tiến trình lẫn bắt tay WireGuard; tiến trình chết thì không ai biết cho tới request kế tiếp; và mỗi lần bấm Lưu, `ApplyConfig` gọi `InvalidateAll()` giết sạch mọi đường hầm kể cả outbound VPN không đổi gì. Đã sửa:
 
