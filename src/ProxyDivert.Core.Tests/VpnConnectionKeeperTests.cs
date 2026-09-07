@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
+using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
@@ -30,6 +31,8 @@ public class VpnConnectionKeeperTests
         Name = "vpn",
         Kind = OutboundKind.Vpn,
         Url = Path.Combine(Path.GetTempPath(), $"pd-missing-{Guid.NewGuid():N}.conf"),
+        // The switch the user flicks; without it the keeper has nothing to hold up.
+        KeepConnected = true,
     };
 
     [Fact]
@@ -127,5 +130,90 @@ public class VpnConnectionKeeperTests
         keeper.Sync(new[] { vpn }, null);
 
         Assert.Empty(keeper.Statuses);
+    }
+
+    // A VPN nobody has switched on is a set of settings, not a connection. It used to be dialled
+    // the moment the engine started, which is why turning redirection on brought up tunnels the
+    // user had never asked for.
+    [Fact]
+    public void AVpnThatIsNotSwitchedOn_IsNotKept()
+    {
+        Outbound vpn = MissingConfigVpn();
+        vpn.KeepConnected = false;
+
+        using var factory = new OutboundSourceFactory();
+        using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
+        keeper.Sync(new[] { vpn }, null);
+
+        Assert.Empty(keeper.Statuses);
+    }
+
+    // Switching redirection on: a filter routing through a VPN needs that tunnel up, so it is
+    // switched on for the user rather than failing every connection the rule catches.
+    [Fact]
+    public void StartingARunSwitchesOn_OnlyTheVpnsAFilterRoutesThrough()
+    {
+        Outbound routed = MissingConfigVpn();
+        routed.KeepConnected = false;
+        Outbound unused = MissingConfigVpn();
+        unused.KeepConnected = false;
+
+        AppConfig config = BuildConfig(routed, unused, filterEnabled: true);
+
+        using var factory = new OutboundSourceFactory();
+        using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
+        IReadOnlyCollection<Guid> switchedOn = keeper.ConnectRoutedVpns(config);
+
+        Assert.Equal(new[] { routed.Id }, switchedOn);
+        Assert.True(routed.KeepConnected);
+        Assert.False(unused.KeepConnected);
+        Assert.Single(keeper.Statuses);
+        Assert.NotNull(keeper.StatusOf(routed.Id));
+    }
+
+    // A filter that is switched off routes nothing, so it is no reason to dial anything.
+    [Fact]
+    public void ADisabledFilter_SwitchesOnNothing()
+    {
+        Outbound routed = MissingConfigVpn();
+        routed.KeepConnected = false;
+
+        AppConfig config = BuildConfig(routed, null, filterEnabled: false);
+
+        using var factory = new OutboundSourceFactory();
+        using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
+
+        Assert.Empty(keeper.ConnectRoutedVpns(config));
+        Assert.False(routed.KeepConnected);
+        Assert.Empty(keeper.Statuses);
+    }
+
+    // One filter, one policy, pointing at the first outbound; the second is in the list but
+    // nothing routes to it.
+    private static AppConfig BuildConfig(Outbound routed, Outbound? unused, bool filterEnabled)
+    {
+        var policy = new RoutingPolicy
+        {
+            Id = Guid.NewGuid(),
+            Name = "policy",
+            OutboundId = routed.Id,
+        };
+        var config = new AppConfig
+        {
+            Outbounds = { routed },
+            Policies = { policy },
+            ProcessRules =
+            {
+                new ProcessRule
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "filter",
+                    IsEnabled = filterEnabled,
+                    PolicyIds = { policy.Id },
+                },
+            },
+        };
+        if (unused != null) config.Outbounds.Add(unused);
+        return config;
     }
 }

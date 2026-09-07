@@ -9,6 +9,17 @@
     <UserControl.Resources>
         <b:BindingProxy x:Key="Vm" Data="{Binding}"/>
 
+        <!-- Only a VPN has a tunnel to connect, so on every other row the button is simply not
+             there: a greyed one would only raise the question of what it would have done. -->
+        <Style x:Key="VpnConnectButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="{x:Static enums:OutboundKind.Vpn}">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- The tunnel cell. The row already says which outbound this is, so only the state is
              here: a green dot once the tunnel is up, amber while it is still trying. A row the
              engine holds no tunnel for gets no content at all, and this template is never applied
@@ -168,6 +179,35 @@
                                             ElementStyle="{StaticResource RowPicker}"
                                             EditingElementStyle="{StaticResource RowPicker}"
                                             Width="100"/>
+                    <!-- The tunnel switch. A VPN's connection is the user's session with their
+                         provider, not part of a redirection run: this connects and disconnects it
+                         on its own, WinDivert on or off. Switching WinDivert ON connects whatever
+                         the filters route through — a rule pointing at a tunnel that is down would
+                         only produce connection errors — and switching it off disconnects nothing.
+                         The button then refuses to take down a tunnel a live filter is routing
+                         through, which is the same rule read the other way round. -->
+                    <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Vpn.Connection}" Width="110"
+                                            IsReadOnly="True">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Margin="0,2" Padding="6,1" MinWidth="90"
+                                        Style="{StaticResource VpnConnectButton}"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        ToolTip="{DynamicResource Str.Vpn.ConnectHint}"
+                                        Command="{Binding Data.ToggleVpnCommand, Source={StaticResource Vm}}"
+                                        CommandParameter="{Binding}">
+                                    <Button.Content>
+                                        <MultiBinding Converter="{StaticResource VpnConnectButtonText}" Mode="OneWay">
+                                            <Binding Path="Id"/>
+                                            <Binding Path="Data.VpnTunnels" Source="{StaticResource Vm}"/>
+                                            <Binding Path="Data.VpnTunnels.Count" Source="{StaticResource Vm}"/>
+                                            <Binding Path="Version" Source="{x:Static loc:LocalizationScope.Instance}"/>
+                                        </MultiBinding>
+                                    </Button.Content>
+                                </Button>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <!-- Whether the tunnel is actually up — the one thing on this tab the user
                          cannot set, only watch, which is why it sits at the far end. It used to be
                          a strip under the grid, where it repeated the outbound's name to say which

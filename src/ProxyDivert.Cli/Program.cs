@@ -12,6 +12,7 @@ using ProxyDivert.Core.Engine.Models;
 using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing.Enums;
+using ProxyDivert.Core.Vpn;
 using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Routing.Models.Conditions;
@@ -199,6 +200,12 @@ engine.Connections.Updated += c =>
 engine.Connections.Closed += c =>
     Console.WriteLine($"  [close] pid={c.ProcessId,-6} {c.Host ?? c.Destination.Address.ToString(),-40} " +
                       $"   up={c.BytesUp} down={c.BytesDown}{(c.Error is null ? "" : "  ERROR: " + c.Error)}");
+
+// The tunnels the run is about to route through come up first, and in the background: dialling one
+// on demand would put the subprocess launch and the handshake in front of whichever connection
+// happened to be first. The window keeps them across runs; a command-line run switches on whatever
+// its own configuration routes through a VPN and lets the container drop them when it exits.
+services.GetRequiredService<VpnConnectionKeeper>().ConnectRoutedVpns(config);
 
 try
 {

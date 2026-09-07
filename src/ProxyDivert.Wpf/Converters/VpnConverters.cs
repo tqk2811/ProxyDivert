@@ -3,6 +3,7 @@ using System.Collections;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Data;
+using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.ViewModels;
 
 namespace ProxyDivert.Wpf.Converters;
@@ -25,6 +26,31 @@ public sealed class VpnTunnelForOutboundConverter : IMultiValueConverter
             return null;
 
         return tunnels.OfType<VpnTunnelViewModel>().FirstOrDefault(t => t.Id == id);
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException("Display only.");
+}
+
+/// <summary>
+/// What the tunnel button offers this outbound: Disconnect while a tunnel is being held up,
+/// Connect otherwise.
+/// </summary>
+/// <remarks>
+/// The same three bindings as <see cref="VpnTunnelForOutboundConverter"/>, plus the language
+/// version — a converter's output does not follow a DynamicResource, so without it the button
+/// would keep the wording of whichever language was loaded when the row was built.
+/// </remarks>
+public sealed class VpnConnectButtonTextConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        bool connected = values.Length > 1
+            && values[0] is Guid id
+            && values[1] is IEnumerable tunnels
+            && tunnels.OfType<VpnTunnelViewModel>().Any(t => t.Id == id);
+
+        return LocalizationManager.Get(connected ? "Str.Vpn.Disconnect" : "Str.Vpn.Connect");
     }
 
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)

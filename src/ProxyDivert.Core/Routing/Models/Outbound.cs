@@ -42,6 +42,18 @@ public sealed class Outbound
 
     public bool IsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Whether this VPN's tunnel is to be held up. Meaningless for every other kind — only a VPN
+    /// has a tunnel to keep.
+    /// </summary>
+    /// <remarks>
+    /// It is deliberately not tied to the engine: the tunnel is a connection to a VPN provider, not
+    /// part of a redirection run, so turning WinDivert off leaves it up and turning WinDivert on
+    /// sets it for whatever the rules actually route through a VPN. Stored rather than kept in
+    /// memory so the tunnels that were up come back the next time the window opens.
+    /// </remarks>
+    public bool KeepConnected { get; set; }
+
     // Whether this way out can reach IPv6 destinations. See Ipv6Support — Auto learns it from the
     // first failure rather than asking the user to know.
     public Ipv6Support Ipv6Support { get; set; } = Ipv6Support.Auto;

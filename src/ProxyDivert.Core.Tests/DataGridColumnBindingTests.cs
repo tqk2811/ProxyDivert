@@ -145,7 +145,11 @@ public class DataGridColumnBindingTests
 
             DataGrid grid = FindVisuals<DataGrid>(view).First();
             DataGridColumn vpnProtocol = ComboColumnFor(grid, "VpnProtocol");
-            DataGridColumn kind = grid.Columns.OfType<DataGridTemplateColumn>().Single();
+            // Three template columns now — the type picker, the tunnel button and the tunnel
+            // state — and only the first sorts by Kind.
+            DataGridColumn kind = grid.Columns
+                .OfType<DataGridTemplateColumn>()
+                .Single(c => c.SortMemberPath == "Kind");
             DataGridColumn url = grid.Columns
                 .OfType<DataGridTextColumn>()
                 .Single(c => (c.Binding as System.Windows.Data.Binding)?.Path.Path == "Url");

@@ -6,6 +6,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ProxyDivert.Core.Engine;
+using ProxyDivert.Core.Routing;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn.Enums;
@@ -45,8 +46,8 @@ public sealed partial class OutboundsViewModel : ObservableObject
     private bool _isTesting;
 
     /// <summary>
-    /// The VPN tunnels the engine is holding up. Empty when nothing is running or no VPN outbound
-    /// is enabled, which is what hides the strip.
+    /// The VPN tunnels being held up right now, whether or not anything is being redirected. A row
+    /// with no tunnel here is one that is switched off, and its button offers Connect.
     /// </summary>
     public ObservableCollection<VpnTunnelViewModel> VpnTunnels { get; }
         = new ObservableCollection<VpnTunnelViewModel>();
@@ -54,9 +55,9 @@ public sealed partial class OutboundsViewModel : ObservableObject
     public OutboundsViewModel(AppServices services)
     {
         _services = services;
-        // The engine supervises tunnels on its own threads and outlives this view model, so the
+        // The keeper supervises tunnels on its own threads and outlives this view model, so the
         // subscription is for the life of the window.
-        _services.Engine.VpnStatusChanged += OnVpnStatusChanged;
+        _services.Vpn.StatusChanged += OnVpnStatusChanged;
         Reload();
     }
 
@@ -67,8 +68,46 @@ public sealed partial class OutboundsViewModel : ObservableObject
             Outbounds.Add(outbound);
 
         VpnTunnels.Clear();
-        foreach (VpnStatus status in _services.Engine.VpnStatuses)
+        foreach (VpnStatus status in _services.Vpn.Statuses)
             VpnTunnels.Add(new VpnTunnelViewModel(status));
+        ToggleVpnCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Re-asks whether each Connect button may be pressed. Called when redirection is switched on
+    /// or off, which is what decides whether a tunnel a filter routes through may be taken down.
+    /// </summary>
+    public void RefreshVpnCommands() => ToggleVpnCommand.NotifyCanExecuteChanged();
+
+    /// <summary>True when the engine is holding a tunnel up for this outbound.</summary>
+    private bool IsConnected(Outbound outbound) => VpnTunnels.Any(t => t.Id == outbound.Id);
+
+    // Connect and Disconnect are the same button: which one it is depends on the tunnel, not on
+    // which control was pressed. The engine is never told — a tunnel going up or down changes
+    // nothing about how a connection is routed.
+    [RelayCommand(CanExecute = nameof(CanToggleVpn))]
+    private void ToggleVpn(Outbound? outbound)
+    {
+        if (outbound is null) return;
+
+        _services.SetVpnConnectedAsync(outbound, !IsConnected(outbound));
+        // The tunnel answers on its own thread a moment from now; until then the button would
+        // still offer what it offered before.
+        ToggleVpnCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanToggleVpn(Outbound? outbound)
+    {
+        if (outbound is null || outbound.Kind != OutboundKind.Vpn || !outbound.IsEnabled)
+            return false;
+
+        // Connecting is always allowed. Disconnecting is not, while redirection is on and a filter
+        // routes through this tunnel: taking it down would leave every connection that filter
+        // catches failing at a tunnel that is no longer there, with nothing on screen to say why.
+        // Switch redirection off, or point the filter elsewhere, and the button comes back.
+        if (!IsConnected(outbound)) return true;
+        return !_services.Engine.IsRunning
+            || !OutboundUsage.RoutedOutboundIds(_services.Config).Contains(outbound.Id);
     }
 
     // Called from the tunnel's supervision thread. BeginInvoke, never Invoke: the thread that
@@ -83,16 +122,21 @@ public sealed partial class OutboundsViewModel : ObservableObject
     {
         VpnTunnelViewModel? row = VpnTunnels.FirstOrDefault(t => t.Id == status.OutboundId);
 
-        // A stopped tunnel is one the engine is no longer keeping — the outbound was disabled,
-        // deleted, or the engine stopped — so it leaves the strip rather than sitting there greyed.
+        // A stopped tunnel is one the keeper is no longer holding up — switched off, disabled or
+        // deleted — so its cell goes back to offering Connect rather than sitting there greyed.
         if (status.State == VpnConnectionState.Stopped)
         {
             if (row != null) VpnTunnels.Remove(row);
+            ToggleVpnCommand.NotifyCanExecuteChanged();
             return;
         }
 
         if (row is null) VpnTunnels.Add(new VpnTunnelViewModel(status));
         else row.Update(status);
+
+        // Which button the row offers follows the tunnel, so it is re-asked here rather than only
+        // when the user clicks something.
+        ToggleVpnCommand.NotifyCanExecuteChanged();
     }
 
     // True for the two built-ins, which the UI keeps read-only. The grid asks the row itself, so

@@ -117,6 +117,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             IsRunning = true;
             StatusMessage = null;
             Processes.RefreshApplied();
+            // A tunnel a filter routes through may not be disconnected while that filter is live,
+            // so the Outbounds tab has to be told the moment redirection comes on.
+            Outbounds.RefreshVpnCommands();
         }
         catch (Exception ex)
         {
@@ -134,6 +137,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IsRunning = false;
         // Nothing is being redirected any more, so the tree must not keep claiming otherwise.
         Processes.RefreshApplied();
+        // The tunnels stay up — but nothing is routing through them now, so they may be
+        // disconnected by hand again.
+        Outbounds.RefreshVpnCommands();
     }
 
     [RelayCommand]

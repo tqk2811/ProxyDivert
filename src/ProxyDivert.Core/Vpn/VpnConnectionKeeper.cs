@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
+using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Outbounds;
+using ProxyDivert.Core.Routing;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn.Enums;
@@ -11,8 +13,8 @@ using ProxyDivert.Core.Vpn.Models;
 namespace ProxyDivert.Core.Vpn;
 
 /// <summary>
-/// Keeps every enabled VPN outbound connected for as long as the engine runs, instead of dialling
-/// one when a request happens to need it.
+/// Keeps the VPN outbounds that are switched on connected, instead of dialling one when a request
+/// happens to need it.
 /// </summary>
 /// <remarks>
 /// A VPN outbound is a wireproxy subprocess plus a WireGuard session, and building both takes
@@ -21,14 +23,18 @@ namespace ProxyDivert.Core.Vpn;
 /// for the far side to forget the session. None of that is visible as an error; it just makes one
 /// page load inexplicably slow.
 ///
-/// So the tunnels come up when the engine does and are held there: a dead subprocess is noticed
-/// through its exit event rather than at the next request, and reconnected with a growing delay so
-/// a genuinely broken configuration does not become a spawn loop. Idle sessions are kept alive by
+/// So a tunnel that is switched on is held there: a dead subprocess is noticed through its exit
+/// event rather than at the next request, and reconnected with a growing delay so a genuinely
+/// broken configuration does not become a spawn loop. Idle sessions are kept alive by
 /// PersistentKeepalive, which the config writer adds when the provider's file has none.
 ///
-/// Only enabled VPN outbounds are kept, whether or not a rule currently points at one: rules are
-/// edited far more often than outbounds, and a tunnel that has to warm up the moment the user
-/// repoints a rule at it would defeat the purpose.
+/// Which tunnels those are is <see cref="Outbound.KeepConnected"/>, and it is the user's switch —
+/// this lives for as long as the application rather than for as long as an engine run. A VPN is a
+/// connection to a provider, not part of a redirection: switching WinDivert off leaves it up, so
+/// the browser that was already using it does not fall off the tunnel mid-download. Switching
+/// WinDivert on goes the other way and turns on whatever the rules route through a VPN — see
+/// <see cref="ConnectRoutedVpns"/> — because a rule pointing at a tunnel that is down would send
+/// its traffic into a connection error.
 /// </remarks>
 public sealed class VpnConnectionKeeper : IDisposable
 {
@@ -64,8 +70,9 @@ public sealed class VpnConnectionKeeper : IDisposable
     }
 
     /// <summary>
-    /// Brings the set of kept tunnels in line with the configuration: starts the ones that are new
-    /// or edited, stops the ones that are gone or disabled, and leaves the rest running untouched.
+    /// Brings the set of kept tunnels in line with the configuration: starts the ones that are
+    /// newly switched on or edited, stops the ones that are gone, disabled or switched off, and
+    /// leaves the rest running untouched.
     /// </summary>
     public void Sync(IEnumerable<Outbound> outbounds, string? wireProxyPath)
     {
@@ -75,7 +82,8 @@ public sealed class VpnConnectionKeeper : IDisposable
         var definitions = new Dictionary<Guid, Outbound>();
         foreach (Outbound outbound in outbounds)
         {
-            if (outbound.Kind != OutboundKind.Vpn || !outbound.IsEnabled) continue;
+            if (outbound.Kind != OutboundKind.Vpn || !outbound.IsEnabled || !outbound.KeepConnected)
+                continue;
             wanted[outbound.Id] = OutboundSignature.Of(outbound, wireProxyPath);
             definitions[outbound.Id] = outbound;
         }
@@ -130,6 +138,36 @@ public sealed class VpnConnectionKeeper : IDisposable
             _logger.LogInformation("vpn {Outbound} will be kept connected", tunnel.OutboundName);
             tunnel.Start();
         }
+    }
+
+    /// <summary>
+    /// Switches on every VPN the configuration actually routes through — the filters' policies'
+    /// outbounds — and brings the tunnels up. Returns the ones that were off until now, so the
+    /// caller can write the change to the file it came from.
+    /// </summary>
+    /// <remarks>
+    /// Called when the engine starts. Nothing is switched off here, and stopping the engine calls
+    /// nothing at all: a tunnel is only ever put down by the user.
+    /// </remarks>
+    public IReadOnlyCollection<Guid> ConnectRoutedVpns(AppConfig config)
+    {
+        if (config is null) throw new ArgumentNullException(nameof(config));
+
+        HashSet<Guid> routed = OutboundUsage.RoutedOutboundIds(config);
+        var switchedOn = new List<Guid>();
+        foreach (Outbound outbound in config.Outbounds)
+        {
+            if (outbound.Kind != OutboundKind.Vpn || !outbound.IsEnabled) continue;
+            if (outbound.KeepConnected || !routed.Contains(outbound.Id)) continue;
+
+            outbound.KeepConnected = true;
+            switchedOn.Add(outbound.Id);
+            _logger.LogInformation(
+                "vpn {Outbound} is switched on: a filter routes through it", outbound.Name);
+        }
+
+        Sync(config.Outbounds, config.WireProxyPath);
+        return switchedOn;
     }
 
     private void OnTunnelStatusChanged(VpnStatus status) => Raise(status);

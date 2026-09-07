@@ -196,6 +196,13 @@ internal sealed class KeptVpnTunnel : IDisposable
         // said it stopped — but never block the caller on it: every await in there is cancellable,
         // and a stuck one is not worth freezing the window over.
         try { _loop?.Wait(TimeSpan.FromSeconds(2)); } catch { }
+
+        // The instance IS the tunnel — a wireproxy subprocess, or a driver holding a session — and
+        // the factory is what owns it. Ending supervision without this would stop watching a tunnel
+        // that carries on running: the user presses Disconnect, the row goes quiet, and the
+        // subprocess keeps talking to the VPN server.
+        _factory.Invalidate(_outbound.Id);
+
         _cts.Dispose();
     }
 }

@@ -87,6 +87,10 @@
     <sys:String x:Key="Str.Outbound.Hint">Direct và Block luôn tồn tại. Với VPN, ô URL là file cấu hình (.ovpn, .conf, .vpn) hoặc chính máy chủ, dạng sstp://vpn.example.com:443 — xem README. File .conf chạy bằng wireproxy nên không chở UDP; VPN loại khác chạy trong tiến trình này thì chở được.</sys:String>
 
     <sys:String x:Key="Str.Vpn.Header">Đường hầm VPN</sys:String>
+    <sys:String x:Key="Str.Vpn.Connection">Kết nối</sys:String>
+    <sys:String x:Key="Str.Vpn.Connect">Kết nối</sys:String>
+    <sys:String x:Key="Str.Vpn.Disconnect">Ngắt</sys:String>
+    <sys:String x:Key="Str.Vpn.ConnectHint">Kết nối và ngắt VPN này độc lập, không phụ thuộc WinDivert. Bật WinDivert sẽ kết nối các VPN mà bộ lọc định tuyến qua, tắt WinDivert thì mọi đường hầm vẫn giữ nguyên; đường hầm đang có bộ lọc chạy qua thì không ngắt được ở đây.</sys:String>
     <sys:String x:Key="Str.Vpn.Connecting">đang kết nối</sys:String>
     <sys:String x:Key="Str.Vpn.Connected">đã kết nối</sys:String>
     <sys:String x:Key="Str.Vpn.Reconnecting">đang kết nối lại</sys:String>

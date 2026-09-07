@@ -10,6 +10,8 @@ using ProxyDivert.Core.DependencyInjection;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Logging;
 using ProxyDivert.Core.Processes;
+using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Vpn;
 
 namespace ProxyDivert.Wpf.Services;
 
@@ -39,6 +41,14 @@ public sealed class AppServices : IDisposable
     public AppConfig Config { get; private set; }
 
     public RedirectEngine Engine { get; }
+
+    /// <summary>
+    /// The VPN tunnels, which are deliberately not part of an engine run: the user switches one on
+    /// and it stays on across a Start and a Stop, because it is a session with their VPN provider
+    /// rather than a piece of the redirection. Switching redirection ON is the one thing that
+    /// touches them — see <see cref="StartEngineAsync"/>.
+    /// </summary>
+    public VpnConnectionKeeper Vpn { get; }
 
     /// <summary>
     /// Every process running on this machine, with its path, its arguments and its parent. Started
@@ -109,6 +119,12 @@ public sealed class AppServices : IDisposable
         _loggerProvider = _provider.GetRequiredService<AppLoggerProvider>();
         _logger = _provider.GetRequiredService<ILoggerFactory>().CreateLogger<AppServices>();
         Engine = _provider.GetRequiredService<RedirectEngine>();
+        Vpn = _provider.GetRequiredService<VpnConnectionKeeper>();
+
+        // The tunnels that were up when the window last closed come back now, before anything is
+        // redirected: they were switched on by the user and never switched off, and dialling one
+        // takes seconds that would otherwise be paid by whichever request needed it first.
+        Vpn.Sync(Config.Outbounds, Config.WireProxyPath);
 
         // Before anything else asks: collecting is what makes starting the engine cheap, and the
         // first sweep is about thirty milliseconds, so it is done here rather than deferred.
@@ -164,6 +180,9 @@ public sealed class AppServices : IDisposable
             try
             {
                 ConfigStore.Save(snapshot);
+                // Whether or not anything is being redirected: a VPN edited or switched off on the
+                // Outbounds tab has to reach its tunnel, and the tunnels do not belong to the run.
+                Vpn.Sync(snapshot.Outbounds, snapshot.WireProxyPath);
                 if (Engine.IsRunning) Engine.ApplyConfig(snapshot);
             }
             catch (Exception ex)
@@ -174,13 +193,54 @@ public sealed class AppServices : IDisposable
     }
 
     /// <summary>Starts the engine on a snapshot of the configuration, off the caller's thread.</summary>
+    /// <remarks>
+    /// The VPN tunnels the filters route through are switched on first, on this thread, so the
+    /// engine never starts routing at a tunnel that is down — every connection the rule caught
+    /// would fail until someone noticed. Dialling itself is in the background; only the switch is
+    /// flicked here, and it is written to the file so it survives the next start.
+    /// </remarks>
     public Task StartEngineAsync()
     {
+        IReadOnlyCollection<Guid> switchedOn = Vpn.ConnectRoutedVpns(Config);
         AppConfig snapshot = ConfigStore.Clone(Config);
-        return Enqueue(() => Engine.Start(snapshot));
+        return Enqueue(() =>
+        {
+            if (switchedOn.Count > 0) ConfigStore.Save(snapshot);
+            Engine.Start(snapshot);
+        });
     }
 
+    /// <summary>
+    /// Stops the engine. The VPN tunnels stay up: the user switched them on, and nothing here has
+    /// been asked to end their session with the provider.
+    /// </summary>
     public Task StopEngineAsync() => Enqueue(Engine.Stop);
+
+    /// <summary>
+    /// Switches one VPN's tunnel on or off and remembers it. The engine is not told: which
+    /// tunnels are up changes nothing about how a connection is routed, and re-applying the
+    /// configuration would close live connections for a setting that does not concern them.
+    /// </summary>
+    public Task SetVpnConnectedAsync(Outbound outbound, bool connected)
+    {
+        if (outbound is null) throw new ArgumentNullException(nameof(outbound));
+
+        outbound.KeepConnected = connected;
+        AppConfig snapshot = ConfigStore.Clone(Config);
+        return Enqueue(() =>
+        {
+            try
+            {
+                ConfigStore.Save(snapshot);
+                Vpn.Sync(snapshot.Outbounds, snapshot.WireProxyPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "switching the vpn {Outbound} {State} failed",
+                    outbound.Name, connected ? "on" : "off");
+            }
+        });
+    }
 
     /// <summary>
     /// Completes once everything queued so far — saves, starts, stops — has run. For code that

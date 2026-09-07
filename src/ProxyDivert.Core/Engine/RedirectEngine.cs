@@ -51,6 +51,7 @@ public sealed class RedirectEngine : IDisposable
     private readonly IProcessRedirectorFactory _redirectorFactory;
     private readonly ProcessInventory _inventory;
     private readonly IHostNameInspector _hostNameInspector;
+    private readonly OutboundSourceFactory _outboundFactory;
     private readonly object _stateLock = new object();
     // What we have learned about which outbounds can actually reach IPv6. Lives across Start/Stop
     // because it describes the proxies, not the run.
@@ -58,12 +59,10 @@ public sealed class RedirectEngine : IDisposable
 
     private AppConfig _config = AppConfig.CreateDefault();
     private RoutingPolicyResolver _resolver;
-    private OutboundSourceFactory? _outboundFactory;
     private ProcessRuleTracker? _tracker;
     private IProcessRedirector? _redirector;
     private IConnectionHostNameResolver? _hostNames;
     private UdpProxyForwarder? _udpForwarder;
-    private VpnConnectionKeeper? _vpnKeeper;
     private CancellationTokenSource? _cts;
 
     public ConnectionTracker Connections { get; } = new ConnectionTracker();
@@ -88,28 +87,27 @@ public sealed class RedirectEngine : IDisposable
     /// </summary>
     public event Action? ConfigurationApplied;
 
-    /// <summary>
-    /// Raised when a VPN outbound's tunnel changes state, from the thread supervising it. A UI
-    /// handler must marshal asynchronously — see <see cref="VpnConnectionKeeper.StatusChanged"/>.
-    /// </summary>
-    public event Action<VpnStatus>? VpnStatusChanged;
-
-    /// <summary>The tunnels currently held up, or an empty list when the engine is not running.</summary>
-    public IReadOnlyList<VpnStatus> VpnStatuses => _vpnKeeper?.Statuses ?? Array.Empty<VpnStatus>();
-
     /// <param name="inventory">
     /// The machine-wide process table. It is started by the host and outlives every engine run, so
     /// it is NOT owned here and never disposed by Stop.
+    /// </param>
+    /// <param name="outboundFactory">
+    /// The live instance of every outbound. Like the process table it belongs to the application:
+    /// a VPN outbound's instance IS its tunnel, and a tunnel must not be torn down because the user
+    /// switched redirection off. Stop therefore leaves it alone, and Start only reconciles it with
+    /// the configuration it was handed.
     /// </param>
     public RedirectEngine(
         IProcessRedirectorFactory redirectorFactory,
         ProcessInventory inventory,
         IHostNameInspector hostNameInspector,
+        OutboundSourceFactory outboundFactory,
         ILoggerFactory loggerFactory)
     {
         _redirectorFactory = redirectorFactory ?? throw new ArgumentNullException(nameof(redirectorFactory));
         _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
         _hostNameInspector = hostNameInspector ?? throw new ArgumentNullException(nameof(hostNameInspector));
+        _outboundFactory = outboundFactory ?? throw new ArgumentNullException(nameof(outboundFactory));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<RedirectEngine>();
         _resolver = BuildResolver(_config, new Dictionary<uint, IReadOnlyList<Guid>>());
@@ -126,7 +124,10 @@ public sealed class RedirectEngine : IDisposable
             _config = config;
 
             _cts = new CancellationTokenSource();
-            _outboundFactory = new OutboundSourceFactory(_loggerFactory, config.WireProxyPath);
+            // The instances outlive the run, so this picks up whatever was edited while the engine
+            // was off rather than starting from an empty cache — and leaves a VPN tunnel that is
+            // already up exactly where it is.
+            ReconcileOutbounds(config);
             _resolver = BuildResolver(config, new Dictionary<uint, IReadOnlyList<Guid>>());
 
             var options = new RedirectOptions
@@ -157,13 +158,6 @@ public sealed class RedirectEngine : IDisposable
             _tracker.ProcessDetached += OnProcessDetached;
             _tracker.Start(config.ProcessRules);
 
-            // VPN tunnels come up now, in the background, rather than when a request first needs
-            // one: dialling on demand would put the subprocess launch and the WireGuard handshake
-            // in front of whichever connection happened to be first. Sync never blocks Start.
-            _vpnKeeper = new VpnConnectionKeeper(_outboundFactory, _loggerFactory.CreateLogger<VpnConnectionKeeper>());
-            _vpnKeeper.StatusChanged += OnVpnStatusChanged;
-            _vpnKeeper.Sync(config.Outbounds, config.WireProxyPath);
-
             IsRunning = true;
             _logger.LogInformation(
                 "engine started; relay tcp={Tcp} udp={Udp} tcpV6={TcpV6} udpV6={UdpV6}, ipv6={Ipv6Mode}",
@@ -187,17 +181,7 @@ public sealed class RedirectEngine : IDisposable
             // Only the outbounds that actually changed are rebuilt. Throwing them all away on
             // every save is what used to kill a running VPN tunnel — and make the next request
             // re-handshake it — because the user ticked a checkbox on another tab.
-            IReadOnlyCollection<Guid> changed =
-                _outboundFactory?.ApplyOutbounds(config.Outbounds, config.WireProxyPath) ?? Array.Empty<Guid>();
-            foreach (Guid outboundId in changed)
-            {
-                // The edit may be exactly the fix for what we learned (a proxy that now has an
-                // IPv6 route), so an outbound that was rebuilt gets a clean slate.
-                _ipv6Capability.Reset(outboundId);
-                // Its UDP tunnels are pointed at an instance that no longer exists.
-                _udpForwarder?.InvalidateOutbound(outboundId);
-            }
-            _vpnKeeper?.Sync(config.Outbounds, config.WireProxyPath);
+            ReconcileOutbounds(config);
             // Takes effect on the next process event, with no restart — it only tunes how the
             // watcher reads command lines, not what it watches.
             _inventory.EventBacklogMs = config.ProcessEventBacklogMs;
@@ -271,23 +255,16 @@ public sealed class RedirectEngine : IDisposable
                 _tracker = null;
             }
 
-            // Before the factory: the keeper would otherwise see its tunnels disposed underneath it
-            // and start reconnecting the very thing we are shutting down.
-            if (_vpnKeeper != null)
-            {
-                _vpnKeeper.StatusChanged -= OnVpnStatusChanged;
-                _vpnKeeper.Dispose();
-                _vpnKeeper = null;
-            }
-
             _udpForwarder?.Dispose();
             _udpForwarder = null;
 
             _redirector?.Dispose();
             _redirector = null;
 
-            _outboundFactory?.Dispose();
-            _outboundFactory = null;
+            // The outbound instances are deliberately left alone. A VPN outbound's instance IS the
+            // tunnel: the user's session with their provider, which they switched on themselves and
+            // which nothing here has been asked to end. Switching redirection off drops no tunnel,
+            // and the proxies are only settings until a connection asks for one.
 
             _logger.LogInformation("engine stopped");
 
@@ -296,10 +273,21 @@ public sealed class RedirectEngine : IDisposable
         }
     }
 
-    private void OnVpnStatusChanged(VpnStatus status)
+    // Rebuilds only the outbound instances the configuration has actually changed, and tells
+    // everything keyed by outbound that theirs is gone. Shared by Start and ApplyConfig: an edit
+    // made while the engine was off has to reach the cache exactly as one made while it runs.
+    private void ReconcileOutbounds(AppConfig config)
     {
-        try { VpnStatusChanged?.Invoke(status); }
-        catch { /* a broken subscriber must not break the tunnel supervision it came from */ }
+        IReadOnlyCollection<Guid> changed =
+            _outboundFactory.ApplyOutbounds(config.Outbounds, config.WireProxyPath);
+        foreach (Guid outboundId in changed)
+        {
+            // The edit may be exactly the fix for what we learned (a proxy that now has an IPv6
+            // route), so an outbound that was rebuilt gets a clean slate.
+            _ipv6Capability.Reset(outboundId);
+            // Its UDP tunnels are pointed at an instance that no longer exists.
+            _udpForwarder?.InvalidateOutbound(outboundId);
+        }
     }
 
     // ---- process scope ----------------------------------------------------------------------
@@ -446,7 +434,7 @@ public sealed class RedirectEngine : IDisposable
             return;
         }
 
-        IProxySource source = _outboundFactory!.GetOrCreate(outbound);
+        IProxySource source = _outboundFactory.GetOrCreate(outbound);
         IConnectSource? tunnel = null;
         Guid tunnelId = Guid.NewGuid();
         try
@@ -501,7 +489,7 @@ public sealed class RedirectEngine : IDisposable
         if (outbound.Kind == OutboundKind.Direct) return;
         if (!_ipv6Capability.RecordIpv6Failure(outbound)) return;
 
-        _outboundFactory?.SetIpv6Support(outbound.Id, false);
+        _outboundFactory.SetIpv6Support(outbound.Id, false);
         _logger.LogInformation(ex,
             "outbound {Outbound} marked IPv4-only after {Destination} failed. Later IPv6 destinations go "
             + "out over IPv4, by name where one is known; set Ipv6Support=Enabled to override",
@@ -586,7 +574,7 @@ public sealed class RedirectEngine : IDisposable
                         return null;
                     }
 
-                    IProxySource source = _outboundFactory!.GetOrCreate(decision.Outbound);
+                    IProxySource source = _outboundFactory.GetOrCreate(decision.Outbound);
                     bool queued = _udpForwarder!.Send(
                         decision.Outbound.Id, source,
                         (ushort)datagram.OriginalSource.Port,
