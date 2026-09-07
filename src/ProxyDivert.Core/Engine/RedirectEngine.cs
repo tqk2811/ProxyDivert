@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -363,9 +364,11 @@ public sealed class RedirectEngine : IDisposable
         try
         {
             // Name first: SNI / Host header, then whatever DNS taught us about this IP.
+            long nameStarted = Stopwatch.GetTimestamp();
             string? host = _hostNames is null
                 ? null
                 : await _hostNames.TryResolveAsync(connection, HostPeekTimeout, ct).ConfigureAwait(false);
+            TimeSpan nameTime = Stopwatch.GetElapsedTime(nameStarted);
             info.Host = host;
 
             var target = new RouteTarget(
@@ -387,7 +390,7 @@ public sealed class RedirectEngine : IDisposable
                 return;
             }
 
-            await TunnelAsync(connection, decision.Outbound, host, info, ct).ConfigureAwait(false);
+            await TunnelAsync(connection, decision.Outbound, host, info, nameTime, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -405,7 +408,8 @@ public sealed class RedirectEngine : IDisposable
     }
 
     private async Task TunnelAsync(
-        RedirectedTcpConnection connection, Outbound outbound, string? host, ConnectionInfo info, CancellationToken ct)
+        RedirectedTcpConnection connection, Outbound outbound, string? host, ConnectionInfo info,
+        TimeSpan nameTime, CancellationToken ct)
     {
         IPEndPoint destination = connection.OriginalDestination;
         bool isIpv6 = destination.Address.AddressFamily == AddressFamily.InterNetworkV6;
@@ -444,6 +448,7 @@ public sealed class RedirectEngine : IDisposable
             // what the SOCKS5/HTTP address parsers expect to see.
             var targetUri = new UriBuilder("tcp", targetHost, destination.Port).Uri;
 
+            long connectStarted = Stopwatch.GetTimestamp();
             try
             {
                 await tunnel.ConnectAsync(targetUri, ct).ConfigureAwait(false);
@@ -457,6 +462,16 @@ public sealed class RedirectEngine : IDisposable
                 NoteIpv6Failure(outbound, destination, ex);
                 throw;
             }
+
+            // The three legs a connection waits on, so a slow site can be blamed on the right one:
+            // the handshake through the relay (a stalled pump), the wait for the client to name
+            // its host (a preconnect that says nothing), or the upstream connect (the network).
+            _logger.LogInformation(
+                "tcp pid={Pid} -> {Target} up via {Outbound}: handshake {HandshakeMs}ms, name {NameMs}ms, connect {ConnectMs}ms",
+                connection.ProcessId, targetUri.Authority, outbound.Name,
+                (long)connection.CaptureToAccept.TotalMilliseconds,
+                (long)nameTime.TotalMilliseconds,
+                (long)Stopwatch.GetElapsedTime(connectStarted).TotalMilliseconds);
 
             await tunnel.ForwardAsync(
                 connection.ClientStream, tunnelId, _loggerFactory,
