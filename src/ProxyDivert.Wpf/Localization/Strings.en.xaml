@@ -150,6 +150,15 @@ Downside: an extra service and a COM hop add latency, and the events of one watc
     <sys:String x:Key="Str.Settings.Language">Language</sys:String>
     <sys:String x:Key="Str.Settings.Theme">Theme</sys:String>
     <sys:String x:Key="Str.Settings.StartWithWindows">Start with Windows</sys:String>
+    <sys:String x:Key="Str.Settings.MinimizeToTrayOnClose">Closing the window hides it to the notification area</sys:String>
+
+    <sys:String x:Key="Str.Tray.Show">Show window</sys:String>
+    <sys:String x:Key="Str.Tray.Hide">Hide window</sys:String>
+    <sys:String x:Key="Str.Tray.Engine">Redirect traffic</sys:String>
+    <sys:String x:Key="Str.Tray.Exit">Exit</sys:String>
+    <sys:String x:Key="Str.Tray.ToolTip">ProxyDivert — {0}</sys:String>
+    <sys:String x:Key="Str.Tray.HiddenTitle">ProxyDivert is still running</sys:String>
+    <sys:String x:Key="Str.Tray.HiddenMessage">The window is hidden, not closed. Use this icon to bring it back or to quit.</sys:String>
     <sys:String x:Key="Str.Settings.RestartHint">DNS mode, IPv6 blocking and the log file take effect the next time the engine starts.</sys:String>
 
     <sys:String x:Key="Str.Warn.Admin">ProxyDivert must run as Administrator: WinDivert loads a kernel driver.</sys:String>

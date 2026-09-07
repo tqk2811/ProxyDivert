@@ -39,6 +39,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _theme = ThemeManager.Parse(services.Config.Theme);
         _language = LocalizationManager.Parse(services.Config.Language);
         _startWithWindows = services.Config.StartWithWindows;
+        _minimizeToTrayOnClose = services.Config.MinimizeToTrayOnClose;
         _eventSource = services.Config.ProcessEventSource;
         _detection = services.Config.ProcessDetection;
 
@@ -176,6 +177,15 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _startWithWindows;
+
+    [ObservableProperty]
+    private bool _minimizeToTrayOnClose;
+
+    partial void OnMinimizeToTrayOnCloseChanged(bool value)
+    {
+        _services.Config.MinimizeToTrayOnClose = value;
+        _services.Save();
+    }
 
     partial void OnDnsModeChanged(DnsMode value) => _services.Config.Dns.Mode = value;
 

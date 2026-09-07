@@ -1,0 +1,42 @@
+<!-- Biểu tượng khay hệ thống. Sống ở tầng Application chứ không nằm trong MainWindow: khi khởi
+     động ở chế độ ẩn thì cửa sổ chưa từng được hiện, mà khay thì vẫn phải có.
+
+     Menu là ContextMenu WPF thường, nên nó ăn sẵn theme và bộ chuỗi dịch của app — không phải
+     dựng riêng gì cả. DataContext do TaskbarIcon truyền xuống, và là TrayIconController. -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:tb="http://www.hardcodet.net/taskbar">
+
+    <tb:TaskbarIcon x:Key="Tray"
+                    IconSource="pack://application:,,,/ProxyDivert;component/Assets/app.ico"
+                    ToolTipText="{Binding ToolTipText}"
+                    MenuActivation="RightClick"
+                    DoubleClickCommand="{Binding ShowWindowCommand}">
+        <tb:TaskbarIcon.ContextMenu>
+            <ContextMenu>
+                <!-- Một mục đổi chữ theo trạng thái, không phải hai mục: cửa sổ chỉ có thể đang
+                     hiện hoặc đang ẩn, và mục kia lúc nào cũng vô nghĩa. -->
+                <MenuItem Header="{Binding WindowToggleText}"
+                          Command="{Binding ToggleWindowCommand}"
+                          FontWeight="SemiBold"/>
+
+                <Separator/>
+
+                <!-- Cùng một lệnh với công tắc trên thanh tiêu đề, không phải bản sao: chỉ có một
+                     chỗ biết cách bật và tắt engine. Khoá lại khi không có quyền Administrator,
+                     vì WinDivert nạp driver kernel nên có bấm cũng không lên. -->
+                <MenuItem Header="{DynamicResource Str.Tray.Engine}"
+                          IsCheckable="True"
+                          IsChecked="{Binding ViewModel.IsRunning, Mode=OneWay}"
+                          IsEnabled="{Binding ViewModel.IsElevated}"
+                          Command="{Binding ViewModel.ToggleEngineCommand}"/>
+
+                <Separator/>
+
+                <MenuItem Header="{DynamicResource Str.Tray.Exit}"
+                          Command="{Binding ExitCommand}"/>
+            </ContextMenu>
+        </tb:TaskbarIcon.ContextMenu>
+    </tb:TaskbarIcon>
+
+</ResourceDictionary>

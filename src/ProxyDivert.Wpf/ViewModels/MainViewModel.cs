@@ -43,6 +43,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // window says so up front instead of failing at the first click.
     public bool IsElevated { get; }
 
+    /// <summary>
+    /// Whether the close button hides the window instead of ending the process. Read straight from
+    /// the configuration on every close rather than cached, so ticking the box in Settings changes
+    /// what the button does at once.
+    /// </summary>
+    public bool MinimizeToTrayOnClose => _services.Config.MinimizeToTrayOnClose;
+
     public MainViewModel(AppServices services)
     {
         _services = services;

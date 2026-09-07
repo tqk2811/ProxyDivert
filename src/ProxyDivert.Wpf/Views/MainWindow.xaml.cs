@@ -1,6 +1,8 @@
 using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Interop;
+using ProxyDivert.Wpf.ViewModels;
 using ProxyDivert.Wpf.Views.Native;
 
 namespace ProxyDivert.Wpf.Views;
@@ -60,4 +62,25 @@ public partial class MainWindow : Window
         => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+    // Closing the window is not the same as quitting when there is a tray icon to fall back on:
+    // the redirect is meant to outlive the window, and the icon is what says it still is. Which of
+    // the two the button means is the user's choice, in Settings.
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        base.OnClosing(e);
+
+        // Exit on the tray menu comes through here too, and must not be caught by the rule below.
+        if (App.IsExiting) return;
+
+        if (DataContext is MainViewModel viewModel && viewModel.MinimizeToTrayOnClose)
+        {
+            e.Cancel = true;
+            Hide();
+            return;
+        }
+
+        // Shutdown is explicit now, so closing the last window no longer ends the process on its own.
+        App.BeginExit();
+    }
 }

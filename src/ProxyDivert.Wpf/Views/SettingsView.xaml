@@ -120,6 +120,8 @@
                     </StackPanel>
                     <CheckBox Content="{DynamicResource Str.Settings.StartWithWindows}"
                               IsChecked="{Binding StartWithWindows}"/>
+                    <CheckBox Content="{DynamicResource Str.Settings.MinimizeToTrayOnClose}"
+                              IsChecked="{Binding MinimizeToTrayOnClose}"/>
                 </StackPanel>
             </Border>
 

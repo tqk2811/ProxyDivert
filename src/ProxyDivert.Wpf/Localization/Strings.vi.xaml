@@ -150,6 +150,15 @@ Hại: thêm một dịch vụ và một chặng COM nên trễ hơn, và sự k
     <sys:String x:Key="Str.Settings.Language">Ngôn ngữ</sys:String>
     <sys:String x:Key="Str.Settings.Theme">Chủ đề</sys:String>
     <sys:String x:Key="Str.Settings.StartWithWindows">Chạy cùng Windows</sys:String>
+    <sys:String x:Key="Str.Settings.MinimizeToTrayOnClose">Đóng cửa sổ thì thu vào khay hệ thống</sys:String>
+
+    <sys:String x:Key="Str.Tray.Show">Hiện cửa sổ</sys:String>
+    <sys:String x:Key="Str.Tray.Hide">Ẩn cửa sổ</sys:String>
+    <sys:String x:Key="Str.Tray.Engine">Chuyển hướng traffic</sys:String>
+    <sys:String x:Key="Str.Tray.Exit">Thoát</sys:String>
+    <sys:String x:Key="Str.Tray.ToolTip">ProxyDivert — {0}</sys:String>
+    <sys:String x:Key="Str.Tray.HiddenTitle">ProxyDivert vẫn đang chạy</sys:String>
+    <sys:String x:Key="Str.Tray.HiddenMessage">Cửa sổ chỉ bị ẩn chứ chưa đóng. Bấm vào biểu tượng này để mở lại hoặc để thoát hẳn.</sys:String>
     <sys:String x:Key="Str.Settings.RestartHint">Chế độ DNS, chặn IPv6 và file nhật ký chỉ có hiệu lực từ lần chạy engine kế tiếp.</sys:String>
 
     <sys:String x:Key="Str.Warn.Admin">ProxyDivert phải chạy bằng quyền Administrator: WinDivert nạp driver kernel.</sys:String>

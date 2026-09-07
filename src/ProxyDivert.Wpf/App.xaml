@@ -13,6 +13,10 @@
                 <ResourceDictionary Source="pack://application:,,,/ProxyDivert;component/Themes/Logo.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/ProxyDivert;component/Themes/Controls.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/ProxyDivert;component/Themes/Controls.ListBox.xaml"/>
+                <!-- Views/TrayIcon.xaml cố tình KHÔNG nằm ở đây: TaskbarIcon gắn tay vào sự kiện
+                     của Application ngay trong constructor, nên bất kỳ ai duyệt qua tài nguyên của
+                     ứng dụng cũng dựng nó ra, và nếu không phải luồng UI thì nổ. App.OnStartup nạp
+                     riêng đúng một lần, ở đúng luồng. -->
             </ResourceDictionary.MergedDictionaries>
 
             <conv:InverseBoolConverter x:Key="InverseBool"/>
