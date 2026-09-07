@@ -86,7 +86,7 @@
     <sys:String x:Key="Str.Outbound.TestFailed">Connection failed:</sys:String>
     <sys:String x:Key="Str.Outbound.Hint">Direct and Block always exist. For a VPN the URL box is either a configuration file (.ovpn, .conf, .vpn) or the server itself, as in sstp://vpn.example.com:443 — see the README. A .conf runs on wireproxy and carries no UDP; every other VPN runs in this process and does.</sys:String>
 
-    <sys:String x:Key="Str.Vpn.Header">VPN tunnels</sys:String>
+    <sys:String x:Key="Str.Vpn.Header">VPN tunnel</sys:String>
     <sys:String x:Key="Str.Vpn.Connecting">connecting</sys:String>
     <sys:String x:Key="Str.Vpn.Connected">connected</sys:String>
     <sys:String x:Key="Str.Vpn.Reconnecting">reconnecting</sys:String>

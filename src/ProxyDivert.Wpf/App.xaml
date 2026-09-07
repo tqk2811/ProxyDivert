@@ -25,6 +25,7 @@
             <conv:ConditionSummaryConverter x:Key="ConditionSummary"/>
             <conv:PolicyNamesConverter x:Key="PolicyNames"/>
             <conv:SameObjectConverter x:Key="SameObject"/>
+            <conv:VpnTunnelForOutboundConverter x:Key="VpnTunnelForOutbound"/>
 
             <!-- Every list of enum values in the app shows its items through these. The templates
                  are for a stand-alone ComboBox; the style is for a DataGridComboBoxColumn, which
