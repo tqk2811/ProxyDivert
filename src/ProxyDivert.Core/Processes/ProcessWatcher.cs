@@ -141,12 +141,14 @@ public sealed class ProcessWatcher : IDisposable
     }
 
     // Applies a new rule set: newly matching processes are attached, processes that no longer match
-    // are detached. Safe to call while running — this is what the UI does after a rule edit.
+    // are detached, and processes that still match are re-described in place — a changed policy
+    // list reaches them without a detach. Safe to call while running — this is what the UI does
+    // after a rule edit.
     public void ApplyRules(IReadOnlyList<ProcessRule> rules)
     {
         SetRules(rules);
         ScanOnce();
-        DropProcessesThatNoLongerMatch();
+        ReconcileTrackedWithRules();
     }
 
     private void SetRules(IReadOnlyList<ProcessRule> rules)
@@ -323,23 +325,26 @@ public sealed class ProcessWatcher : IDisposable
         }
     }
 
-    // After a rule change, a process attached by the old rules may no longer match. Children keep
-    // following their parent: they were never matched by a rule in the first place.
-    private void DropProcessesThatNoLongerMatch()
+    // After a rule change, every tracked process is re-read against the new rules. One no rule
+    // describes any more is detached. One a rule still describes is re-described IN PLACE — the
+    // entry under its pid swapped for one carrying the new rule and policies — rather than
+    // detached and attached again: the redirector only ever cared about the pid, so there is
+    // nothing at that level to redo. Redoing it anyway is what used to freeze the window on Save
+    // (sixty browser processes, each closing and reopening a driver handle and reading the kernel
+    // tables) and, worse, it forgot every flow those processes had for an instant, so each running
+    // connection slipped out of capture and went direct.
+    //
+    // Children keep following their parent: they were never matched by a rule in the first place,
+    // so they take whatever the parent now has, and go when it goes.
+    private void ReconcileTrackedWithRules()
     {
         foreach (var kv in _tracked)
         {
             TrackedProcess tracked = kv.Value;
 
             // A process the caller named directly is not described by any rule, so a rule edit has
-            // nothing to say about it.
-            if (tracked.IsExplicit) continue;
-
-            if (tracked.IsChild)
-            {
-                if (!_tracked.ContainsKey(tracked.ParentProcessId)) Detach(kv.Key, "parent no longer tracked");
-                continue;
-            }
+            // nothing to say about it. Children are dealt with after their parents, below.
+            if (tracked.IsExplicit || tracked.IsChild) continue;
 
             // Answered from the table, which the scan above has just brought up to date. A query
             // each is what this used to do, and at ~210ms apiece it is what made saving a rule
@@ -349,13 +354,48 @@ public sealed class ProcessWatcher : IDisposable
                 : null;
 
             ProcessRule? rule = FindMatchingRule(tracked.Name, tracked.ExecutablePath, commandLine);
-            if (rule == null) Detach(kv.Key, "no longer matches any rule");
-            else if (!rule.PolicyIds.SequenceEqual(tracked.PolicyIds))
+            if (rule == null)
             {
-                // The policy changed: re-attach so the engine reads the new assignment.
-                Detach(kv.Key, "policies changed");
-                TryAttach(tracked.ProcessId, tracked.Name, tracked.ExecutablePath, tracked.ParentProcessId, commandLine);
+                Detach(kv.Key, "no longer matches any rule");
+                continue;
             }
+            if (ReferenceEquals(rule, tracked.MatchedRule)) continue;
+
+            // The rule object is new after every save (the engine runs on a snapshot), so this
+            // swap happens for every process on every save. It is an allocation, nothing more.
+            if (_tracked.TryUpdate(kv.Key, tracked.WithRule(rule), tracked)
+                && !rule.PolicyIds.SequenceEqual(tracked.PolicyIds))
+            {
+                _logger.LogInformation("pid={Pid} name={Name} now routed by policies={Policies}",
+                    tracked.ProcessId, tracked.Name, string.Join(", ", rule.PolicyIds));
+            }
+        }
+
+        FollowParents();
+    }
+
+    // Children after parents, and repeated until nothing moves: a grandchild read before its parent
+    // was brought up to date would otherwise keep the old list for one more save.
+    private void FollowParents()
+    {
+        for (int pass = 0; pass < 16; pass++)
+        {
+            bool moved = false;
+            foreach (var kv in _tracked)
+            {
+                TrackedProcess child = kv.Value;
+                if (!child.IsChild) continue;
+
+                if (!_tracked.TryGetValue(child.ParentProcessId, out TrackedProcess? parent))
+                {
+                    Detach(kv.Key, "parent no longer tracked");
+                    continue;
+                }
+                if (parent.PolicyIds.SequenceEqual(child.PolicyIds)) continue;
+
+                moved |= _tracked.TryUpdate(kv.Key, child.WithPolicies(parent.PolicyIds), child);
+            }
+            if (!moved) return;
         }
     }
 

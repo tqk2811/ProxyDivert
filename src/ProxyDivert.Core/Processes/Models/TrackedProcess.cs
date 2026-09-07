@@ -47,6 +47,35 @@ public sealed class TrackedProcess
         _includeChildrenOverride = includeChildren;
     }
 
+    // The copy behind WithRule/WithPolicies: same process, same moment of attachment, new routing.
+    private TrackedProcess(TrackedProcess source, ProcessRule? matchedRule, IReadOnlyList<Guid> policyIds)
+    {
+        ProcessId = source.ProcessId;
+        Name = source.Name;
+        ExecutablePath = source.ExecutablePath;
+        MatchedRule = matchedRule;
+        PolicyIds = policyIds;
+        ParentProcessId = source.ParentProcessId;
+        IsExplicit = source.IsExplicit;
+        AttachedUtc = source.AttachedUtc;
+        _includeChildrenOverride = source._includeChildrenOverride;
+    }
+
+    /// <summary>
+    /// The same process, now described by <paramref name="rule"/> and routed by its policies. This
+    /// is how a rule edit reaches a process that is already redirected: the redirector only knows
+    /// the pid, so nothing has to be detached for the routing to change.
+    /// </summary>
+    public TrackedProcess WithRule(ProcessRule rule)
+    {
+        if (rule is null) throw new ArgumentNullException(nameof(rule));
+        return new TrackedProcess(this, rule, rule.PolicyIds);
+    }
+
+    /// <summary>The same process routed by a different list — a child following its parent.</summary>
+    public TrackedProcess WithPolicies(IReadOnlyList<Guid> policyIds)
+        => new TrackedProcess(this, MatchedRule, policyIds ?? Array.Empty<Guid>());
+
     // A child adopted through IncludeChildren: it inherits a policy without claiming one itself.
     public bool IsChild => MatchedRule == null && !IsExplicit;
 
