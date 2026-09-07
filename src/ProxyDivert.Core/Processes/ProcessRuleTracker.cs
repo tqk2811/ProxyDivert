@@ -95,7 +95,11 @@ public sealed class ProcessRuleTracker : IDisposable
         _attachFromProcessEvents = attachFromProcessEvents;
 
         SetRules(rules);
-        if (attachFromProcessEvents) MatchEverything();
+        // Always, whichever mode: the processes already running are in the table with everything
+        // needed to judge them, and waiting for one to open a NEW socket would leave a program
+        // that connected before the engine started running unredirected for as long as it keeps
+        // using the connections it already has.
+        MatchEverything();
 
         if (attachFromProcessEvents) _inventory.ProcessStarted += OnProcessStarted;
         _inventory.ProcessStopped += OnProcessStopped;
@@ -118,10 +122,6 @@ public sealed class ProcessRuleTracker : IDisposable
         lock (_rulesLock) _rules = rules ?? Array.Empty<ProcessRule>();
     }
 
-    /// <summary>
-    /// Runs every process in the table past the filters. Nothing is read from the operating system:
-    /// the table already holds the name, the path and the command line.
-    /// </summary>
     /// <summary>
     /// Decides, for one process, whether its traffic belongs to us — reading the machine for it if
     /// the table has never heard of it. True attaches it (raising <see cref="ProcessAttached"/>),
@@ -186,6 +186,10 @@ public sealed class ProcessRuleTracker : IDisposable
         return _tracked.ContainsKey(process.ProcessId);
     }
 
+    /// <summary>
+    /// Runs every process in the table past the filters. Nothing is read from the operating system:
+    /// the table already holds the name, the path and the command line.
+    /// </summary>
     public void MatchEverything()
     {
         foreach (ProcessSnapshot process in _inventory.All) TryAttach(process);

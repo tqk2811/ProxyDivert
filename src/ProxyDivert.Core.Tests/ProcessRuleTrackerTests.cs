@@ -324,14 +324,17 @@ public class ProcessRuleTrackerTests
     public void ShouldRedirect_follows_the_parent_chain_to_a_tracked_ancestor()
     {
         using var fixture = new Fixture();
+        // Started AFTER the tracker, so the opening sweep has not already claimed the tree: what
+        // is being tested is the walk up from a pid, not that sweep.
+        fixture.Tracker.Start(new[] { Rule("chrome.exe", DirectPolicy) }, attachFromProcessEvents: false);
         fixture.Machine
             .Start(100, "chrome.exe")
             .Start(200, "chrome_helper.exe", parentPid: 100)
             .Start(300, "chrome_tab.exe", parentPid: 200);
         fixture.Inventory.Refresh();
-        fixture.Tracker.Start(new[] { Rule("chrome.exe", DirectPolicy) }, attachFromProcessEvents: false);
+        Assert.Empty(fixture.Attached);
 
-        // The root has to be ours first — in the real thing that happens when IT opens a socket.
+        // The root becomes ours the way it does in the real thing: when IT opens a socket.
         Assert.True(fixture.Tracker.ShouldRedirect(100));
 
         Assert.True(fixture.Tracker.ShouldRedirect(300));
