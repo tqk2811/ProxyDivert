@@ -61,12 +61,13 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
    KỲ** — nên không phải đặt toán tử giữa hai dòng, cũng không có độ ưu tiên nào để nhầm. Nút
    **KHÔNG** trên mỗi dòng hoặc mỗi nhóm để đảo ngược, **+ Nhóm** để lồng thêm một lớp ngoặc, còn
    tích hai dòng rồi bấm **Gộp nhóm** thì đóng ngoặc cho chúng sau khi đã viết xong. Câu ở trên cùng
-   nói bộ lọc hiện đang có nghĩa gì, và **Thử với** chạy nó trên một tiến trình đang chạy rồi tô màu
-   đúng dòng đã quyết định. `java.exe VÀ (minecraft HOẶC forge)` viết ra như vậy. Dưới phần điều
-   kiện, tích các bộ luật mà bộ lọc áp dụng: luật được xét từ bộ luật trên xuống, khớp cái nào
-   trước thì cái đó quyết định, nên dùng ▲▼ để sắp thứ tự ưu tiên. Bộ luật đứng đầu cũng là cái
-   quyết định chế độ UDP và Block QUIC. Hoặc bấm **Chạy ở trạng thái tạm
-   dừng…** để không lọt kết nối nào lúc khởi động.
+   nói bộ lọc hiện đang có nghĩa gì. `java.exe VÀ (minecraft HOẶC forge)` viết ra như vậy. Cột bên
+   phải phần điều kiện là **Hành động**: tích các bộ luật mà bộ lọc áp dụng, luật được xét từ bộ
+   luật trên xuống, khớp cái nào trước thì cái đó quyết định, nên dùng ▲▼ để sắp thứ tự ưu tiên.
+   Thứ tự đó giữ nguyên kể cả với những bộ luật đang không tích, nên bỏ tích một cái rồi tích lại
+   không làm xáo chỗ. Bộ luật đứng đầu cũng là cái quyết định chế độ UDP và Block QUIC. Đóng cửa sổ
+   khi còn thay đổi chưa lưu thì được hỏi lưu, không lưu, hay quay lại. Hoặc bấm **Chạy ở trạng thái
+   tạm dừng…** để không lọt kết nối nào lúc khởi động.
 5. Gạt công tắc trên thanh tiêu đề. Nửa dưới tab **Tiến trình** khi đó hiện dạng cây mọi tiến trình
    engine đang thực sự áp dụng, tiến trình con nhận theo **Cả tiến trình con** nằm lồng dưới tiến
    trình đã sinh ra nó. Tab **Kết nối** hiện từng kết nối kèm tên miền, đường ra và số byte.

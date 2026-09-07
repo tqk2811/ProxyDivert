@@ -62,13 +62,14 @@ and `WinDivert64.sys` copied next to it.
    **match ALL of** or **match ANY of** — so there is no operator to place between two rows and no
    precedence to get wrong. **NOT** on any row or group inverts it, **+ Group** nests a bracket,
    and ticking two rows and pressing **Group ticked** wraps them in one after the fact. The
-   sentence above the rows says what the filter currently means, and **Try it with** runs it
-   against a process that is running right now and colours the row that decided. That is how
-   `java.exe AND (minecraft OR forge)` gets written. Under the conditions, tick the policies the
-   filter applies: their rules are tried from the top policy down and the first rule that matches
-   decides, so use ▲▼ to say which comes first. The top policy is also the one whose UDP mode and
-   Block QUIC apply. Or press **Launch suspended…** so not one connection escapes while the process
-   starts.
+   sentence above the rows says what the filter currently means. That is how
+   `java.exe AND (minecraft OR forge)` gets written. The column beside the conditions is **Then**:
+   tick the policies the filter applies, whose rules are tried from the top policy down so that the
+   first rule that matches decides — use ▲▼ to say which comes first. That arrangement is kept for
+   the unticked policies too, so unticking one and ticking it again does not move it. The top policy
+   is also the one whose UDP mode and Block QUIC apply. Closing the window with unsaved changes asks
+   whether to save them, drop them, or go back. Or press **Launch suspended…** so not one connection
+   escapes while the process starts.
 5. Throw the switch in the title bar. The lower half of the **Processes** tab then shows, as a tree,
    every process the engine is actually holding, with anything adopted through **Children** nested
    under the process that spawned it. The **Connections** tab lists every connection with its host
