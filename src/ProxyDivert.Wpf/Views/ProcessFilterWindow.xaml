@@ -4,7 +4,7 @@
         xmlns:b="clr-namespace:ProxyDivert.Wpf.Bindings"
         xmlns:cvm="clr-namespace:ProxyDivert.Wpf.ViewModels.Conditions"
         Title="{DynamicResource Str.Process.FilterTitle}"
-        Height="660" Width="900" MinHeight="480" MinWidth="720"
+        Height="660" Width="1180" MinHeight="480" MinWidth="960"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource Brush.Window.Background}"
         TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
@@ -49,8 +49,8 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="132"/>
-                    <ColumnDefinition Width="158"/>
+                    <ColumnDefinition Width="126"/>
+                    <ColumnDefinition Width="150"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -132,7 +132,7 @@
                                 Command="{Binding ToggleNegateCommand}"
                                 ToolTip="{DynamicResource Str.Cond.NotGroupHint}"/>
 
-                        <ComboBox Grid.Column="2" Width="176"
+                        <ComboBox Grid.Column="2" Width="168"
                                   ItemsSource="{Binding Operators}"
                                   SelectedItem="{Binding Operator}"
                                   ItemTemplate="{StaticResource EnumItemTemplate}"/>
@@ -211,7 +211,6 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- ==== name ==== -->
@@ -233,86 +232,97 @@
                 </StackPanel>
             </Border>
 
-            <!-- ==== the conditions ==== -->
-            <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,10,0,0" Padding="6">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <ContentControl Content="{Binding Root}"/>
-                </ScrollViewer>
-            </Border>
+            <!-- ==== the conditions, and what happens to whatever matches ====
+                 Side by side rather than stacked: the tree is what the window is for and it grows
+                 downwards without limit, so the action underneath it was the part that got pushed
+                 off the bottom. In a column of its own the policy list is never the thing that has
+                 to be scrolled to. -->
+            <Grid Grid.Row="2" Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="520"/>
+                    <ColumnDefinition Width="330"/>
+                </Grid.ColumnDefinitions>
 
-            <!-- ==== what happens to whatever matches ====
-                 Tick as many policies as you like: their rules are tried from the top down, and the
-                 first rule that matches the connection decides it. The order is the point, so it is
-                 arranged here rather than inferred from anything. -->
-            <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,10,0,0">
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{DynamicResource Str.Cond.Action}" VerticalAlignment="Center"
-                                   Width="110"/>
-                        <TextBlock VerticalAlignment="Center" FontWeight="SemiBold"
+                <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0" Padding="6">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <ContentControl Content="{Binding Root}"/>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- Tick as many policies as you like: their rules are tried from the top down, and
+                     the first rule that matches the connection decides it. The order is the point,
+                     so it is arranged here rather than inferred from anything. -->
+                <Border Grid.Column="1" Style="{StaticResource Card}" Margin="10,0,0,0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Heading}"
+                                   Text="{DynamicResource Str.Cond.Action}"/>
+
+                        <TextBlock DockPanel.Dock="Top" Margin="0,4,0,0" FontWeight="SemiBold"
                                    TextTrimming="CharacterEllipsis" Text="{Binding PolicySummary}"/>
-                        <CheckBox Margin="16,0,0,0" VerticalAlignment="Center"
+
+                        <CheckBox DockPanel.Dock="Top" Margin="0,8,0,0"
                                   Content="{DynamicResource Str.Process.IncludeChildrenLong}"
                                   IsChecked="{Binding IncludeChildren}"/>
-                    </StackPanel>
 
-                    <Border Margin="110,6,0,0" CornerRadius="6" Padding="4"
-                            BorderThickness="1"
-                            BorderBrush="{DynamicResource Brush.Surface.BorderBrush}">
-                        <ScrollViewer MaxHeight="132" VerticalScrollBarVisibility="Auto">
-                            <ItemsControl ItemsSource="{Binding Policies}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,1">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="26"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
+                        <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Subtle}"
+                                   Margin="0,6,0,0" TextWrapping="Wrap"
+                                   Text="{DynamicResource Str.Process.PolicyOrderHint}"/>
 
-                                            <!-- Only the ticked rows are numbered: an order among
-                                                 rows nothing uses would be noise. -->
-                                            <TextBlock VerticalAlignment="Center" FontSize="11"
-                                                       HorizontalAlignment="Center"
-                                                       Foreground="{DynamicResource Brush.Accent}"
-                                                       Text="{Binding Rank}">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Rank}" Value="0">
-                                                                <Setter Property="Visibility" Value="Hidden"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
+                        <Border Margin="0,8,0,0" CornerRadius="6" Padding="4"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource Brush.Surface.BorderBrush}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding Policies}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="26"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+    
+                                                <!-- Only the ticked rows are numbered: an order among
+                                                     rows nothing uses would be noise. -->
+                                                <TextBlock VerticalAlignment="Center" FontSize="11"
+                                                           HorizontalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.Accent}"
+                                                           Text="{Binding Rank}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Rank}" Value="0">
+                                                                    <Setter Property="Visibility" Value="Hidden"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+    
+                                                <CheckBox Grid.Column="1" VerticalAlignment="Center"
+                                                          Content="{Binding Name}"
+                                                          IsChecked="{Binding IsSelected}"/>
+    
+                                                <Button Grid.Column="2" Content="▲" Width="26" Padding="0"
+                                                        Command="{Binding DataContext.MovePolicyUpCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"/>
+                                                <Button Grid.Column="3" Content="▼" Width="26" Padding="0" Margin="4,0,0,0"
+                                                        Command="{Binding DataContext.MovePolicyDownCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+                    </DockPanel>
+                </Border>
+            </Grid>
 
-                                            <CheckBox Grid.Column="1" VerticalAlignment="Center"
-                                                      Content="{Binding Name}"
-                                                      IsChecked="{Binding IsSelected}"/>
-
-                                            <Button Grid.Column="2" Content="▲" Width="26" Padding="0"
-                                                    Command="{Binding DataContext.MovePolicyUpCommand,
-                                                              RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}"/>
-                                            <Button Grid.Column="3" Content="▼" Width="26" Padding="0" Margin="4,0,0,0"
-                                                    Command="{Binding DataContext.MovePolicyDownCommand,
-                                                              RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                    </Border>
-
-                    <TextBlock Style="{StaticResource Subtle}" Margin="110,4,0,0" TextWrapping="Wrap"
-                               Text="{DynamicResource Str.Process.PolicyOrderHint}"/>
-                </StackPanel>
-            </Border>
-
-            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
                 <Button MinWidth="96" Content="{DynamicResource Str.App.Cancel}" IsCancel="True"/>
                 <Button MinWidth="96" Margin="8,0,0,0" Style="{StaticResource AccentButton}"
                         Content="{DynamicResource Str.App.Save}" Click="Save_Click"/>

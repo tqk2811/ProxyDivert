@@ -301,6 +301,53 @@ public class DataGridColumnBindingTests
         Assert.True(buttons >= 1, "The conditions cell has no button to open the editor.");
     }
 
+    // The tree and the policy list stand side by side, and that is not decoration: the tree grows
+    // downwards as conditions are added, and underneath it the action was the part that went off
+    // the bottom of the window. A stray Grid.Row put back where a Grid.Column belongs would stack
+    // them again and still build, so the two are asked where they actually are.
+    [Fact]
+    public void The_conditions_and_the_action_stand_side_by_side()
+    {
+        RunOnStaThread(() =>
+        {
+            EnsureApplication();
+
+            var policy = new ProxyDivert.Core.Routing.Models.RoutingPolicy
+            {
+                Id = Guid.NewGuid(),
+                Name = "policy",
+                OutboundId = Guid.NewGuid(),
+            };
+
+            var window = new ProcessFilterWindow(
+                new ProxyDivert.Wpf.ViewModels.ProcessFilterViewModel(SampleFilter(), new[] { policy }))
+            {
+                Width = 1000,
+                Height = 800,
+            };
+            window.Show();
+            window.UpdateLayout();
+
+            FrameworkElement tree = FindVisuals<ContentControl>(window)
+                .First(control => control.Content is ProxyDivert.Wpf.ViewModels.Conditions.ConditionGroupViewModel);
+
+            FrameworkElement policies = FindVisuals<ItemsControl>(window)
+                .First(control => control.ItemsSource
+                    is IEnumerable<ProxyDivert.Wpf.ViewModels.ProcessFilterViewModel.PolicyChoice>);
+
+            double treeRight = Left(tree, window) + tree.ActualWidth;
+
+            window.Close();
+
+            Assert.True(
+                Left(policies, window) >= treeRight,
+                $"The policy list starts at {Left(policies, window)}, which is not right of the condition tree ending at {treeRight}.");
+        });
+    }
+
+    private static double Left(Visual element, Visual window)
+        => element.TransformToAncestor(window).Transform(new Point(0, 0)).X;
+
     // The condition rows are drawn by a template that contains an ItemsControl over the same kind
     // of thing it is itself, so a group inside a group renders through it again. Nothing about
     // that shows up at build time: get the recursion wrong and the window opens with the nested
