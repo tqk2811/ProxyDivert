@@ -188,6 +188,8 @@ ProxyDivert/
 
 Chưa kiểm được bằng đường hầm thật: máy chưa có `wireproxy.exe`. Phần kiểm được — vòng giám sát, backoff, invalidate chọn lọc — đã có unit test và không cần quyền Administrator.
 
+**Kết nối VPN tách khỏi engine ĐÃ XONG (07/09/2026).** Mục 6 ở trên nói "dựng mọi outbound VPN đang bật ngay khi engine chạy" — kèm theo đó là `Engine.Stop` giật xuống toàn bộ, vì cả `OutboundSourceFactory` lẫn `VpnConnectionKeeper` đều do `Start` dựng và `Stop` huỷ. Nay không còn: cả hai là singleton đời ứng dụng, người dùng tự bật/tắt từng đường hầm bằng nút Connect/Disconnect ở cột thứ 10 của tab Outbounds, cột 11 hiện trạng thái. Bật WinDivert thì tự bật VPN nào bộ lọc định tuyến qua; tắt WinDivert thì không ngắt gì. Chi tiết và bẫy `Invalidate` ở [Vòng đời kết nối VPN tách khỏi engine WinDivert](Glossary-vi.md#L344).
+
 **Năm giao thức còn lại qua TqkLibrary.VpnClient ĐÃ XONG (04/09/2026).** Phạm vi chốt: OpenVPN, SSTP, L2TP/IPsec, IKEv2, SoftEther, cộng WireGuard chạy native. Ba điều phát hiện lúc làm đã đổi thiết kế so với dự tính ban đầu:
 
 - **Sáu giao thức không đồng dạng.** OpenVPN và WireGuard nhận đường dẫn file; SSTP/L2TP/IKEv2/SoftEther nhận `(host, port, user, pass, psk, hub)` và **không có định dạng file client chuẩn nào**. Nên ô `Outbound.Url` nhận cả hai hình: có `://` thì là endpoint, không thì là đường dẫn file (`.ovpn`, `.conf`, hoặc file ini `.vpn` của riêng tool). Bí mật (mật khẩu, [khoá chung IPsec](Glossary-vi.md#L117)) nằm ở ô riêng để đi qua DPAPI, không nhét vào URL.

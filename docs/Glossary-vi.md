@@ -340,3 +340,16 @@ Gói tới có thể **đến sai thứ tự**, nên không phải gói nào cũ
 **Bẫy đã vấp** (`TcpConnection`, sửa 2026-09-07): SYN-ACK phải **gán thẳng** `SND.WND = SEG.WND`, `SND.WL1 = SEG.SEQ`, `SND.WL2 = SEG.ACK` (RFC 9293 §3.10.7.3, bước 5 của SYN-SENT), KHÔNG đi qua luật "mới hơn" ở trên. Nếu để nó đi qua, `SND.WL1` lúc đó vẫn là 0, mà so sánh có dấu với 0 thì **mọi ISN từ 2^31 trở lên đều bị coi là cũ** — và bị coi là cũ ở mọi gói sau đó luôn, vì WL1 không bao giờ được gán. Cửa sổ gửi kẹt ở 0 suốt đời kết nối: bắt tay xong, bên kia vẫn ACK, nhưng request chỉ rỉ ra 1 byte mỗi lần thăm dò rồi server bỏ cuộc. Server chọn ISN **ngẫu nhiên** ⇒ hỏng như tung đồng xu, mỗi kết nối một lần — nhìn từ ngoài y hệt "mạng phập phù" chứ không giống bug. Dấu vân tay trong log: dòng `ipstack` báo `sent=5 acked=5 rcvd=0 sndwnd=0` (5 = số lần thăm dò), còn `TcpRelayServer` báo `up≈1930B down=0B`.
 
 Bài học đo đạc: mọi test bắt tay sẵn có đều dùng ISN nhỏ (9000) nên không bao giờ chạm nửa còn lại của không gian số thứ tự. Test cho giao thức có so sánh quay vòng phải phủ **cả hai nửa** và hai mép của phép so sánh.
+
+## Vòng đời kết nối VPN tách khỏi engine WinDivert
+
+Đường hầm VPN **không** thuộc một lần chạy chuyển hướng. Một outbound VPN có instance chính là đường hầm (tiến trình `wireproxy`, hoặc phiên của driver chạy trong process), tức là **phiên của người dùng với nhà cung cấp VPN** — bật/tắt WinDivert không phải lý do để dựng lên hay giật xuống.
+
+Cách chia trách nhiệm (sửa 2026-09-07):
+
+- `OutboundSourceFactory` và `VpnConnectionKeeper` là **singleton** trong container [DI](Glossary-vi.md#L97), sống bằng đời ứng dụng; `RedirectEngine` chỉ mượn. `Engine.Start` chỉ gọi `ApplyOutbounds` để đối chiếu instance với cấu hình, `Engine.Stop` **không** dispose cái nào.
+- Đường hầm nào được giữ là do cờ `Outbound.KeepConnected`, lưu trong file cấu hình ⇒ mở lại app thì các đường hầm đang bật tự dựng lại. Nút Connect/Disconnect ở tab Outbounds chỉ lật cờ này rồi gọi `Sync`, không đụng tới engine.
+- **Bật** WinDivert thì `ConnectRoutedVpns` bật cờ cho mọi VPN mà [bộ lọc tiến trình](Glossary-vi.md#L181) đang bật định tuyến qua (bộ lọc → các [policy](Glossary-vi.md#L145) → outbound, xem `OutboundUsage.RoutedOutboundIds`); **tắt** WinDivert thì không ngắt gì cả.
+- Ngược lại, đường hầm đang có bộ lọc chạy qua thì nút Disconnect bị khoá: ngắt nó sẽ làm mọi kết nối bộ lọc đó bắt được rơi vào lỗi mà trên màn hình không có gì giải thích.
+
+**Bẫy đi kèm**: `KeptVpnTunnel.Dispose` phải gọi `_factory.Invalidate(outboundId)`. Trước đây `Engine.Stop` dispose cả factory nên không ai để ý; bỏ chỗ đó đi mà không invalidate thì "Disconnect" chỉ dừng vòng giám sát, còn tiến trình `wireproxy` vẫn chạy và vẫn nói chuyện với máy chủ VPN.
