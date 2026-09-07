@@ -186,6 +186,7 @@ using ServiceProvider services = new ServiceCollection()
 // The process table has to be collecting before the engine reads it — the engine matches filters
 // against the table rather than going to the operating system itself.
 using ProcessInventory processes = services.GetRequiredService<ProcessInventory>();
+processes.UseEventSource(config.ProcessEventSource);
 processes.Start();
 
 RedirectEngine engine = services.GetRequiredService<RedirectEngine>();

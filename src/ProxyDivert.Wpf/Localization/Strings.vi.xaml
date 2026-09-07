@@ -124,6 +124,16 @@
     <sys:String x:Key="Str.Settings.Ipv6Hint">Redirect: đưa IPv6 qua luật định tuyến y như IPv4. Block: chặn để ứng dụng tự lùi về IPv4 — dùng khi đường ra không có tuyến IPv6. Ignore: thả cho đi thẳng, tức là lọt ra ngoài proxy.</sys:String>
     <sys:String x:Key="Str.Settings.WireProxy">wireproxy.exe</sys:String>
     <sys:String x:Key="Str.Settings.WireProxyHint">Chỉ cần cho đường ra VPN: wireproxy chạy đường hầm WireGuard ở tầng ứng dụng, không tạo card mạng ảo. Bỏ trống thì tìm cạnh ProxyDivert.exe rồi tới PATH.</sys:String>
+    <sys:String x:Key="Str.Settings.EventSource">Cách phát hiện tiến trình</sys:String>
+    <sys:String x:Key="Str.Settings.EventSourceHint">Cách công cụ biết một tiến trình vừa khởi động, tức thứ quyết định traffic của nó được chuyển hướng sớm hay muộn. Khoá khi WinDivert đang bật.</sys:String>
+    <sys:String x:Key="Str.Settings.EventSourceEtw">ETW (nguồn của kernel)</sys:String>
+    <sys:String x:Key="Str.Settings.EventSourceEtwTip">Đọc thẳng Microsoft-Windows-Kernel-Process.
+Lợi: sự kiện tới trong khoảng một mili giây kể từ lúc kernel tạo tiến trình, ngay trong tiến trình này, không qua dịch vụ trung gian — nên kết nối đầu tiên của chương trình dễ bắt được hơn.
+Hại: cần một phiên ETW riêng. Nếu không mở được (phiên trùng tên còn sót, hoặc dịch vụ trace bị tắt) thì công cụ tự lùi về WMI.</sys:String>
+    <sys:String x:Key="Str.Settings.EventSourceWmi">WMI (process trace)</sys:String>
+    <sys:String x:Key="Str.Settings.EventSourceWmiTip">Đọc Win32_ProcessStartTrace / StopTrace, thứ WMI phát lại từ chính sự kiện kernel đó.
+Lợi: không cần phiên trace riêng nên chạy được cả khi ETW không mở được; đây là cách công cụ vẫn dùng từ trước.
+Hại: thêm một dịch vụ và một chặng COM nên trễ hơn, và sự kiện của một watcher được giao lần lượt từng cái — một chương trình mở ba chục tiến trình cùng lúc sẽ bị dồn hàng, các tiến trình con sau bị chuyển hướng muộn hơn.</sys:String>
     <sys:String x:Key="Str.Settings.AutoSaveLog">Tự động lưu log ra file</sys:String>
     <sys:String x:Key="Str.Settings.AutoSaveLogHint">Mỗi lần chạy ghi ra một file riêng Logs\yyyyMMdd-HHmmss.log cạnh chương trình, bắt đầu ngay khi tích ô này.</sys:String>
     <sys:String x:Key="Str.Settings.LogPath">File nhật ký chi tiết</sys:String>

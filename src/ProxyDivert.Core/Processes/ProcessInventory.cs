@@ -1,11 +1,11 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Management;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using ProxyDivert.Core.Processes.Enums;
 using ProxyDivert.Core.Processes.Interfaces;
 using ProxyDivert.Core.Processes.Models;
 
@@ -26,24 +26,25 @@ namespace ProxyDivert.Core.Processes;
 ///
 /// Where the entries come from, in the order they are set up:
 ///
-///   * WMI process traces (Win32_ProcessStartTrace / StopTrace), hooked first, because a process
-///     that starts during the first sweep must not fall into the gap between the two;
+///   * process start/stop events, hooked first, because a process that starts during the first
+///     sweep must not fall into the gap between the two. Which source they come from — the
+///     kernel's ETW provider, or WMI — is the user's choice and changes nothing here;
 ///   * one full sweep, which costs a single syscall for the list plus one handle per process for
 ///     the details — about 30ms on a machine running 640 processes;
 ///   * a periodic reconcile that compares the table against a fresh listing. It is what makes the
-///     table self-healing: a dropped WMI event, or a process that started while the machine was
+///     table self-healing: a dropped event, or a process that started while the machine was
 ///     asleep, is corrected within one interval instead of never.
 ///
-/// When WMI cannot be reached at all, the reconcile simply runs far more often and becomes the only
-/// source. Nothing else changes, which is why there is one loop here rather than two.
+/// When no event source can be started at all, the reconcile simply runs far more often and
+/// becomes the only source. Nothing else changes, which is why there is one loop here rather than two.
 ///
 /// Threading: every member is safe from any thread. The two events are raised on whichever thread
-/// noticed — a WMI callback, or the reconcile loop — and a handler that blocks delays the next
+/// noticed — the event source's pump, or the reconcile loop — and a handler that blocks delays the next
 /// process being reported, so handlers are expected to be short.
 /// </remarks>
 public sealed class ProcessInventory : IDisposable
 {
-    /// <summary>How often the table is compared against a fresh listing while WMI is working.</summary>
+    /// <summary>How often the table is compared against a fresh listing while events are working.</summary>
     /// <remarks>
     /// A listing is ~12ms, and a reconcile only reads details for processes it has not seen before,
     /// so the steady-state cost is about a quarter of a percent of one core. That buys an upper
@@ -52,7 +53,7 @@ public sealed class ProcessInventory : IDisposable
     /// </remarks>
     private const int ReconcileIntervalMs = 5_000;
 
-    /// <summary>How often the table is rebuilt when WMI is unavailable and the loop is all there is.</summary>
+    /// <summary>How often the table is rebuilt when no event source works and the loop is all there is.</summary>
     private const int PollIntervalMs = 750;
 
     private readonly ILogger<ProcessInventory> _logger;
@@ -67,8 +68,9 @@ public sealed class ProcessInventory : IDisposable
     // already done.
     private readonly object _reconcileLock = new object();
 
-    private ManagementEventWatcher? _startWatcher;
-    private ManagementEventWatcher? _stopWatcher;
+    private readonly IProcessEventSourceFactory _eventSources;
+
+    private IProcessEventSource? _events;
     private Task? _loopTask;
     private bool _started;
 
@@ -78,17 +80,47 @@ public sealed class ProcessInventory : IDisposable
     /// <summary>A process is gone. The snapshot handed over is the last one known about it.</summary>
     public event Action<ProcessSnapshot>? ProcessStopped;
 
-    /// <summary>True while process events come from WMI; false while the table is polled.</summary>
-    public bool IsUsingWmi { get; private set; }
+    /// <summary>True while process events are arriving; false while the table is only polled.</summary>
+    public bool IsUsingEvents { get; private set; }
+
+    /// <summary>
+    /// Where events are being read from. The user picks this in the settings; it is only a request
+    /// until <see cref="Start"/>, and a source that will not start falls back to the other one and
+    /// then to polling, so this says what was ASKED for and <see cref="ActiveEventSource"/> says
+    /// what answered.
+    /// </summary>
+    public ProcessEventSourceKind EventSource { get; private set; } = ProcessEventSourceKind.Etw;
+
+    /// <summary>The source actually delivering events, or null while the table is polled.</summary>
+    public ProcessEventSourceKind? ActiveEventSource { get; private set; }
 
     public ProcessInventory(
         ILogger<ProcessInventory> logger,
         IProcessLister? lister = null,
-        IProcessDetailsReader? detailsReader = null)
+        IProcessDetailsReader? detailsReader = null,
+        IProcessEventSourceFactory? eventSources = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _lister = lister ?? new NativeProcessLister();
         _detailsReader = detailsReader ?? new NativeProcessDetailsReader();
+        _eventSources = eventSources ?? new ProcessEventSourceFactory(_logger);
+    }
+
+    /// <summary>
+    /// Switches to another event source, before or after <see cref="Start"/>. Takes effect at once:
+    /// the current source is torn down and the new one subscribed, and the table is reconciled
+    /// afterwards so nothing that happened during the swap is lost.
+    /// </summary>
+    public void UseEventSource(ProcessEventSourceKind kind)
+    {
+        if (EventSource == kind && (!_started || IsUsingEvents)) return;
+
+        EventSource = kind;
+        if (!_started) return;
+
+        StopEvents();
+        IsUsingEvents = TryStartEvents();
+        Reconcile();
     }
 
     /// <summary>How many processes the table holds.</summary>
@@ -123,13 +155,7 @@ public sealed class ProcessInventory : IDisposable
         // and without it every process of another user reads as pathless and argumentless.
         new DebugPrivilege(_logger).TryEnable();
 
-        IsUsingWmi = TryStartWmi();
-        if (!IsUsingWmi)
-        {
-            _logger.LogWarning(
-                "WMI is unavailable, so the process table is rebuilt every {IntervalMs}ms instead of following events — a new process is noticed later",
-                PollIntervalMs);
-        }
+        IsUsingEvents = TryStartEvents();
 
         Reconcile();
         _logger.LogDebug("the process table starts with {Count} processes", _processes.Count);
@@ -246,77 +272,95 @@ public sealed class ProcessInventory : IDisposable
             : complete;
     }
 
-    private bool TryStartWmi()
+    // The source the user asked for, and the other one if it will not start: both carry the same
+    // kernel events, so falling back costs latency rather than correctness. Polling is what is left
+    // when neither answers, and it is a far bigger step down — a process is then noticed up to one
+    // poll interval after it started, by which time its first connection may already be out.
+    private bool TryStartEvents()
     {
-        try
+        if (TryStartEventSource(EventSource)) return true;
+
+        ProcessEventSourceKind fallback = EventSource == ProcessEventSourceKind.Etw
+            ? ProcessEventSourceKind.Wmi
+            : ProcessEventSourceKind.Etw;
+
+        if (TryStartEventSource(fallback))
         {
-            _startWatcher = new ManagementEventWatcher(new WqlEventQuery("SELECT * FROM Win32_ProcessStartTrace"));
-            _startWatcher.EventArrived += OnProcessStarted;
-            _startWatcher.Start();
-
-            _stopWatcher = new ManagementEventWatcher(new WqlEventQuery("SELECT * FROM Win32_ProcessStopTrace"));
-            _stopWatcher.EventArrived += OnProcessStopped;
-            _stopWatcher.Start();
-
-            _logger.LogDebug("the process table follows WMI process traces");
+            _logger.LogWarning(
+                "{Wanted} could not be started, so the process table is following {Fallback} instead",
+                EventSource, fallback);
             return true;
         }
+
+        _logger.LogWarning(
+            "no process event source could be started, so the table is rebuilt every {IntervalMs}ms instead — a new process is noticed later",
+            PollIntervalMs);
+        return false;
+    }
+
+    private bool TryStartEventSource(ProcessEventSourceKind kind)
+    {
+        IProcessEventSource source;
+        try { source = _eventSources.Create(kind); }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "the WMI process watcher failed to start");
-            DisposeWmi();
+            _logger.LogWarning(ex, "the {Kind} process event source could not be built", kind);
             return false;
         }
+
+        source.Started += OnProcessStarted;
+        source.Stopped += OnProcessStopped;
+        if (!source.TryStart())
+        {
+            source.Started -= OnProcessStarted;
+            source.Stopped -= OnProcessStopped;
+            source.Dispose();
+            return false;
+        }
+
+        _events = source;
+        ActiveEventSource = kind;
+        _logger.LogDebug("the process table follows {Source} process events", source.Name);
+        return true;
     }
 
-    private void OnProcessStarted(object sender, EventArrivedEventArgs e)
+    private void StopEvents()
     {
-        try
-        {
-            uint pid = Convert.ToUInt32(e.NewEvent.Properties["ProcessID"].Value);
-            if (pid == 0) return;
+        IProcessEventSource? events = _events;
+        _events = null;
+        ActiveEventSource = null;
+        IsUsingEvents = false;
+        if (events is null) return;
 
-            uint parentPid = Convert.ToUInt32(e.NewEvent.Properties["ParentProcessID"].Value);
-            string name = e.NewEvent.Properties["ProcessName"].Value?.ToString() ?? $"pid {pid}";
-            uint sessionId = TryReadUInt32(e.NewEvent, "SessionID");
-
-            // The stop event for whatever held this pid before may never have arrived.
-            if (_processes.ContainsKey(pid)) Retire(pid, "its pid was handed to another program");
-
-            Admit(new ProcessSnapshot
-            {
-                ProcessId = pid,
-                Name = name,
-                ParentProcessId = parentPid,
-                SessionId = sessionId,
-                // Filled in from the handle the detail read opens; the trace does not carry it.
-                StartedUtc = DateTime.MinValue,
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "handling a process-start event failed");
-        }
+        events.Started -= OnProcessStarted;
+        events.Stopped -= OnProcessStopped;
+        try { events.Dispose(); } catch { }
     }
 
-    private void OnProcessStopped(object sender, EventArrivedEventArgs e)
+    private void OnProcessStarted(ProcessStartedEvent started)
     {
-        try
+        // The stop event for whatever held this pid before may never have arrived.
+        if (_processes.ContainsKey(started.ProcessId))
+            Retire(started.ProcessId, "its pid was handed to another program");
+
+        Admit(new ProcessSnapshot
         {
-            uint pid = Convert.ToUInt32(e.NewEvent.Properties["ProcessID"].Value);
-            Retire(pid, "exited");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "handling a process-stop event failed");
-        }
+            ProcessId = started.ProcessId,
+            Name = string.IsNullOrEmpty(started.ImageName) ? $"pid {started.ProcessId}" : started.ImageName,
+            ParentProcessId = started.ParentProcessId,
+            SessionId = started.SessionId,
+            // Filled in from the handle the detail read opens; the event does not carry it.
+            StartedUtc = DateTime.MinValue,
+        });
     }
+
+    private void OnProcessStopped(uint pid) => Retire(pid, "exited");
 
     private async Task ReconcileLoop(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
-            int delayMs = IsUsingWmi ? ReconcileIntervalMs : PollIntervalMs;
+            int delayMs = IsUsingEvents ? ReconcileIntervalMs : PollIntervalMs;
             try { await Task.Delay(delayMs, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { return; }
 
@@ -343,37 +387,10 @@ public sealed class ProcessInventory : IDisposable
         }
     }
 
-    private static uint TryReadUInt32(ManagementBaseObject wmiEvent, string name)
-    {
-        try { return Convert.ToUInt32(wmiEvent[name] ?? 0u); }
-        catch (Exception ex) when (ex is ManagementException or InvalidCastException
-            or FormatException or OverflowException)
-        {
-            return 0u;
-        }
-    }
-
-    // A property WMI may or may not have put on the event. Nothing here is worth an exception.
-    private static object? TryReadProperty(ManagementBaseObject wmiEvent, string name)
-    {
-        try { return wmiEvent[name]; }
-        catch (ManagementException) { return null; }
-    }
-
-    private void DisposeWmi()
-    {
-        try { _startWatcher?.Stop(); } catch { }
-        try { _startWatcher?.Dispose(); } catch { }
-        try { _stopWatcher?.Stop(); } catch { }
-        try { _stopWatcher?.Dispose(); } catch { }
-        _startWatcher = null;
-        _stopWatcher = null;
-    }
-
     public void Dispose()
     {
         try { _cts.Cancel(); } catch { }
-        DisposeWmi();
+        StopEvents();
         try { _loopTask?.Wait(TimeSpan.FromSeconds(2)); } catch { }
         _cts.Dispose();
         _processes.Clear();

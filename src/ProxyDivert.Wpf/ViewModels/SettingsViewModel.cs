@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using ProxyDivert.Core.Configuration.Enums;
+using ProxyDivert.Core.Processes.Enums;
 using TqkLibrary.WinDivert.Redirect.Enums;
 using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.Services;
@@ -40,6 +41,47 @@ public sealed partial class SettingsViewModel : ObservableObject
         _theme = ThemeManager.Parse(services.Config.Theme);
         _language = LocalizationManager.Parse(services.Config.Language);
         _startWithWindows = services.Config.StartWithWindows;
+        _eventSource = services.Config.ProcessEventSource;
+    }
+
+    // Which source the process table listens to. Two booleans rather than the enum itself because
+    // a RadioButton binds to IsChecked; setting one to false is the other one being picked, and is
+    // ignored here so the group cannot end up with nothing selected.
+    private ProcessEventSourceKind _eventSource;
+
+    public bool UsesEtw
+    {
+        get => _eventSource == ProcessEventSourceKind.Etw;
+        set { if (value) SetEventSource(ProcessEventSourceKind.Etw); }
+    }
+
+    public bool UsesWmi
+    {
+        get => _eventSource == ProcessEventSourceKind.Wmi;
+        set { if (value) SetEventSource(ProcessEventSourceKind.Wmi); }
+    }
+
+    /// <summary>
+    /// True while redirection is on, which is when the detection settings are locked. Swapping the
+    /// source under a running engine would mean a window where neither the old nor the new one is
+    /// delivering, and a process that starts in it is redirected late or not at all.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isEngineRunning;
+
+    // Applied at once rather than at the next Save: the table is running now, and a user who picks
+    // a source expects the next process to arrive through it.
+    private void SetEventSource(ProcessEventSourceKind kind)
+    {
+        if (_eventSource == kind) return;
+
+        _eventSource = kind;
+        _services.Config.ProcessEventSource = kind;
+        _services.Save();
+        _services.Processes.UseEventSource(kind);
+
+        OnPropertyChanged(nameof(UsesEtw));
+        OnPropertyChanged(nameof(UsesWmi));
     }
 
     [ObservableProperty]

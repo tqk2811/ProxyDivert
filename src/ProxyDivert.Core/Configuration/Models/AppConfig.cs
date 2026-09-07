@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using ProxyDivert.Core.Processes;
+using ProxyDivert.Core.Processes.Enums;
 using ProxyDivert.Core.Routing.Models;
 using TqkLibrary.WinDivert.Redirect.Enums;
 
@@ -37,6 +38,12 @@ public sealed class AppConfig
     // Null = look next to this executable and then on PATH. One setting for the whole machine:
     // it is the same binary whichever tunnel it runs.
     public string? WireProxyPath { get; set; }
+
+    // Where the process table hears about processes starting and stopping. ETW is the kernel's own
+    // provider and the shortest path; WMI is the same events after a service has repackaged them,
+    // kept for a machine where a trace session cannot be created. A source that will not start
+    // falls back to the other one on its own, so this is a preference rather than a requirement.
+    public ProcessEventSourceKind ProcessEventSource { get; set; } = ProcessEventSourceKind.Etw;
 
     // UI preferences kept with the rest so one file is the whole state.
     public string? Language { get; set; }

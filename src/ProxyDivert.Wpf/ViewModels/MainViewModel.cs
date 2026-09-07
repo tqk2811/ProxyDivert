@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows;
@@ -120,6 +120,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // A tunnel a filter routes through may not be disconnected while that filter is live,
             // so the Outbounds tab has to be told the moment redirection comes on.
             Outbounds.RefreshVpnCommands();
+            // ...and the detection settings lock while it is on.
+            Settings.IsEngineRunning = true;
         }
         catch (Exception ex)
         {
@@ -140,6 +142,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // The tunnels stay up — but nothing is routing through them now, so they may be
         // disconnected by hand again.
         Outbounds.RefreshVpnCommands();
+        Settings.IsEngineRunning = false;
     }
 
     [RelayCommand]

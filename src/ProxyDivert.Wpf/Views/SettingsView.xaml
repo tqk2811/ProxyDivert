@@ -21,6 +21,31 @@
                 </StackPanel>
             </Border>
 
+            <!-- ==== process detection ====
+
+                 Locked while redirection is on: swapping the source under a running engine leaves
+                 a window where neither the old nor the new one is delivering, and a process that
+                 starts inside it is redirected late or not at all. -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                <StackPanel IsEnabled="{Binding IsEngineRunning, Converter={StaticResource InverseBool}}">
+                    <TextBlock Style="{StaticResource Heading}" Text="{DynamicResource Str.Settings.EventSource}"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.EventSourceHint}"/>
+
+                    <RadioButton GroupName="ProcessEventSource" Margin="0,0,0,4"
+                                 Content="{DynamicResource Str.Settings.EventSourceEtw}"
+                                 ToolTipService.ShowDuration="30000"
+                                 ToolTip="{DynamicResource Str.Settings.EventSourceEtwTip}"
+                                 IsChecked="{Binding UsesEtw}"/>
+                    <RadioButton GroupName="ProcessEventSource"
+                                 Content="{DynamicResource Str.Settings.EventSourceWmi}"
+                                 ToolTipService.ShowDuration="30000"
+                                 ToolTip="{DynamicResource Str.Settings.EventSourceWmiTip}"
+                                 IsChecked="{Binding UsesWmi}"/>
+                </StackPanel>
+            </Border>
+
             <!-- ==== network ==== -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,8">
                 <StackPanel>
