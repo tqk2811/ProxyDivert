@@ -23,7 +23,10 @@ public sealed class UdpProxyForwarder : IDisposable
     private readonly IProcessRedirector _redirector;
     private readonly ILogger<UdpProxyForwarder> _logger;
     private readonly CancellationTokenSource _cts;
-    private readonly ConcurrentDictionary<TunnelKey, PortTunnel> _tunnels = new ConcurrentDictionary<TunnelKey, PortTunnel>();
+    // Lazy, because GetOrAdd may run its factory on several threads and keep only one result. A
+    // PortTunnel opens a SOCKS5 control connection and a UDP socket as it is constructed, so the
+    // copies the dictionary discards would go on running with nobody holding them.
+    private readonly ConcurrentDictionary<TunnelKey, Lazy<PortTunnel>> _tunnels = new ConcurrentDictionary<TunnelKey, Lazy<PortTunnel>>();
     private volatile bool _disposed;
 
     public UdpProxyForwarder(IProcessRedirector redirector, ILogger<UdpProxyForwarder> logger, CancellationToken cancellationToken)
@@ -41,7 +44,8 @@ public sealed class UdpProxyForwarder : IDisposable
         if (_disposed) return false;
 
         var key = new TunnelKey(outboundId, clientPort, isIpv6);
-        PortTunnel tunnel = _tunnels.GetOrAdd(key, k => new PortTunnel(this, source, k));
+        PortTunnel tunnel = _tunnels.GetOrAdd(key, k => new Lazy<PortTunnel>(
+            () => new PortTunnel(this, source, k), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
         return tunnel.Send(destination, payload);
     }
 
@@ -51,8 +55,15 @@ public sealed class UdpProxyForwarder : IDisposable
         foreach (var kv in _tunnels)
         {
             if (kv.Key.OutboundId != outboundId) continue;
-            if (_tunnels.TryRemove(kv.Key, out PortTunnel? tunnel)) tunnel.Dispose();
+            if (_tunnels.TryRemove(kv.Key, out Lazy<PortTunnel>? tunnel)) Dispose(tunnel);
         }
+    }
+
+    // Waits for a tunnel still being constructed rather than skipping it: a half-built one would
+    // finish and hold its socket open with nobody left to close it.
+    private static void Dispose(Lazy<PortTunnel> tunnel)
+    {
+        try { tunnel.Value.Dispose(); } catch { }
     }
 
     private void OnReply(ushort clientPort, IPEndPoint from, byte[] payload, bool isIpv6)
@@ -71,7 +82,7 @@ public sealed class UdpProxyForwarder : IDisposable
     {
         _disposed = true;
         try { _cts.Cancel(); } catch { }
-        foreach (var kv in _tunnels) kv.Value.Dispose();
+        foreach (var kv in _tunnels) Dispose(kv.Value);
         _tunnels.Clear();
         _cts.Dispose();
     }

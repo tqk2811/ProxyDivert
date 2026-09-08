@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Threading;
 using System.Collections.Generic;
 using System.Net;
 using Microsoft.Extensions.Logging;
@@ -53,7 +54,7 @@ public sealed class OutboundSourceFactory : IDisposable
         if (outbound is null) throw new ArgumentNullException(nameof(outbound));
         return _cache.GetOrAdd(
             outbound.Id,
-            _ => new CachedSource(OutboundSignature.Of(outbound, WireProxyPath), Create(outbound))).Source;
+            _ => new CachedSource(OutboundSignature.Of(outbound, WireProxyPath), () => Create(outbound))).Source;
     }
 
     /// <summary>
@@ -61,7 +62,7 @@ public sealed class OutboundSourceFactory : IDisposable
     /// one — a caller that wants it built asks <see cref="GetOrCreate"/>.
     /// </summary>
     public IProxySource? Find(Guid outboundId)
-        => _cache.TryGetValue(outboundId, out CachedSource? cached) ? cached.Source : null;
+        => _cache.TryGetValue(outboundId, out CachedSource? cached) ? cached.SourceIfBuilt : null;
 
     /// <summary>
     /// Reconciles the cache with an edited configuration, disposing only the instances that are
@@ -106,8 +107,10 @@ public sealed class OutboundSourceFactory : IDisposable
     /// </summary>
     public void SetIpv6Support(Guid outboundId, bool supported)
     {
-        if (_cache.TryGetValue(outboundId, out CachedSource? cached))
-            ApplyIpv6Support(cached.Source, supported);
+        // SourceIfBuilt, not Source: this is what a failed connection teaches us, so the instance
+        // always exists by now — and spawning one here just to configure it would be absurd.
+        if (_cache.TryGetValue(outboundId, out CachedSource? cached) && cached.SourceIfBuilt is IProxySource built)
+            ApplyIpv6Support(built, supported);
     }
 
     private static void ApplyIpv6Support(IProxySource source, bool supported)
@@ -128,12 +131,12 @@ public sealed class OutboundSourceFactory : IDisposable
     // Call after the user edits or removes an outbound.
     public void Invalidate(Guid outboundId)
     {
-        if (_cache.TryRemove(outboundId, out CachedSource? cached)) DisposeSource(cached.Source);
+        if (_cache.TryRemove(outboundId, out CachedSource? cached)) DisposeSource(cached.SourceIfBuilt);
     }
 
     public void InvalidateAll()
     {
-        foreach (var kv in _cache) DisposeSource(kv.Value.Source);
+        foreach (var kv in _cache) DisposeSource(kv.Value.SourceIfBuilt);
         _cache.Clear();
     }
 
@@ -308,16 +311,31 @@ public sealed class OutboundSourceFactory : IDisposable
 
     // The instance plus what it was built from, so a later configuration can be compared against
     // it without rebuilding anything.
+    //
+    // Built lazily so that constructing this is free. ConcurrentDictionary.GetOrAdd may run its
+    // factory on several threads at once and keep only one result; when the factory is what spawns
+    // wireproxy or dials a tunnel, the copies it discards are not merely wasted work — nobody holds
+    // them, so nobody ever shuts them down. Making the expensive part a Lazy means only the entry
+    // the dictionary actually kept is ever built.
     private sealed class CachedSource
     {
-        public CachedSource(string signature, IProxySource source)
+        private readonly Lazy<IProxySource> _source;
+
+        public CachedSource(string signature, Func<IProxySource> build)
         {
             Signature = signature;
-            Source = source;
+            _source = new Lazy<IProxySource>(build, LazyThreadSafetyMode.ExecutionAndPublication);
         }
 
         public string Signature { get; }
 
-        public IProxySource Source { get; }
+        /// <summary>The instance, built on first use.</summary>
+        public IProxySource Source => _source.Value;
+
+        /// <summary>
+        /// The instance if something has already asked for it, else null — for callers that must
+        /// not cause one to be built.
+        /// </summary>
+        public IProxySource? SourceIfBuilt => _source.IsValueCreated ? _source.Value : null;
     }
 }

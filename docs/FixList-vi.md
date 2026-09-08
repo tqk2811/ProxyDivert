@@ -52,9 +52,10 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A6. `GetOrAdd` với factory tốn tài nguyên không dispose bản thua — Vừa
 
-- [ ] **Vị trí**: [OutboundSourceFactory.cs:51-57](../src/ProxyDivert.Core/Outbounds/OutboundSourceFactory.cs#L51-L57), [UdpProxyForwarder.cs:44](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L44)
+- [x] **Vị trí**: [OutboundSourceFactory.cs:51-57](../src/ProxyDivert.Core/Outbounds/OutboundSourceFactory.cs#L51-L57), [UdpProxyForwarder.cs:44](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L44)
 - **Vấn đề**: `ConcurrentDictionary.GetOrAdd` có thể chạy factory hai lần khi hai kết nối tới cùng outbound chưa cache. Bản không thắng bị vứt mà không `Dispose()`. Với `PortTunnel`, bản thua đã kịp `Task.Run(AssociateAsync)` nên mở hẳn một UDP ASSOCIATE không ai đóng.
 - **Cách sửa**: `GetOrAdd(key, k => new Lazy<T>(() => ..., ExecutionAndPublication)).Value`, hoặc so sánh reference sau `GetOrAdd` và dispose bản không được giữ.
+- **Đã sửa**: ProxyDivert — commit "Build a shared instance once, even when two threads ask together"
 
 ### A7. `ApplyConfig` giữ `_stateLock` khi dispose tuần tự PortTunnel — Vừa
 
