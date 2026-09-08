@@ -146,6 +146,16 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 - **Phát hiện thế nào**: `ProcessRuleMatcherTests.The_plain_comparisons_still_work_with_no_readable_path(Regex, "^chr.*", "chrome.exe", true)` rớt 1 lần ở đợt 2 rồi không dựng lại được, và rớt lại ở đợt 3 đúng lượt chạy ngay sau build. Chạy riêng hoặc `--no-build` thì 5/5 xanh. Probe dựng tải CPU đo được con số 47 ms ở trên.
 - **Đã sửa**: commit "fix(core): stop charging a filter for time it did not spend matching". Tách `RegexBudget` (internal) đếm thời gian **thực sự nằm trong `Regex.IsMatch`** bằng `Stopwatch`, thay cho hạn đồng hồ tường; timeout truyền vào là hằng số nên pattern nằm yên trong cache. Đánh đổi ghi rõ trong code: pattern cuối có thể vượt ngân sách tối đa một lượt timeout, đổi lấy việc không dựng lại regex.
 - **Test**: `RegexBudgetTests` (4 test). Đã kiểm ngược: dựng lại ngữ nghĩa hạn-đồng-hồ cũ thì 3/4 đỏ. Một test "end to end" viết ban đầu đã bỏ vì nó xanh cả với code cũ — hạn cũ đóng dấu *bên trong* `Evaluate` nên nghỉ *trước* khi gọi không tái hiện được gì.
+- **Sửa tiếp (hiệu năng)**: commit "perf(core): keep the expressions a filter is built from". Chỉ đổi timeout thành hằng số **chưa đủ** — `Regex.CacheSize` mặc định là **15**, mà `EitherSubject` hỏi mỗi luật hai pattern (tên + đường dẫn đã chuẩn hoá), nên chỉ 8 điều kiện là vượt ngưỡng và lại dựng lại pattern trên mọi tiến trình mỗi lần quét. Thêm `RegexCache` giữ hẳn `Regex` đã `Compiled`. Đo end-to-end qua chính `ProcessRuleMatcher`, một lượt quét 301 tiến trình:
+
+  | Số điều kiện | `Regex.IsMatch` tĩnh | Giữ instance, thông dịch | Giữ instance, `Compiled` |
+  |---|---|---|---|
+  | 8 | 2,63 ms | 2,33 ms | **1,57 ms** |
+  | 20 | 26,41 ms | 6,00 ms | **2,91 ms** |
+  | 40 | 41,62 ms | 9,29 ms | **5,25 ms** |
+
+- **Bẫy đã mắc rồi sửa**: bản `RegexCache` đầu gọi `entries.Count >= Capacity` ở **mọi** lần tra. `ConcurrentDictionary.Count` khoá toàn bộ bucket (đúng lỗi B9 đã sửa ở đợt 2), làm bản có cache **chậm hơn** bản cũ (3,07 ms so với 2,59 ms). Chỉ phát hiện được vì đo trước/sau chứ không tin vào microbenchmark. Đã chuyển sang `TryGetValue` trên đường trúng, chỉ kiểm `Count` khi trượt.
+- **Đã cân nhắc và loại**: nâng `Regex.CacheSize` (là thiết lập toàn tiến trình, áp lên cả thư viện khác, mà vẫn còn chi phí băm khoá); `RegexOptions.NonBacktracking` (bỏ được deadline nhưng từ chối lookaround/backreference ngay lúc dựng, và chậm hơn `Compiled` với pattern đơn giản).
 
 ---
 

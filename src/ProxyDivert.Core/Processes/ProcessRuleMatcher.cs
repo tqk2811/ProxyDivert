@@ -30,9 +30,6 @@ public static class ProcessRuleMatcher
     // see RegexBudget for why that distinction is the whole point.
     private static readonly TimeSpan RegexBudgetTotal = TimeSpan.FromMilliseconds(100);
 
-    // What any single pattern is allowed, and a constant so the built expression stays cached.
-    private static readonly TimeSpan RegexTimeout = RegexBudgetTotal;
-
     // A tree this deep is not something the editor can build — it would be a hand-edited config
     // file, and the recursion has to stop somewhere short of the stack.
     public const int MaxDepth = 16;
@@ -256,45 +253,33 @@ public static class ProcessRuleMatcher
     private static bool Same(string left, string right)
         => string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 
-    // "*" and "?" as everyone writes them in a file dialog, turned into the regex they mean.
+    // "*" and "?" as everyone writes them in a file dialog, turned into the regex they mean —
+    // once, by the cache, rather than rebuilt for every process on the machine.
     private static ConditionResult WildcardMatches(string pattern, string text, Subject subject)
-        => RunRegex(
-            "^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$",
-            text,
-            subject);
+        => RunRegex(RegexCache.Shared.GetWildcard(pattern), text, subject);
 
     private static ConditionResult RegexMatches(string pattern, string text, Subject subject)
-        => RunRegex(pattern, text, subject);
+        => RunRegex(RegexCache.Shared.Get(pattern), text, subject);
 
     // Every pattern here came from a text box, so a typo must not take the watcher down — and must
     // not turn into a confident "no" either, because a NOT in front of it would then claim every
     // process on the machine. A pattern that will not compile, or one that runs past the filter
     // budget, is Unknown: the filter simply does not apply.
-    private static ConditionResult RunRegex(string pattern, string text, Subject subject)
+    private static ConditionResult RunRegex(Regex? regex, string text, Subject subject)
     {
+        // A pattern that will not compile. RegexCache has already decided that once and remembered
+        // it, so this costs nothing per process.
+        if (regex is null) return ConditionResult.Unknown;
+
         if (subject.Budget.Remaining <= TimeSpan.Zero) return ConditionResult.Unknown;
 
-        // A constant timeout, not what is left of the budget. Regex.IsMatch caches the built
-        // expression under a key that includes the timeout, so a value that shrank with every call
-        // — which is what the budget-as-a-deadline version passed — missed that cache every time
-        // and rebuilt the pattern from source. These run against every process on the machine on
-        // every scan, so that is not a small thing.
-        //
-        // The budget is enforced by not starting another pattern once it is gone, which lets the
-        // last one overshoot by up to one timeout. That is the price of the pattern staying cached,
-        // and it is bounded.
+        // Only the match is timed. Building the expression is not matching, it happens once per
+        // distinct pattern rather than once per process, and charging it to the budget would make
+        // the first process of a scan behave differently from the rest.
         long started = Stopwatch.GetTimestamp();
         try
         {
-            return Yes(Regex.IsMatch(
-                text,
-                pattern,
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-                RegexTimeout));
-        }
-        catch (ArgumentException)
-        {
-            return ConditionResult.Unknown;
+            return Yes(regex.IsMatch(text));
         }
         catch (RegexMatchTimeoutException)
         {
