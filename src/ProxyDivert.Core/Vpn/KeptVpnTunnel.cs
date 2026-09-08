@@ -21,7 +21,7 @@ namespace ProxyDivert.Core.Vpn;
 // What "the tunnel" is varies (a wireproxy subprocess, an in-process VpnClient driver), so the loop
 // only ever sees IKeptTunnel. That also settles who reconnects: a driver that heals itself is left
 // to get on with it, and this loop steps in only once the tunnel is finished for good.
-internal sealed class KeptVpnTunnel : IDisposable
+internal sealed class KeptVpnTunnel : IAsyncDisposable
 {
     // 1s covers a tunnel that lost a race with something; 30s is where it settles for one that is
     // down for a real reason (no network, a dead VPN server), which is often enough to reconnect
@@ -111,7 +111,7 @@ internal sealed class KeptVpnTunnel : IDisposable
                 // Restarting the cached one would re-run whatever already failed and would not see
                 // a configuration the user has corrected in the meantime — the same reasoning as
                 // the catch below, for the path that ends without an exception.
-                _factory.Invalidate(_outbound.Id);
+                await _factory.InvalidateAsync(_outbound.Id).ConfigureAwait(false);
 
                 if (DateTime.UtcNow - upSince >= StableFor) attempt = 0;
             }
@@ -125,7 +125,7 @@ internal sealed class KeptVpnTunnel : IDisposable
                 // A source built from a config that does not work stays broken however often it is
                 // started, so it is thrown away: the retry builds a new one, and a config the user
                 // has meanwhile fixed is picked up without restarting the engine.
-                _factory.Invalidate(_outbound.Id);
+                await _factory.InvalidateAsync(_outbound.Id).ConfigureAwait(false);
             }
 
             attempt++;
@@ -227,27 +227,37 @@ internal sealed class KeptVpnTunnel : IDisposable
         catch { /* a broken subscriber must not break the supervision loop */ }
     }
 
-    public void Dispose()
+    /// <remarks>
+    /// Awaited rather than blocked on, and still bounded. Cancelling ought to bring the loop back
+    /// promptly, because every await in it takes the token — but a dial that ignores its token
+    /// would otherwise hold the application open on the way out, so the wait gives up after a while
+    /// and lets the loop finish on its own.
+    /// </remarks>
+    public async ValueTask DisposeAsync()
     {
         try { _cts.Cancel(); } catch { }
+
         // Give the loop a moment to notice, so nothing logs about a tunnel after the engine has
-        // said it stopped — but never block the caller on it: every await in there is cancellable,
-        // and a stuck one is not worth freezing the window over.
-        try { _loop?.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        // said it stopped.
+        if (_loop is not null)
+        {
+            try { await _loop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
+            catch { /* timed out, or the loop itself failed; neither stops the teardown */ }
+        }
 
         // The instance IS the tunnel — a wireproxy subprocess, or a driver holding a session — and
         // the factory is what owns it. Ending supervision without this would stop watching a tunnel
         // that carries on running: the user presses Disconnect, the row goes quiet, and the
         // subprocess keeps talking to the VPN server.
-        _factory.Invalidate(_outbound.Id);
+        await _factory.InvalidateAsync(_outbound.Id).ConfigureAwait(false);
 
-        // Deliberately not disposed here. The wait above times out whenever the loop is inside a
-        // dial, which takes up to 90 seconds, and the loop reaches Task.Delay(delay, ct) after
-        // that — on a disposed source that throws ObjectDisposedException, which no catch in
+        // Only once the loop is actually finished. The wait above gives up whenever the loop is
+        // inside a dial, which takes up to 90 seconds, and the loop reaches Task.Delay(delay, ct)
+        // after that — on a disposed source that throws ObjectDisposedException, which no catch in
         // RunAsync is looking for. The status would stay on "Reconnecting" forever and the fault
         // would go unobserved. Letting the loop finish and hand the source to the GC costs one
         // registration; getting it wrong costs the row.
-        if (_loop is null) { try { _cts.Dispose(); } catch { } return; }
+        if (_loop is null || _loop.IsCompleted) { try { _cts.Dispose(); } catch { } return; }
         _loop.ContinueWith(
             static (_, state) => { try { ((CancellationTokenSource)state!).Dispose(); } catch { } },
             _cts, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);

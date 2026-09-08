@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Outbounds;
@@ -37,7 +38,7 @@ namespace ProxyDivert.Core.Vpn;
 /// <see cref="ConnectRoutedVpns"/> — because a rule pointing at a tunnel that is down would send
 /// its traffic into a connection error.
 /// </remarks>
-public sealed class VpnConnectionKeeper : IDisposable
+public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
 {
     private readonly OutboundSourceFactory _factory;
     private readonly ILogger<VpnConnectionKeeper> _logger;
@@ -75,7 +76,7 @@ public sealed class VpnConnectionKeeper : IDisposable
     /// newly switched on or edited, stops the ones that are gone, disabled or switched off, and
     /// leaves the rest running untouched.
     /// </summary>
-    public void Sync(IEnumerable<Outbound> outbounds, string? wireProxyPath)
+    public async Task SyncAsync(IEnumerable<Outbound> outbounds, string? wireProxyPath)
     {
         if (outbounds is null) throw new ArgumentNullException(nameof(outbounds));
 
@@ -130,7 +131,7 @@ public sealed class VpnConnectionKeeper : IDisposable
         foreach (KeptVpnTunnel tunnel in stopping)
         {
             _logger.LogInformation("vpn {Outbound} is no longer kept connected", tunnel.OutboundName);
-            tunnel.Dispose();
+            await tunnel.DisposeAsync().ConfigureAwait(false);
             Raise(new VpnStatus(tunnel.OutboundId, tunnel.OutboundName, VpnConnectionState.Stopped));
         }
 
@@ -141,6 +142,10 @@ public sealed class VpnConnectionKeeper : IDisposable
         }
     }
 
+    // See Dispose: bridge for the host, which is still synchronous here.
+    public void Sync(IEnumerable<Outbound> outbounds, string? wireProxyPath)
+        => SyncAsync(outbounds, wireProxyPath).GetAwaiter().GetResult();
+
     /// <summary>
     /// Switches on every VPN the configuration actually routes through — the filters' policies'
     /// outbounds — and brings the tunnels up. Returns the ones that were off until now, so the
@@ -150,7 +155,7 @@ public sealed class VpnConnectionKeeper : IDisposable
     /// Called when the engine starts. Nothing is switched off here, and stopping the engine calls
     /// nothing at all: a tunnel is only ever put down by the user.
     /// </remarks>
-    public IReadOnlyCollection<Guid> ConnectRoutedVpns(AppConfig config)
+    public async Task<IReadOnlyCollection<Guid>> ConnectRoutedVpnsAsync(AppConfig config)
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
 
@@ -167,9 +172,13 @@ public sealed class VpnConnectionKeeper : IDisposable
                 "vpn {Outbound} is switched on: a filter routes through it", outbound.Name);
         }
 
-        Sync(config.Outbounds, config.WireProxyPath);
+        await SyncAsync(config.Outbounds, config.WireProxyPath).ConfigureAwait(false);
         return switchedOn;
     }
+
+    // See Dispose: bridge for the host, which is still synchronous here.
+    public IReadOnlyCollection<Guid> ConnectRoutedVpns(AppConfig config)
+        => ConnectRoutedVpnsAsync(config).GetAwaiter().GetResult();
 
     private void OnTunnelStatusChanged(VpnStatus status) => Raise(status);
 
@@ -179,7 +188,7 @@ public sealed class VpnConnectionKeeper : IDisposable
         catch { /* a broken subscriber must not break supervision */ }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         List<KeptVpnTunnel> tunnels;
         lock (_lock)
@@ -193,7 +202,11 @@ public sealed class VpnConnectionKeeper : IDisposable
         foreach (KeptVpnTunnel tunnel in tunnels)
         {
             tunnel.StatusChanged -= OnTunnelStatusChanged;
-            tunnel.Dispose();
+            await tunnel.DisposeAsync().ConfigureAwait(false);
         }
     }
+
+    // Bridge, and one the container needs: ServiceProvider.Dispose refuses a singleton that only
+    // offers DisposeAsync. Goes when the host disposes its container asynchronously.
+    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 }
