@@ -26,7 +26,8 @@ namespace ProxyDivert.Core.Vpn;
 /// So a tunnel that is switched on is held there: a dead subprocess is noticed through its exit
 /// event rather than at the next request, and reconnected with a growing delay so a genuinely
 /// broken configuration does not become a spawn loop. Idle sessions are kept alive by
-/// PersistentKeepalive, which the config writer adds when the provider's file has none.
+/// PersistentKeepalive, which is supplied when the provider's file has none — by the config writer
+/// for a tunnel on wireproxy, and by VpnTunnelOptions for one running in this process.
 ///
 /// Which tunnels those are is <see cref="Outbound.KeepConnected"/>, and it is the user's switch —
 /// this lives for as long as the application rather than for as long as an engine run. A VPN is a

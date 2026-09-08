@@ -269,10 +269,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### C4. WireGuard in-process không có PersistentKeepalive — Vừa
 
-- [ ] **Vị trí**: [VpnConnectionKeeper.cs:29](../src/ProxyDivert.Core/Vpn/VpnConnectionKeeper.cs#L29), [VpnClientProxySource.cs:183-184](../src/ProxyDivert.Core/Vpn/Client/VpnClientProxySource.cs#L183-L184); thư viện `WireGuardConfFile.cs:36,132`, `WireGuardTimers.cs:80`; wireproxy có mặc định 25 ở `WireGuardOptions.cs:84`
+- [x] **Vị trí**: [VpnConnectionKeeper.cs:29](../src/ProxyDivert.Core/Vpn/VpnConnectionKeeper.cs#L29), [VpnClientProxySource.cs:183-184](../src/ProxyDivert.Core/Vpn/Client/VpnClientProxySource.cs#L183-L184); thư viện `WireGuardConfFile.cs:36,132`, `WireGuardTimers.cs:80`; wireproxy có mặc định 25 ở `WireGuardOptions.cs:84`
 - **Vấn đề**: comment của keeper nói "config writer thêm [PersistentKeepalive](Glossary-vi.md#L105) khi file không có", nhưng chỉ đúng với wireproxy. `VpnDialer.ConnectWireGuardAsync` parse file thô, keepalive = 0 = tắt.
 - **Vì sao**: file của provider không có dòng này → sau 30-120 giây im lặng NAT phía peer hết hạn, tunnel im lặng chết mà WireGuard không báo link-loss.
 - **Cách sửa**: thêm `DefaultPersistentKeepalive` vào `VpnTunnelOptions` (hoặc overload nhận `WireGuardConfig`), ép 25 giây khi file không có. Cần sửa trong submodule.
+- **Đã sửa**: submodule VpnClient (branch `fix/wave2`), commit "feat(tunnels): keep an in-process WireGuard tunnel alive behind NAT" — `VpnTunnelOptions.WireGuardKeepaliveSeconds` mặc định 25, truyền xuống `WireGuardConfFile.Load/Parse` làm giá trị dùng khi file không có dòng nào. **Parser vẫn mặc định 0** (đọc đúng như file viết) — cấp fallback là quyết định của caller, không phải của parser. `WireGuardConfig` là class có `init` chứ không phải record nên không dùng được `with`; vì vậy giá trị phải đi vào lúc parse. Kèm test project mới `TqkLibrary.VpnClient.Tunnels.Tests` (Tunnels trước đó không có test nào), 4 test. Repo cha: sửa lại comment sai ở `VpnConnectionKeeper`.
 
 ### C5. `KeptVpnTunnel.Dispose` dispose CTS khi loop còn chạy — Vừa
 
