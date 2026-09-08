@@ -54,6 +54,12 @@ public sealed class RedirectEngine : IDisposable
     private readonly IHostNameInspector _hostNameInspector;
     private readonly OutboundSourceFactory _outboundFactory;
     private readonly object _stateLock = new object();
+    // Start, Stop and ApplyConfig are mutually exclusive, and each of them now awaits work that
+    // must not happen under _stateLock — closing a UDP tunnel, putting a VPN tunnel down, unloading
+    // the driver. A monitor cannot be held across an await, so the lock guards only the moment the
+    // run's parts are published or taken away, and this keeps the operations themselves from
+    // overlapping.
+    private readonly SemaphoreSlim _lifecycle = new SemaphoreSlim(1, 1);
     // What we have learned about which outbounds can actually reach IPv6. Lives across Start/Stop
     // because it describes the proxies, not the run.
     private readonly OutboundIpv6Capability _ipv6Capability = new OutboundIpv6Capability();
@@ -119,89 +125,117 @@ public sealed class RedirectEngine : IDisposable
         _resolver = BuildResolver(_config, new Dictionary<uint, IReadOnlyList<Guid>>());
     }
 
-    public void Start(AppConfig config)
+    public async Task StartAsync(AppConfig config)
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
 
-        lock (_stateLock)
+        await _lifecycle.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (IsRunning) throw new InvalidOperationException("Engine already running");
 
             _config = config;
 
-            _cts = new CancellationTokenSource();
-            // The instances outlive the run, so this picks up whatever was edited while the engine
-            // was off rather than starting from an empty cache — and leaves a VPN tunnel that is
-            // already up exactly where it is.
-            ReconcileOutbounds(config);
-            _resolver = BuildResolver(config, new Dictionary<uint, IReadOnlyList<Guid>>());
+            // Before the lock. The instances outlive the run, so this picks up whatever was edited
+            // while the engine was off rather than starting from an empty cache — and leaves a VPN
+            // tunnel that is already up exactly where it is. Rebuilding a stale one can mean
+            // putting a tunnel down, which is not work to do inside the monitor the packet path
+            // reads through.
+            await ReconcileOutboundsAsync(config).ConfigureAwait(false);
 
-            var options = new RedirectOptions
+            lock (_stateLock)
             {
-                // Start with an empty scope: pids arrive from the process watcher.
-                ProcessId = 0,
-                Protocols = RedirectProtocol.All,
+                _cts = new CancellationTokenSource();
+                _resolver = BuildResolver(config, new Dictionary<uint, IReadOnlyList<Guid>>());
 
-                Ipv6Mode = config.Ipv6,
-                EnableDnsSniff = true,
-                EnableSecureDns = config.Dns.Mode == DnsMode.DnsOverHttps,
-                DohEndpoint = ParseDohEndpoint(config.Dns.DohEndpoint),
-                TcpConnectionHandler = HandleTcpAsync,
-                UdpDatagramHandler = HandleUdpDatagram,
-                ShouldRedirectUdp = ShouldRedirectUdpFlow,
-                // Socket-sniffing mode: the redirector listens to every process on the machine and
-                // asks this about each pid it has not seen. Left null in process-event mode, where
-                // the tracker names the pids instead.
-                ShouldTrackProcess = config.ProcessDetection == ProcessDetectionMode.NetworkSniff
-                    ? ShouldRedirectProcess
-                    : null,
-            };
+                var options = new RedirectOptions
+                {
+                    // Start with an empty scope: pids arrive from the process watcher.
+                    ProcessId = 0,
+                    Protocols = RedirectProtocol.All,
 
-            _redirector = _redirectorFactory.Create(options);
-            _redirector.Start();
-            _hostNames = new ConnectionHostNameResolver(_hostNameInspector, _redirector.ReverseDns);
-            _udpForwarder = new UdpProxyForwarder(_redirector, _loggerFactory.CreateLogger<UdpProxyForwarder>(), _cts.Token);
+                    Ipv6Mode = config.Ipv6,
+                    EnableDnsSniff = true,
+                    EnableSecureDns = config.Dns.Mode == DnsMode.DnsOverHttps,
+                    DohEndpoint = ParseDohEndpoint(config.Dns.DohEndpoint),
+                    TcpConnectionHandler = HandleTcpAsync,
+                    UdpDatagramHandler = HandleUdpDatagram,
+                    ShouldRedirectUdp = ShouldRedirectUdpFlow,
+                    // Socket-sniffing mode: the redirector listens to every process on the machine and
+                    // asks this about each pid it has not seen. Left null in process-event mode, where
+                    // the tracker names the pids instead.
+                    ShouldTrackProcess = config.ProcessDetection == ProcessDetectionMode.NetworkSniff
+                        ? ShouldRedirectProcess
+                        : null,
+                };
 
-            // The process table is already running and already knows every process on the machine,
-            // so starting is a matter of reading it rather than of discovering anything.
-            _tracker = new ProcessRuleTracker(_loggerFactory.CreateLogger<ProcessRuleTracker>(), _inventory);
-            _tracker.ProcessAttached += OnProcessAttached;
-            _tracker.ProcessDetached += OnProcessDetached;
-            _tracker.Start(
-                config.ProcessRules,
-                attachFromProcessEvents: config.ProcessDetection == ProcessDetectionMode.ProcessEvents);
+                _redirector = _redirectorFactory.Create(options);
+                _redirector.Start();
+                _hostNames = new ConnectionHostNameResolver(_hostNameInspector, _redirector.ReverseDns);
+                _udpForwarder = new UdpProxyForwarder(_redirector, _loggerFactory.CreateLogger<UdpProxyForwarder>(), _cts.Token);
 
-            IsRunning = true;
-            _logger.LogInformation(
-                "engine started; relay tcp={Tcp} udp={Udp} tcpV6={TcpV6} udpV6={UdpV6}, ipv6={Ipv6Mode}",
-                _redirector.TcpRelayPort, _redirector.UdpRelayPort,
-                _redirector.TcpRelayPortV6, _redirector.UdpRelayPortV6, config.Ipv6);
+                // The process table is already running and already knows every process on the machine,
+                // so starting is a matter of reading it rather than of discovering anything.
+                _tracker = new ProcessRuleTracker(_loggerFactory.CreateLogger<ProcessRuleTracker>(), _inventory);
+                _tracker.ProcessAttached += OnProcessAttached;
+                _tracker.ProcessDetached += OnProcessDetached;
+                _tracker.Start(
+                    config.ProcessRules,
+                    attachFromProcessEvents: config.ProcessDetection == ProcessDetectionMode.ProcessEvents);
+
+                IsRunning = true;
+                _logger.LogInformation(
+                    "engine started; relay tcp={Tcp} udp={Udp} tcpV6={TcpV6} udpV6={UdpV6}, ipv6={Ipv6Mode}",
+                    _redirector.TcpRelayPort, _redirector.UdpRelayPort,
+                    _redirector.TcpRelayPortV6, _redirector.UdpRelayPortV6, config.Ipv6);
+            }
+        }
+        finally
+        {
+            _lifecycle.Release();
         }
     }
+
+    // Bridge for the host, which still starts synchronously.
+    public void Start(AppConfig config) => StartAsync(config).GetAwaiter().GetResult();
 
     // Applies an edited configuration without dropping the redirector: rules, outbounds and DNS
     // preferences take effect on the NEXT connection. Options that live in the WinDivert handles
     // (the IPv6 mode, DoH) need a restart — the UI says so rather than silently ignoring them.
-    public void ApplyConfig(AppConfig config)
+    public async Task ApplyConfigAsync(AppConfig config)
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
 
-        lock (_stateLock)
+        await _lifecycle.WaitAsync().ConfigureAwait(false);
+        try
         {
-            _config = config;
+            lock (_stateLock) { _config = config; }
             if (!IsRunning) return;
 
-            // Only the outbounds that actually changed are rebuilt. Throwing them all away on
-            // every save is what used to kill a running VPN tunnel — and make the next request
-            // re-handshake it — because the user ticked a checkbox on another tab.
-            ReconcileOutbounds(config);
-            _tracker?.ApplyRules(config.ProcessRules);
-            RebuildResolver();
+            // Outside the state lock, and this is the point of the whole exercise: only the
+            // outbounds that actually changed are rebuilt, but rebuilding one can mean putting a
+            // VPN tunnel down and closing its UDP tunnels. Doing that inside the monitor the packet
+            // path and the next Save both queue behind is what the user felt as the window
+            // freezing on Save.
+            //
+            // Throwing them all away on every save is what used to kill a running VPN tunnel — and
+            // make the next request re-handshake it — because the user ticked a checkbox on another
+            // tab.
+            await ReconcileOutboundsAsync(config).ConfigureAwait(false);
+
+            lock (_stateLock)
+            {
+                _tracker?.ApplyRules(config.ProcessRules);
+                RebuildResolver();
+            }
 
             // The connections already running are read against the new rules as well. One the new
             // configuration would route somewhere else is closed — the application reconnects, and
             // the reconnect is captured and routed afresh. One still routed the same way is left
             // alone: a download in progress does not restart over an unrelated edit.
+            //
+            // Also outside the lock: closing one cancels its token, and a cancellation callback
+            // runs on the thread that cancels.
             int closed = _liveConnections.CloseWhereRouteChanged(_resolver, (live, now) =>
                 _logger.LogInformation(
                     "tcp pid={Pid} {Target} is being closed: the configuration now routes it via {New} instead of {Old}",
@@ -217,10 +251,17 @@ public sealed class RedirectEngine : IDisposable
                 "configuration applied: {Closed} connection(s) closed for a changed route, {Reset} pre-existing flow(s) reset",
                 closed, reset);
         }
+        finally
+        {
+            _lifecycle.Release();
+        }
 
         try { ConfigurationApplied?.Invoke(); }
         catch (Exception ex) { _logger.LogWarning(ex, "a ConfigurationApplied subscriber threw"); }
     }
+
+    // Bridge for the host, which still saves synchronously.
+    public void ApplyConfig(AppConfig config) => ApplyConfigAsync(config).GetAwaiter().GetResult();
 
     /// <summary>
     /// Redirects one specific process (and, by default, whatever it spawns) without a rule
@@ -247,29 +288,54 @@ public sealed class RedirectEngine : IDisposable
         _tracker?.MatchEverything();
     }
 
-    public void Stop()
+    /// <remarks>
+    /// The state lock is held only long enough to take the run's parts away from the packet path.
+    /// Closing them is awaited outside it, because a UDP tunnel takes up to two seconds to close
+    /// and the redirector unloads a driver — none of which the next Start should be queued behind
+    /// inside a monitor. <see cref="_lifecycle"/> is what keeps Start and Stop from overlapping now
+    /// that the lock no longer spans the whole of either.
+    /// </remarks>
+    public async Task StopAsync()
     {
-        lock (_stateLock)
+        ProcessRuleTracker? tracker;
+        UdpProxyForwarder? udpForwarder;
+        IProcessRedirector? redirector;
+        CancellationTokenSource? cts;
+
+        await _lifecycle.WaitAsync().ConfigureAwait(false);
+        try
         {
-            if (!IsRunning) return;
-            IsRunning = false;
-
-            try { _cts?.Cancel(); } catch { }
-
-            // The table it read stays running: it belongs to the application, not to this run.
-            if (_tracker != null)
+            lock (_stateLock)
             {
-                _tracker.ProcessAttached -= OnProcessAttached;
-                _tracker.ProcessDetached -= OnProcessDetached;
-                _tracker.Dispose();
+                if (!IsRunning) return;
+                IsRunning = false;
+
+                try { _cts?.Cancel(); } catch { }
+
+                // The table it read stays running: it belongs to the application, not to this run.
+                tracker = _tracker;
+                if (tracker != null)
+                {
+                    // Unsubscribed here rather than with the disposal below: an event arriving
+                    // after the fields are cleared would find a run that no longer exists.
+                    tracker.ProcessAttached -= OnProcessAttached;
+                    tracker.ProcessDetached -= OnProcessDetached;
+                }
                 _tracker = null;
+
+                udpForwarder = _udpForwarder;
+                _udpForwarder = null;
+
+                redirector = _redirector;
+                _redirector = null;
+
+                cts = _cts;
+                _cts = null;
             }
 
-            _udpForwarder?.Dispose();
-            _udpForwarder = null;
-
-            _redirector?.Dispose();
-            _redirector = null;
+            tracker?.Dispose();
+            if (udpForwarder != null) await udpForwarder.DisposeAsync().ConfigureAwait(false);
+            redirector?.Dispose();
 
             // The outbound instances are deliberately left alone. A VPN outbound's instance IS the
             // tunnel: the user's session with their provider, which they switched on themselves and
@@ -278,10 +344,18 @@ public sealed class RedirectEngine : IDisposable
 
             _logger.LogInformation("engine stopped");
 
-            _cts?.Dispose();
-            _cts = null;
+            // Last, and only now: the forwarder was handed this token and is only finished with it
+            // once its own teardown has been awaited.
+            cts?.Dispose();
+        }
+        finally
+        {
+            _lifecycle.Release();
         }
     }
+
+    // Bridge for the host, which still starts and stops synchronously.
+    public void Stop() => StopAsync().GetAwaiter().GetResult();
 
     // Asked by the redirector's socket pump, once per process. The tracker does the deciding; this
     // only exists because the options are built before the tracker is.
@@ -290,10 +364,10 @@ public sealed class RedirectEngine : IDisposable
     // Rebuilds only the outbound instances the configuration has actually changed, and tells
     // everything keyed by outbound that theirs is gone. Shared by Start and ApplyConfig: an edit
     // made while the engine was off has to reach the cache exactly as one made while it runs.
-    private void ReconcileOutbounds(AppConfig config)
+    private async Task ReconcileOutboundsAsync(AppConfig config)
     {
         IReadOnlyCollection<Guid> changed =
-            _outboundFactory.ApplyOutbounds(config.Outbounds, config.WireProxyPath);
+            await _outboundFactory.ApplyOutboundsAsync(config.Outbounds, config.WireProxyPath).ConfigureAwait(false);
         foreach (Guid outboundId in changed)
         {
             // The edit may be exactly the fix for what we learned (a proxy that now has an IPv6
@@ -661,5 +735,8 @@ public sealed class RedirectEngine : IDisposable
         }
     }
 
-    public void Dispose() => Stop();
+    public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
+
+    // Bridge for the host, which still shuts down synchronously.
+    public void Dispose() => StopAsync().GetAwaiter().GetResult();
 }

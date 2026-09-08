@@ -42,7 +42,7 @@ namespace ProxyDivert.Core.Processes;
 /// noticed — the event source's pump, or the reconcile loop — and a handler that blocks delays the next
 /// process being reported, so handlers are expected to be short.
 /// </remarks>
-public sealed class ProcessInventory : IDisposable
+public sealed class ProcessInventory : IDisposable, IAsyncDisposable
 {
     /// <summary>How often the table is compared against a fresh listing while events are working.</summary>
     /// <remarks>
@@ -431,12 +431,22 @@ public sealed class ProcessInventory : IDisposable
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         try { _cts.Cancel(); } catch { }
         StopEvents();
-        try { _loopTask?.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        if (_loopTask is not null)
+        {
+            // Bounded, because the scan loop can be inside a pass over every process on the
+            // machine and the application should not be held open waiting for it to finish.
+            try { await _loopTask.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
+            catch { }
+        }
         _cts.Dispose();
         _processes.Clear();
     }
+
+    // Bridge for the host, which still shuts down synchronously. Also what the container calls:
+    // ServiceProvider.Dispose refuses a singleton that offers DisposeAsync alone.
+    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 }
