@@ -26,7 +26,7 @@ namespace ProxyDivert.Wpf.Services;
 /// factory in them. It stays a thin facade so a view model still asks for
 /// <see cref="Engine"/> rather than resolving services itself.
 /// </remarks>
-public sealed class AppServices : IDisposable
+public sealed class AppServices : IAsyncDisposable
 {
     private readonly ServiceProvider _provider;
 
@@ -122,11 +122,6 @@ public sealed class AppServices : IDisposable
         Engine = _provider.GetRequiredService<RedirectEngine>();
         Vpn = _provider.GetRequiredService<VpnConnectionKeeper>();
 
-        // The tunnels that were up when the window last closed come back now, before anything is
-        // redirected: they were switched on by the user and never switched off, and dialling one
-        // takes seconds that would otherwise be paid by whichever request needed it first.
-        Vpn.Sync(Config.Outbounds, Config.WireProxyPath);
-
         // Before anything else asks: collecting is what makes starting the engine cheap, and the
         // first sweep is about thirty milliseconds, so it is done here rather than deferred.
         Processes = _provider.GetRequiredService<ProcessInventory>();
@@ -177,15 +172,15 @@ public sealed class AppServices : IDisposable
         // the engine exists. Applying it here is what makes it take effect without a restart.
         _loggerProvider.SetFilePath(EffectiveLogPath);
 
-        return Enqueue(() =>
+        return Enqueue(async () =>
         {
             try
             {
                 ConfigStore.Save(snapshot);
                 // Whether or not anything is being redirected: a VPN edited or switched off on the
                 // Outbounds tab has to reach its tunnel, and the tunnels do not belong to the run.
-                Vpn.Sync(snapshot.Outbounds, snapshot.WireProxyPath);
-                if (Engine.IsRunning) Engine.ApplyConfig(snapshot);
+                await Vpn.SyncAsync(snapshot.Outbounds, snapshot.WireProxyPath).ConfigureAwait(false);
+                if (Engine.IsRunning) await Engine.ApplyConfigAsync(snapshot).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -194,21 +189,36 @@ public sealed class AppServices : IDisposable
         });
     }
 
+    /// <summary>
+    /// Brings back the tunnels that were up when the window last closed, and returns without
+    /// waiting for them to dial.
+    /// </summary>
+    /// <remarks>
+    /// They were switched on by the user and never switched off, and dialling one takes seconds
+    /// that would otherwise be paid by whichever request needed it first. Called from startup
+    /// rather than from the constructor because it goes through the work queue, which is what keeps
+    /// it in order with the first save the user makes.
+    /// </remarks>
+    public Task ConnectKeptVpnsAsync()
+        => Enqueue(() => Vpn.SyncAsync(Config.Outbounds, Config.WireProxyPath));
+
     /// <summary>Starts the engine on a snapshot of the configuration, off the caller's thread.</summary>
     /// <remarks>
-    /// The VPN tunnels the filters route through are switched on first, on this thread, so the
-    /// engine never starts routing at a tunnel that is down — every connection the rule caught
-    /// would fail until someone noticed. Dialling itself is in the background; only the switch is
-    /// flicked here, and it is written to the file so it survives the next start.
+    /// The VPN tunnels the filters route through are switched on first, before the snapshot is
+    /// taken, so the engine never starts routing at a tunnel that is down — every connection the
+    /// rule caught would fail until someone noticed. Dialling itself is in the background; only the
+    /// switch is flicked here, and it is written to the file so it survives the next start.
     /// </remarks>
-    public Task StartEngineAsync()
+    public async Task StartEngineAsync()
     {
-        IReadOnlyCollection<Guid> switchedOn = Vpn.ConnectRoutedVpns(Config);
+        // Deliberately awaited without ConfigureAwait(false): the snapshot below must be taken on
+        // the thread that owns the grids, the same as everywhere else in this class.
+        IReadOnlyCollection<Guid> switchedOn = await Vpn.ConnectRoutedVpnsAsync(Config);
         AppConfig snapshot = ConfigStore.Clone(Config);
-        return Enqueue(() =>
+        await Enqueue(async () =>
         {
             if (switchedOn.Count > 0) ConfigStore.Save(snapshot);
-            Engine.Start(snapshot);
+            await Engine.StartAsync(snapshot).ConfigureAwait(false);
         });
     }
 
@@ -216,7 +226,7 @@ public sealed class AppServices : IDisposable
     /// Stops the engine. The VPN tunnels stay up: the user switched them on, and nothing here has
     /// been asked to end their session with the provider.
     /// </summary>
-    public Task StopEngineAsync() => Enqueue(Engine.Stop);
+    public Task StopEngineAsync() => Enqueue(Engine.StopAsync);
 
     /// <summary>
     /// Switches one VPN's tunnel on or off and remembers it. The engine is not told: which
@@ -229,12 +239,12 @@ public sealed class AppServices : IDisposable
 
         outbound.KeepConnected = connected;
         AppConfig snapshot = ConfigStore.Clone(Config);
-        return Enqueue(() =>
+        return Enqueue(async () =>
         {
             try
             {
                 ConfigStore.Save(snapshot);
-                Vpn.Sync(snapshot.Outbounds, snapshot.WireProxyPath);
+                await Vpn.SyncAsync(snapshot.Outbounds, snapshot.WireProxyPath).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -256,25 +266,34 @@ public sealed class AppServices : IDisposable
     // Chains the work behind whatever is already queued. The task handed back carries the work's
     // own outcome, exception included; the chain itself never faults, so the next piece of work
     // runs whatever happened to the previous one.
-    private Task Enqueue(Action work)
+    private Task Enqueue(Func<Task> work)
     {
         lock (_workLock)
         {
-            Task next = _lastWork.ContinueWith(
-                _ => work(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            // Unwrapped, or the queue would move on the moment the work STARTED and a save could
+            // overtake the engine still applying the one before it.
+            Task next = _lastWork
+                .ContinueWith(_ => work(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default)
+                .Unwrap();
             _lastWork = next.ContinueWith(_ => { }, TaskScheduler.Default);
             return next;
         }
     }
 
-    public void Dispose()
+    /// <remarks>
+    /// Async all the way down: stopping the engine unloads a driver and closes tunnels, and putting
+    /// a VPN down is a conversation with the far side. The application still has to wait for all of
+    /// it before the process goes, but that wait belongs at the edge — see App.OnExit, which is the
+    /// one place left that blocks on a task.
+    /// </remarks>
+    public async ValueTask DisposeAsync()
     {
         _logRollTimer.Dispose();
         // A save the user made a moment before closing the window must still reach the disk, and
         // an engine stop in progress must finish before the engine is torn down under it.
-        try { WhenIdleAsync().Wait(TimeSpan.FromSeconds(10)); } catch { }
-        Engine.Dispose();
-        Processes.Dispose();
-        _provider.Dispose();
+        try { await WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false); } catch { }
+        await Engine.DisposeAsync().ConfigureAwait(false);
+        await Processes.DisposeAsync().ConfigureAwait(false);
+        await _provider.DisposeAsync().ConfigureAwait(false);
     }
 }

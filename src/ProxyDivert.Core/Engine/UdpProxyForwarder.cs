@@ -18,7 +18,7 @@ namespace ProxyDivert.Core.Engine;
 // sockets talking to the same server apart. Giving each source port its own tunnel makes the tunnel
 // itself the correlation key — the reply loop knows exactly which port to inject into, and on which
 // of the relay's two loopback listeners.
-public sealed class UdpProxyForwarder : IDisposable, IAsyncDisposable
+public sealed class UdpProxyForwarder : IAsyncDisposable
 {
     // A tunnel unused for this long is finished with. Browsers open a fresh source port for every
     // QUIC connection and every DNS query, so without an upper bound on their lifetime the table
@@ -185,8 +185,6 @@ public sealed class UdpProxyForwarder : IDisposable, IAsyncDisposable
         _cts.Dispose();
     }
 
-    // Bridge for the engine, which still stops synchronously. Goes with that.
-    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 
     private readonly struct TunnelKey : IEquatable<TunnelKey>
     {

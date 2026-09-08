@@ -39,7 +39,7 @@ public sealed class OutboundSourceFactory : IDisposable, IAsyncDisposable
     /// whichever tunnel it runs.
     /// </summary>
     /// <remarks>
-    /// Set through <see cref="ApplyOutbounds"/> rather than directly, because changing it makes
+    /// Set through <see cref="ApplyOutboundsAsync"/> rather than directly, because changing it makes
     /// every live VPN instance stale and that has to be noticed in the same step.
     /// </remarks>
     public string? WireProxyPath { get; private set; }
@@ -70,7 +70,7 @@ public sealed class OutboundSourceFactory : IDisposable, IAsyncDisposable
     /// now wrong, and returns the ids that were dropped.
     /// </summary>
     /// <remarks>
-    /// The alternative — <see cref="InvalidateAll"/> on every save — is what made saving an
+    /// The alternative — <see cref="InvalidateAllAsync"/> on every save — is what made saving an
     /// unrelated setting tear down a running VPN tunnel and re-handshake it. Everything keyed by
     /// outbound elsewhere (learned IPv6 capability, UDP tunnels) is invalidated from the returned
     /// set, so those stay in step without also being thrown away wholesale.
@@ -99,10 +99,6 @@ public sealed class OutboundSourceFactory : IDisposable, IAsyncDisposable
         }
         return invalidated;
     }
-
-    // See Dispose: bridge for callers not yet converted.
-    public IReadOnlyCollection<Guid> ApplyOutbounds(IEnumerable<Outbound> outbounds, string? wireProxyPath)
-        => ApplyOutboundsAsync(outbounds, wireProxyPath).GetAwaiter().GetResult();
 
     /// <summary>
     /// Turns IPv6 off (or back on) for the live instance of an outbound. Used when a connection
@@ -146,11 +142,6 @@ public sealed class OutboundSourceFactory : IDisposable, IAsyncDisposable
         foreach (var kv in _cache) await DisposeSourceAsync(kv.Value.SourceIfBuilt).ConfigureAwait(false);
         _cache.Clear();
     }
-
-    // See Dispose: bridges for callers not yet converted.
-    public void Invalidate(Guid outboundId) => InvalidateAsync(outboundId).AsTask().GetAwaiter().GetResult();
-
-    public void InvalidateAll() => InvalidateAllAsync().AsTask().GetAwaiter().GetResult();
 
     // Builds a source without caching it — used by the UI's "test this outbound" button, so a
     // test never disturbs the instance live traffic is using.
@@ -329,10 +320,10 @@ public sealed class OutboundSourceFactory : IDisposable, IAsyncDisposable
 
     public async ValueTask DisposeAsync() => await InvalidateAllAsync().ConfigureAwait(false);
 
-    // Bridge for the callers that are still synchronous. Every await underneath is
-    // ConfigureAwait(false), so blocking here cannot deadlock on a UI context — but it does hold
-    // the calling thread for as long as the teardown takes, which is the whole point of removing
-    // it. Goes away once the last caller is converted.
+    // What the container calls: ServiceProvider.Dispose refuses a singleton that offers DisposeAsync
+    // alone, and this is registered as one. Blocking here cannot deadlock — every await underneath
+    // is ConfigureAwait(false) — but it does hold the calling thread for as long as putting the
+    // tunnels down takes, so the application goes through DisposeAsync instead.
     public void Dispose() => InvalidateAllAsync().AsTask().GetAwaiter().GetResult();
 
     // The instance plus what it was built from, so a later configuration can be compared against

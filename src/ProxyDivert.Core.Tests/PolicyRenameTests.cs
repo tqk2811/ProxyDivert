@@ -114,7 +114,8 @@ public class PolicyRenameTests
             System.IO.Directory.CreateDirectory(directory);
             string path = System.IO.Path.Combine(directory, "config.json");
 
-            using (var services = new ProxyDivert.Wpf.Services.AppServices(path))
+            var services = new ProxyDivert.Wpf.Services.AppServices(path);
+            try
             {
                 var model = new ProxyDivert.Wpf.ViewModels.RulesViewModel(services);
                 model.AddPolicyCommand.Execute(null);
@@ -140,6 +141,12 @@ public class PolicyRenameTests
                 // The save runs off the window's thread; the file is only there once it has.
                 services.WhenIdleAsync().Wait(TimeSpan.FromSeconds(10));
                 savedFile = System.IO.File.ReadAllText(path);
+            }
+            finally
+            {
+                // AppServices only tears down asynchronously now; this thread is the STA one the
+                // window lives on, and nothing in that teardown comes back to it.
+                services.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }
 
             System.IO.Directory.Delete(directory, recursive: true);

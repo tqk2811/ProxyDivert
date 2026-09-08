@@ -258,7 +258,7 @@ internal sealed class KeptVpnTunnel : IAsyncDisposable
         // would go unobserved. Letting the loop finish and hand the source to the GC costs one
         // registration; getting it wrong costs the row.
         if (_loop is null || _loop.IsCompleted) { try { _cts.Dispose(); } catch { } return; }
-        _loop.ContinueWith(
+        _ = _loop.ContinueWith(
             static (_, state) => { try { ((CancellationTokenSource)state!).Dispose(); } catch { } },
             _cts, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }

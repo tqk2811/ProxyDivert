@@ -141,11 +141,6 @@ public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
             tunnel.Start();
         }
     }
-
-    // See Dispose: bridge for the host, which is still synchronous here.
-    public void Sync(IEnumerable<Outbound> outbounds, string? wireProxyPath)
-        => SyncAsync(outbounds, wireProxyPath).GetAwaiter().GetResult();
-
     /// <summary>
     /// Switches on every VPN the configuration actually routes through — the filters' policies'
     /// outbounds — and brings the tunnels up. Returns the ones that were off until now, so the
@@ -175,11 +170,6 @@ public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
         await SyncAsync(config.Outbounds, config.WireProxyPath).ConfigureAwait(false);
         return switchedOn;
     }
-
-    // See Dispose: bridge for the host, which is still synchronous here.
-    public IReadOnlyCollection<Guid> ConnectRoutedVpns(AppConfig config)
-        => ConnectRoutedVpnsAsync(config).GetAwaiter().GetResult();
-
     private void OnTunnelStatusChanged(VpnStatus status) => Raise(status);
 
     private void Raise(VpnStatus status)
@@ -206,7 +196,7 @@ public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
         }
     }
 
-    // Bridge, and one the container needs: ServiceProvider.Dispose refuses a singleton that only
-    // offers DisposeAsync. Goes when the host disposes its container asynchronously.
+    // What the container calls: ServiceProvider.Dispose refuses a singleton that only
+    // offers DisposeAsync. The application itself goes through DisposeAsync.
     public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 }

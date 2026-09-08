@@ -180,13 +180,13 @@ Console.WriteLine($"UDP: {options.UdpMode}, QUIC blocked: {options.BlockQuic}, I
 
 // One container, wired exactly like the window's: the libraries register their own services and
 // this application supplies the only thing they ask for, somewhere to put log lines.
-using ServiceProvider services = new ServiceCollection()
+await using ServiceProvider services = new ServiceCollection()
     .AddProxyDivert(config.DiagnosticLogPath, options.Verbose ? LogLevel.Debug : LogLevel.Information)
     .BuildServiceProvider();
 
 // The process table has to be collecting before the engine reads it — the engine matches filters
 // against the table rather than going to the operating system itself.
-using ProcessInventory processes = services.GetRequiredService<ProcessInventory>();
+await using ProcessInventory processes = services.GetRequiredService<ProcessInventory>();
 processes.UseEventSource(
     config.ProcessDetection == ProcessDetectionMode.ProcessEvents ? config.ProcessEventSource : null);
 processes.Start();
@@ -207,11 +207,11 @@ engine.Connections.Closed += c =>
 // on demand would put the subprocess launch and the handshake in front of whichever connection
 // happened to be first. The window keeps them across runs; a command-line run switches on whatever
 // its own configuration routes through a VPN and lets the container drop them when it exits.
-services.GetRequiredService<VpnConnectionKeeper>().ConnectRoutedVpns(config);
+await services.GetRequiredService<VpnConnectionKeeper>().ConnectRoutedVpnsAsync(config);
 
 try
 {
-    engine.Start(config);
+    await engine.StartAsync(config);
 }
 catch (Exception ex)
 {
@@ -273,7 +273,7 @@ finally
     Console.WriteLine();
     Console.WriteLine("Stopping…");
     launched?.Dispose();
-    engine.Stop();
+    await engine.StopAsync();
     selfHosted?.Dispose();
 }
 

@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -36,7 +37,7 @@ public class VpnConnectionKeeperTests
     };
 
     [Fact]
-    public void ATunnelThatCannotStart_IsRetriedWithAGrowingDelay()
+    public async Task ATunnelThatCannotStart_IsRetriedWithAGrowingDelay()
     {
         Outbound vpn = MissingConfigVpn();
         var seen = new List<VpnStatus>();
@@ -52,7 +53,7 @@ public class VpnConnectionKeeperTests
         };
 
         var clock = Stopwatch.StartNew();
-        keeper.Sync(new[] { vpn }, null);
+        await keeper.SyncAsync(new[] { vpn }, null);
 
         // Two failures cost 1s of backoff between them, so this waits generously and measures.
         Assert.True(secondRetry.Wait(TimeSpan.FromSeconds(10)), "the keeper never reached a second attempt");
@@ -78,14 +79,14 @@ public class VpnConnectionKeeperTests
     }
 
     [Fact]
-    public void ADisabledVpnOutbound_IsNotKept()
+    public async Task ADisabledVpnOutbound_IsNotKept()
     {
         Outbound vpn = MissingConfigVpn();
         vpn.IsEnabled = false;
 
         using var factory = new OutboundSourceFactory();
         using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
-        keeper.Sync(new[] { vpn }, null);
+        await keeper.SyncAsync(new[] { vpn }, null);
 
         Assert.Empty(keeper.Statuses);
         Assert.Null(keeper.StatusOf(vpn.Id));
@@ -94,20 +95,20 @@ public class VpnConnectionKeeperTests
     // Saving the configuration must not disturb a tunnel whose settings are unchanged — that is
     // the whole point of the signature comparison, and the reason a VPN survives an unrelated edit.
     [Fact]
-    public void SyncingTheSameConfigurationTwice_DoesNotRestartTheTunnel()
+    public async Task SyncingTheSameConfigurationTwice_DoesNotRestartTheTunnel()
     {
         Outbound vpn = MissingConfigVpn();
 
         using var factory = new OutboundSourceFactory();
         using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
 
-        keeper.Sync(new[] { vpn }, null);
+        await keeper.SyncAsync(new[] { vpn }, null);
         VpnStatus? before = keeper.StatusOf(vpn.Id);
         Assert.NotNull(before);
 
         var stopped = new List<VpnStatus>();
         keeper.StatusChanged += s => { if (s.State == VpnConnectionState.Stopped) lock (stopped) stopped.Add(s); };
-        keeper.Sync(new[] { vpn }, null);
+        await keeper.SyncAsync(new[] { vpn }, null);
 
         // A restarted tunnel would have announced itself stopped on the way down.
         lock (stopped) Assert.Empty(stopped);
@@ -117,17 +118,17 @@ public class VpnConnectionKeeperTests
     // Disabling a VPN while the engine runs has to take the tunnel down with it, or the user has
     // turned something off and left a subprocess talking to a VPN server.
     [Fact]
-    public void DisablingAVpnOutbound_StopsKeepingIt()
+    public async Task DisablingAVpnOutbound_StopsKeepingIt()
     {
         Outbound vpn = MissingConfigVpn();
 
         using var factory = new OutboundSourceFactory();
         using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
-        keeper.Sync(new[] { vpn }, null);
+        await keeper.SyncAsync(new[] { vpn }, null);
         Assert.Single(keeper.Statuses);
 
         vpn.IsEnabled = false;
-        keeper.Sync(new[] { vpn }, null);
+        await keeper.SyncAsync(new[] { vpn }, null);
 
         Assert.Empty(keeper.Statuses);
     }
@@ -136,14 +137,14 @@ public class VpnConnectionKeeperTests
     // the moment the engine started, which is why turning redirection on brought up tunnels the
     // user had never asked for.
     [Fact]
-    public void AVpnThatIsNotSwitchedOn_IsNotKept()
+    public async Task AVpnThatIsNotSwitchedOn_IsNotKept()
     {
         Outbound vpn = MissingConfigVpn();
         vpn.KeepConnected = false;
 
         using var factory = new OutboundSourceFactory();
         using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
-        keeper.Sync(new[] { vpn }, null);
+        await keeper.SyncAsync(new[] { vpn }, null);
 
         Assert.Empty(keeper.Statuses);
     }
@@ -151,7 +152,7 @@ public class VpnConnectionKeeperTests
     // Switching redirection on: a filter routing through a VPN needs that tunnel up, so it is
     // switched on for the user rather than failing every connection the rule catches.
     [Fact]
-    public void StartingARunSwitchesOn_OnlyTheVpnsAFilterRoutesThrough()
+    public async Task StartingARunSwitchesOn_OnlyTheVpnsAFilterRoutesThrough()
     {
         Outbound routed = MissingConfigVpn();
         routed.KeepConnected = false;
@@ -162,7 +163,7 @@ public class VpnConnectionKeeperTests
 
         using var factory = new OutboundSourceFactory();
         using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
-        IReadOnlyCollection<Guid> switchedOn = keeper.ConnectRoutedVpns(config);
+        IReadOnlyCollection<Guid> switchedOn = await keeper.ConnectRoutedVpnsAsync(config);
 
         Assert.Equal(new[] { routed.Id }, switchedOn);
         Assert.True(routed.KeepConnected);
@@ -173,7 +174,7 @@ public class VpnConnectionKeeperTests
 
     // A filter that is switched off routes nothing, so it is no reason to dial anything.
     [Fact]
-    public void ADisabledFilter_SwitchesOnNothing()
+    public async Task ADisabledFilter_SwitchesOnNothing()
     {
         Outbound routed = MissingConfigVpn();
         routed.KeepConnected = false;
@@ -183,7 +184,7 @@ public class VpnConnectionKeeperTests
         using var factory = new OutboundSourceFactory();
         using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
 
-        Assert.Empty(keeper.ConnectRoutedVpns(config));
+        Assert.Empty(await keeper.ConnectRoutedVpnsAsync(config));
         Assert.False(routed.KeepConnected);
         Assert.Empty(keeper.Statuses);
     }

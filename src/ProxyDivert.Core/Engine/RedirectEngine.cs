@@ -196,9 +196,6 @@ public sealed class RedirectEngine : IDisposable
         }
     }
 
-    // Bridge for the host, which still starts synchronously.
-    public void Start(AppConfig config) => StartAsync(config).GetAwaiter().GetResult();
-
     // Applies an edited configuration without dropping the redirector: rules, outbounds and DNS
     // preferences take effect on the NEXT connection. Options that live in the WinDivert handles
     // (the IPv6 mode, DoH) need a restart — the UI says so rather than silently ignoring them.
@@ -259,9 +256,6 @@ public sealed class RedirectEngine : IDisposable
         try { ConfigurationApplied?.Invoke(); }
         catch (Exception ex) { _logger.LogWarning(ex, "a ConfigurationApplied subscriber threw"); }
     }
-
-    // Bridge for the host, which still saves synchronously.
-    public void ApplyConfig(AppConfig config) => ApplyConfigAsync(config).GetAwaiter().GetResult();
 
     /// <summary>
     /// Redirects one specific process (and, by default, whatever it spawns) without a rule
@@ -353,9 +347,6 @@ public sealed class RedirectEngine : IDisposable
             _lifecycle.Release();
         }
     }
-
-    // Bridge for the host, which still starts and stops synchronously.
-    public void Stop() => StopAsync().GetAwaiter().GetResult();
 
     // Asked by the redirector's socket pump, once per process. The tracker does the deciding; this
     // only exists because the options are built before the tracker is.
@@ -737,6 +728,7 @@ public sealed class RedirectEngine : IDisposable
 
     public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
 
-    // Bridge for the host, which still shuts down synchronously.
+    // What the container calls: ServiceProvider.Dispose refuses a singleton that offers
+    // DisposeAsync alone. The application itself goes through DisposeAsync.
     public void Dispose() => StopAsync().GetAwaiter().GetResult();
 }

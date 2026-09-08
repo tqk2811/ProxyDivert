@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -27,48 +28,48 @@ public class OutboundSourceFactoryTests
     };
 
     [Fact]
-    public void ApplyOutbounds_KeepsTheInstanceOfAnUntouchedOutbound()
+    public async Task ApplyOutbounds_KeepsTheInstanceOfAnUntouchedOutbound()
     {
         Guid id = Guid.NewGuid();
         Outbound outbound = Socks5(id);
         using var factory = new OutboundSourceFactory();
 
         IProxySource first = factory.GetOrCreate(outbound);
-        IReadOnlyCollection<Guid> invalidated = factory.ApplyOutbounds(new[] { outbound }, null);
+        IReadOnlyCollection<Guid> invalidated = await factory.ApplyOutboundsAsync(new[] { outbound }, null);
 
         Assert.Empty(invalidated);
         Assert.Same(first, factory.GetOrCreate(outbound));
     }
 
     [Fact]
-    public void ApplyOutbounds_RebuildsAnEditedOutbound()
+    public async Task ApplyOutbounds_RebuildsAnEditedOutbound()
     {
         Guid id = Guid.NewGuid();
         using var factory = new OutboundSourceFactory();
         IProxySource first = factory.GetOrCreate(Socks5(id));
 
         Outbound edited = Socks5(id, "socks5://127.0.0.1:9999");
-        IReadOnlyCollection<Guid> invalidated = factory.ApplyOutbounds(new[] { edited }, null);
+        IReadOnlyCollection<Guid> invalidated = await factory.ApplyOutboundsAsync(new[] { edited }, null);
 
         Assert.Equal(new[] { id }, invalidated);
         Assert.NotSame(first, factory.GetOrCreate(edited));
     }
 
     [Fact]
-    public void ApplyOutbounds_DropsAnOutboundThatIsGone()
+    public async Task ApplyOutbounds_DropsAnOutboundThatIsGone()
     {
         Guid id = Guid.NewGuid();
         using var factory = new OutboundSourceFactory();
         factory.GetOrCreate(Socks5(id));
 
-        IReadOnlyCollection<Guid> invalidated = factory.ApplyOutbounds(Array.Empty<Outbound>(), null);
+        IReadOnlyCollection<Guid> invalidated = await factory.ApplyOutboundsAsync(Array.Empty<Outbound>(), null);
 
         Assert.Equal(new[] { id }, invalidated);
         Assert.Null(factory.Find(id));
     }
 
     [Fact]
-    public void ApplyOutbounds_LeavesTheOtherOutboundsAloneWhenOneChanges()
+    public async Task ApplyOutbounds_LeavesTheOtherOutboundsAloneWhenOneChanges()
     {
         Guid edited = Guid.NewGuid();
         Guid untouched = Guid.NewGuid();
@@ -76,7 +77,7 @@ public class OutboundSourceFactoryTests
         factory.GetOrCreate(Socks5(edited));
         IProxySource keep = factory.GetOrCreate(Socks5(untouched));
 
-        IReadOnlyCollection<Guid> invalidated = factory.ApplyOutbounds(
+        IReadOnlyCollection<Guid> invalidated = await factory.ApplyOutboundsAsync(
             new[] { Socks5(edited, "socks5://127.0.0.1:2222"), Socks5(untouched) }, null);
 
         Assert.Equal(new[] { edited }, invalidated);

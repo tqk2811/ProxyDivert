@@ -40,6 +40,11 @@ public partial class App : Application
 
         _services = new AppServices();
 
+        // Not awaited: the tunnels the user left switched on come back in the background, and the
+        // window must not wait on a dial that takes seconds. Failures land in the log like any
+        // other supervision failure.
+        _ = _services.ConnectKeptVpnsAsync();
+
         // The Run-key entry an earlier version wrote never started anything — Windows skips a Run
         // entry that needs elevation — so it is cleared here rather than left listed under the
         // machine's startup apps as something that plainly does not work.
@@ -86,7 +91,15 @@ public partial class App : Application
         // keep the target's traffic pointed at a relay that no longer exists.
         _tray?.Dispose();
         _mainViewModel?.Dispose();
-        _services?.Dispose();
+
+        // The one place left in the application that blocks on a task, and it is here on purpose.
+        // Everything underneath tears down asynchronously — putting a VPN down is a conversation
+        // with the far side, unloading the driver takes as long as it takes — but OnExit cannot be
+        // async, and the process must not go before that work is finished. Nothing below resumes on
+        // this thread (every await in the chain is ConfigureAwait(false)), so waiting here cannot
+        // deadlock against the dispatcher.
+        if (_services is not null) _services.DisposeAsync().AsTask().GetAwaiter().GetResult();
+
         base.OnExit(e);
     }
 }
