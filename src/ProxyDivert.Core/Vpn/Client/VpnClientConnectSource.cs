@@ -83,11 +83,20 @@ internal sealed class VpnClientConnectSource : IConnectSource
         return Task.FromResult(_stream);
     }
 
+    /// <remarks>
+    /// Aborts rather than closes. Disposing a <see cref="VpnNetworkStream"/> sends a FIN, which
+    /// only says this side has finished sending; the connection then waits for the server's own
+    /// FIN, and a server has no reason to send one for a connection it thinks is merely idle.
+    /// Every abandoned request — a cancelled download, a closed tab, a route changed by Save —
+    /// would leave a port and a receive queue alive inside the tunnel for as long as the tunnel
+    /// ran. An RST ends it for both sides at once.
+    /// </remarks>
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        _stream?.Dispose();
+        if (_stream is VpnNetworkStream vpnStream) vpnStream.Abort();
+        else _stream?.Dispose();
         _stream = null;
     }
 }
