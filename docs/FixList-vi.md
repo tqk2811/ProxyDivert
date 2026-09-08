@@ -66,7 +66,7 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 - [x] **Vị trí**: [RedirectEngine.cs:184-214](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L184-L214), [RedirectEngine.cs:288-300](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L288-L300), [UdpProxyForwarder.cs:179-186](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L179-L186)
 - **Vấn đề**: mỗi `PortTunnel.Dispose` chờ tới 2 giây, tuần tự, dưới lock. Cộng với A2, sửa một outbound có thể khoá `_stateLock` hàng chục giây, chặn `Start`/`Stop`/`ApplyConfig` kế tiếp. `CloseWhereRouteChanged` cũng gọi `Cancel()` dưới lock nên callback huỷ chạy inline.
 - **Cách sửa**: thu thập danh sách cần bỏ dưới lock, dispose ngoài lock (hoặc trên thread pool).
-- **Đã sửa (một phần)**: commit "refactor(udp): close a tunnel without holding up the next save". `InvalidateOutbound` vẫn gỡ khỏi bảng dưới lock (đó mới là thứ chặn lưu lượng) nhưng đẩy phần đóng sang thread pool, nên `ApplyConfig` không còn chờ. `PortTunnel` chuyển sang `IAsyncDisposable`. **Còn lại**: `CloseWhereRouteChanged` vẫn gọi `Cancel()` dưới lock — làm cùng chặng `RedirectEngine.StopAsync` của E1.2.
+- **Đã sửa**: commit "refactor(udp): close a tunnel without holding up the next save". `InvalidateOutbound` vẫn gỡ khỏi bảng dưới lock (đó mới là thứ chặn lưu lượng) nhưng đẩy phần đóng sang thread pool, nên `ApplyConfig` không còn chờ. `PortTunnel` chuyển sang `IAsyncDisposable`. **Phần còn lại đã xong** ở commit "refactor(engine): stop doing the slow part of a save under the state lock": `CloseWhereRouteChanged` và `ReconcileOutbounds` đều ra ngoài `_stateLock`, nên callback huỷ không còn chạy dưới lock.
 
 ### A8. Mode nghe socket quét bảng kernel hai lần cho mỗi pid mới — Vừa
 
