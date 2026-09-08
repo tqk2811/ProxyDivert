@@ -28,14 +28,11 @@ public sealed partial class ConditionGroupViewModel : ConditionNodeViewModel
 
     public ConditionGroupViewModel()
     {
-        // Both of these turn on and off with something the user just did to a row: ticking one
-        // enables "group the ticked rows", and turning NOT on takes "ungroup" away. Ticking and
-        // negating both arrive here as a change coming up from a row, so one handler serves.
-        Changed += () =>
-        {
-            GroupSelectedCommand.NotifyCanExecuteChanged();
-            UngroupCommand.NotifyCanExecuteChanged();
-        };
+        // Turning NOT on takes "ungroup" away, and that arrives here as an edit coming up from a
+        // row. Ticking a row does NOT: a tick is not an edit of the filter, so it deliberately
+        // does not raise Changed, and "group the ticked rows" is re-asked from the row's own
+        // PropertyChanged in OnChildPropertyChanged instead.
+        Changed += () => UngroupCommand.NotifyCanExecuteChanged();
     }
 
     public ConditionGroupViewModel(ConditionGroup model) : this()
@@ -120,18 +117,30 @@ public sealed partial class ConditionGroupViewModel : ConditionNodeViewModel
     {
         node.Parent = this;
         node.Changed += RaiseChanged;
+        node.PropertyChanged += OnChildPropertyChanged;
 
         if (index < 0) Children.Add(node);
         else Children.Insert(index, node);
 
+        GroupSelectedCommand.NotifyCanExecuteChanged();
         RaiseChanged();
     }
 
     private void Detach(ConditionNodeViewModel node)
     {
         node.Changed -= RaiseChanged;
+        node.PropertyChanged -= OnChildPropertyChanged;
         node.Parent = null;
         Children.Remove(node);
+        GroupSelectedCommand.NotifyCanExecuteChanged();
+    }
+
+    // Whether "group the ticked rows" is offered is a question about the rows' tick boxes, and a
+    // tick is not an edit — it never reaches Changed. Listened for directly, so the button comes
+    // alive on the second tick instead of waiting for an unrelated edit to wake it.
+    private void OnChildPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(IsSelected)) GroupSelectedCommand.NotifyCanExecuteChanged();
     }
 
     internal void RemoveChild(ConditionNodeViewModel node)
