@@ -53,11 +53,17 @@ public sealed partial class ProcessesViewModel : ObservableObject
 
     public void Reload()
     {
+        // Held across the refill: this runs on every tab switch, and clearing the grid would
+        // otherwise drop whatever row the user had picked before stepping away.
+        ProcessRule? previous = SelectedRule;
+
         Rules.Clear();
         foreach (ProcessRule rule in _services.Config.ProcessRules) Rules.Add(rule);
 
         Policies.Clear();
         foreach (RoutingPolicy policy in _services.Config.Policies) Policies.Add(policy);
+
+        SelectedRule = previous != null && Rules.Contains(previous) ? previous : null;
     }
 
     [RelayCommand]

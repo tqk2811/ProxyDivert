@@ -79,10 +79,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A10. Các tab không đồng bộ danh sách với nhau — Cao
 
-- [ ] **Vị trí**: [ProcessesViewModel.cs:54-61](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L54-L61), [RulesViewModel.cs:127-172](../src/ProxyDivert.Wpf/ViewModels/RulesViewModel.cs#L127-L172), [OutboundsViewModel.cs:146-179](../src/ProxyDivert.Wpf/ViewModels/OutboundsViewModel.cs#L146-L179), [ProcessFilterViewModel.cs:101-106](../src/ProxyDivert.Wpf/ViewModels/ProcessFilterViewModel.cs#L101-L106)
+- [x] **Vị trí**: [ProcessesViewModel.cs:54-61](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L54-L61), [RulesViewModel.cs:127-172](../src/ProxyDivert.Wpf/ViewModels/RulesViewModel.cs#L127-L172), [OutboundsViewModel.cs:146-179](../src/ProxyDivert.Wpf/ViewModels/OutboundsViewModel.cs#L146-L179), [ProcessFilterViewModel.cs:101-106](../src/ProxyDivert.Wpf/ViewModels/ProcessFilterViewModel.cs#L101-L106)
 - **Vấn đề**: mỗi ViewModel nạp `Policies`/`Outbounds` một lần trong constructor. `MainViewModel.ReloadAll` tồn tại nhưng không ai gọi. Thêm policy ở tab Rules → editor filter ở tab Processes không thấy; xoá policy → fallback `Policies[0]` ghi Guid mồ côi vào `rule.PolicyIds`; thêm outbound → combo "Default outbound" tab Rules không thấy.
 - **Vì sao**: user tạo policy rồi gán cho tiến trình là luồng thao tác chính của app.
 - **Cách sửa**: ngắn hạn gọi `ReloadAll()` khi TabControl đổi tab. Đúng hơn (xem E): một `ObservableCollection` duy nhất cho policy và outbound sống trong `AppServices`, các ViewModel bind chung.
+- **Đã sửa**: ProxyDivert — commit "fix(ui): refresh the shared lists when the tab changes". Mới build xanh, CHƯA chạy thử trên UI thật.
 
 ### A11. `LaunchSuspended` resume trước khi luật mới tới engine — Cao
 

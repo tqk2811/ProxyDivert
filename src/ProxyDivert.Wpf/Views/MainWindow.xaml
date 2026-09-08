@@ -19,7 +19,7 @@
     </WindowChrome.WindowChrome>
 
     <Grid>
-        <TabControl>
+        <TabControl SelectedIndex="{Binding SelectedTabIndex}">
             <TabControl.Template>
                 <ControlTemplate TargetType="TabControl">
                     <Grid>

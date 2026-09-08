@@ -63,9 +63,15 @@ public sealed partial class OutboundsViewModel : ObservableObject
 
     public void Reload()
     {
+        // Held across the refill, since a tab switch calls this and the selection is the user's
+        // place in the list.
+        Outbound? previous = Selected;
+
         Outbounds.Clear();
         foreach (Outbound outbound in _services.Config.Outbounds)
             Outbounds.Add(outbound);
+
+        Selected = previous != null && Outbounds.Contains(previous) ? previous : null;
 
         VpnTunnels.Clear();
         foreach (VpnStatus status in _services.Vpn.Statuses)

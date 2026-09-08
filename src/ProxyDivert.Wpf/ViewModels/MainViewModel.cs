@@ -25,6 +25,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isRunning;
 
+    /// <summary>
+    /// Which tab is showing. Bound so that switching tabs can refresh what the new one displays.
+    /// </summary>
+    [ObservableProperty]
+    private int _selectedTabIndex;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasNotice))]
     private string? _statusMessage;
@@ -185,6 +191,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _services.Config.EngineEnabled = IsRunning;
         _services.Save();
     }
+
+    /// <summary>
+    /// Re-reads the shared lists whenever a different tab comes up.
+    /// </summary>
+    /// <remarks>
+    /// Each tab loads the policies and outbounds once, in its constructor, and they are the same
+    /// objects three tabs let the user add to and delete. Without this, a policy created on Rules
+    /// is missing from the filter editor on Processes, a new outbound never reaches the "default
+    /// outbound" list, and a deleted one is still offered — worse, saving a filter then falls back
+    /// to the first policy in a stale list and writes an id that no longer exists. Creating a
+    /// policy and assigning it to a program is the main thing this application is for, so those
+    /// two lists disagreeing is not a corner case.
+    ///
+    /// Refreshing on the switch is the cheap version of the fix; one shared collection owned above
+    /// the tabs is the right one.
+    /// </remarks>
+    partial void OnSelectedTabIndexChanged(int value) => ReloadAll();
 
     [RelayCommand]
     private void ReloadAll()
