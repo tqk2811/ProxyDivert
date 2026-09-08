@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProxyDivert.Core.Processes;
+using ProxyDivert.Core.Processes.Enums;
+using ProxyDivert.Core.Processes.Interfaces;
 using ProxyDivert.Core.Processes.Models;
 using Xunit;
 
@@ -182,5 +184,65 @@ public class ProcessInventoryTests
 
         Assert.Empty(events.Stopped);
         Assert.Equal(2, inventory.Count);
+    }
+
+    [Fact]
+    public void A_process_that_starts_while_the_machine_is_being_listed_is_not_retired_as_exited()
+    {
+        var machine = new FakeProcessMachine().Start(100, "chrome.exe");
+        var source = new FakeEventSource();
+        using var inventory = new ProcessInventory(
+            NullLogger<ProcessInventory>.Instance, machine, machine, source);
+        var events = new Recorder(inventory);
+        inventory.Start();
+
+        // The renderer is created after the listing has been taken, and its event arrives on the
+        // source's thread rather than through the reconcile. Nothing in the listing mentions it,
+        // which used to be read as "it has exited" — detaching a process one millisecond old and
+        // leaving it unredirected until the next pass five seconds later.
+        machine.AfterListing = () =>
+        {
+            machine.Start(200, "chrome.exe", parentPid: 100);
+            source.RaiseStarted(new ProcessStartedEvent(200, 100, "chrome.exe", SessionId: 1));
+        };
+        inventory.Refresh();
+
+        Assert.NotNull(inventory.Get(200));
+        Assert.Empty(events.Stopped);
+        Assert.Contains(events.Started, p => p.ProcessId == 200);
+    }
+
+    [Fact]
+    public void A_process_that_exits_is_still_retired_on_the_next_pass()
+    {
+        var machine = new FakeProcessMachine().Start(100, "chrome.exe").Start(200, "code.exe");
+        using ProcessInventory inventory = Inventory(machine);
+        var events = new Recorder(inventory);
+        inventory.Refresh();
+
+        machine.Exit(200);
+        inventory.Refresh();
+
+        // The guard above must not turn into "nothing is ever retired": an entry that was in the
+        // table before the listing started and is absent from it has genuinely gone.
+        Assert.Null(inventory.Get(200));
+        Assert.Equal(new uint[] { 200 }, events.Stopped.Select(p => p.ProcessId).ToArray());
+    }
+
+    // Stands in for ETW or WMI: the test decides when a process event arrives, and the same object
+    // is handed back as the factory so the inventory subscribes to it.
+    private sealed class FakeEventSource : IProcessEventSource, IProcessEventSourceFactory
+    {
+        public string Name => "fake";
+
+        public event Action<ProcessStartedEvent>? Started;
+        public event Action<uint>? Stopped;
+
+        public IProcessEventSource Create(ProcessEventSourceKind kind) => this;
+        public bool TryStart() => true;
+        public void Dispose() { }
+
+        public void RaiseStarted(ProcessStartedEvent started) => Started?.Invoke(started);
+        public void RaiseStopped(uint processId) => Stopped?.Invoke(processId);
     }
 }

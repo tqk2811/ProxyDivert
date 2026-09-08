@@ -32,10 +32,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A3. `ProcessInventory.Reconcile` retire nhầm tiến trình vừa start — Vừa
 
-- [ ] **Vị trí**: [ProcessInventory.cs:207-253](../src/ProxyDivert.Core/Processes/ProcessInventory.cs#L207-L253), [ProcessInventory.cs:376-391](../src/ProxyDivert.Core/Processes/ProcessInventory.cs#L376-L391)
+- [x] **Vị trí**: [ProcessInventory.cs:207-253](../src/ProxyDivert.Core/Processes/ProcessInventory.cs#L207-L253), [ProcessInventory.cs:376-391](../src/ProxyDivert.Core/Processes/ProcessInventory.cs#L376-L391)
 - **Vấn đề**: `Reconcile` chụp danh sách tiến trình ở thời điểm T rồi cuối cùng retire mọi pid không có trong đó. `OnProcessStarted` chạy trên thread ETW/WMI **không** lấy `_reconcileLock`, nên tiến trình start ở T+ε được `Admit` → attach → rồi bị `Retire(P, "exited")` ngay → `SocketTracker.RemoveProcess` xoá sạch flow của nó. Nhận lại ở lần reconcile sau (5 giây).
 - **Vì sao**: trình duyệt spawn hàng chục tiến trình con trong vài trăm ms, cửa sổ này trúng thật; kết quả là vài giây đầu của tiến trình đi thẳng không qua proxy.
 - **Cách sửa**: ghi tick lúc bắt đầu `ListAll()`, thêm `AdmittedTicks` vào entry và bỏ qua retire cho entry được admit sau tick đó; hoặc cho `OnProcessStarted` lấy `_reconcileLock`.
+- **Đã sửa**: commit "fix(processes): stop retiring processes that started during the listing". Không cần tick: chụp `HashSet` các pid có trong bảng **trước** `ListAll()` và chỉ retire trong tập đó — entry do event thread admit giữa chừng không nằm trong tập nên không bị đụng, đồng thời tránh được dictionary tick phụ (phải dọn key mồ côi và vẫn còn race giữa ghi tick với `TryAdd`). Kèm test `A_process_that_starts_while_the_machine_is_being_listed_is_not_retired_as_exited` (đã xác nhận fail khi bỏ fix) và `A_process_that_exits_is_still_retired_on_the_next_pass` để chặn hướng "không retire gì nữa".
 
 ### A4. `RebuildResolver` ghi `_resolver` ngoài `_stateLock` — Vừa
 

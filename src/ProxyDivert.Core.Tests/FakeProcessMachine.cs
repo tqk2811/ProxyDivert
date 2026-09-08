@@ -43,14 +43,28 @@ public sealed class FakeProcessMachine : IProcessLister, IProcessDetailsReader
         return this;
     }
 
+    /// <summary>
+    /// Run once the listing has been taken but before the caller gets it — the moment a real
+    /// machine can start a process the listing will never mention. Cleared after it runs.
+    /// </summary>
+    public Action? AfterListing { get; set; }
+
     public IReadOnlyList<ProcessSnapshot> ListAll()
-        => _running.Select(kv => new ProcessSnapshot
+    {
+        List<ProcessSnapshot> listed = _running.Select(kv => new ProcessSnapshot
         {
             ProcessId = kv.Key,
             Name = kv.Value.Name,
             ParentProcessId = kv.Value.ParentPid,
             StartedUtc = kv.Value.StartedUtc,
         }).ToList();
+
+        Action? after = AfterListing;
+        AfterListing = null;
+        after?.Invoke();
+
+        return listed;
+    }
 
     public ProcessDetails Read(uint processId)
     {

@@ -208,6 +208,14 @@ public sealed class ProcessInventory : IDisposable
     {
         lock (_reconcileLock)
         {
+            // Taken BEFORE the listing, and it is the only set this pass may retire from. A process
+            // event arrives on its own thread and does not take this lock, so a process that starts
+            // while the listing is being read is admitted into a table the listing knows nothing
+            // about — and retiring it for being absent would tear down the flows of a process a few
+            // milliseconds old, then re-adopt it one interval later. A browser opening a dozen
+            // children in a burst hits that window for real.
+            var knownBeforeListing = new HashSet<uint>(_processes.Keys);
+
             IReadOnlyList<ProcessSnapshot> listed;
             try
             {
@@ -246,7 +254,7 @@ public sealed class ProcessInventory : IDisposable
                 if (!known.DetailsRead) _processes.TryUpdate(process.ProcessId, WithDetails(known), known);
             }
 
-            foreach (uint pid in _processes.Keys)
+            foreach (uint pid in knownBeforeListing)
             {
                 if (!alive.Contains(pid)) Retire(pid, "exited");
             }
