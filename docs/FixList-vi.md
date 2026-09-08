@@ -150,11 +150,14 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
   | Số điều kiện | `Regex.IsMatch` tĩnh | Giữ instance, thông dịch | Giữ instance, `Compiled` |
   |---|---|---|---|
-  | 8 | 2,63 ms | 2,33 ms | **1,57 ms** |
-  | 20 | 26,41 ms | 6,00 ms | **2,91 ms** |
-  | 40 | 41,62 ms | 9,29 ms | **5,25 ms** |
+  | 8 | 2,04 ms | 1,94 ms | **1,04 ms** |
+  | 20 | 24,46 ms | 5,32 ms | **2,61 ms** |
+  | 40 | 37,58 ms | 8,89 ms | **5,24 ms** |
+
+  Chọn cột cuối. Giữ instance là thứ xoá được vực thẳm ở mốc 15; `Compiled` giảm tiếp khoảng một nửa ở mọi cỡ, và **dưới** mốc 15 thì nó là thứ duy nhất có tác dụng — 8 điều kiện, giữ instance mà thông dịch thì không nhanh hơn cache sẵn của framework. Giá phải trả: ~2 ms dựng mỗi pattern, một lần, và một dynamic method giữ theo biểu thức.
 
 - **Bẫy đã mắc rồi sửa**: bản `RegexCache` đầu gọi `entries.Count >= Capacity` ở **mọi** lần tra. `ConcurrentDictionary.Count` khoá toàn bộ bucket (đúng lỗi B9 đã sửa ở đợt 2), làm bản có cache **chậm hơn** bản cũ (3,07 ms so với 2,59 ms). Chỉ phát hiện được vì đo trước/sau chứ không tin vào microbenchmark. Đã chuyển sang `TryGetValue` trên đường trúng, chỉ kiểm `Count` khi trượt.
+- **Bẫy đo đạc**: bảng số ở commit `792185c` là **đo một lượt mỗi cấu hình** nên dính sai số nguội tới **2×** (lượt đầu 4,48 ms, các lượt sau 1,95 ms cho cùng một thứ). Bảng trên đã đo lại: mỗi ô là **best-of-3 sau khi làm nóng**, cùng một probe, cùng một phiên. Kết luận không đổi nhưng các con số thì đổi — và lần đầu tôi đo nhầm cả mốc nền vì `git stash` chỉ trả về `792185c` (đã có cache) chứ không phải `53742d1`.
 - **Đã cân nhắc và loại**: nâng `Regex.CacheSize` (là thiết lập toàn tiến trình, áp lên cả thư viện khác, mà vẫn còn chi phí băm khoá); `RegexOptions.NonBacktracking` (bỏ được deadline nhưng từ chối lookaround/backreference ngay lúc dựng, và chậm hơn `Compiled` với pattern đơn giản).
 
 ---
