@@ -239,7 +239,7 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 - **Vì sao**: trình duyệt huỷ request là chuyện thường; server không có lý do gửi FIN; mỗi lần là một cổng + hàng đợi nhận sống mãi trong tunnel dài ngày.
 - **Cách sửa**: thư viện lộ `Abort()` (gửi RST) trên `VpnTcpClient`/`VpnNetworkStream` và `VpnClientConnectSource.Dispose` gọi nó; đồng thời thêm timer FIN-WAIT-2 trong `TcpConnection`.
 - **Ghi chú**: cần commit trong submodule VpnClient trước.
-- **Đã sửa**: VpnClient `77a494e` (Abort + timer FIN-WAIT-2, kèm 5 test); ProxyDivert `VpnClientConnectSource.Dispose` gọi `Abort()`
+- **Đã sửa**: VpnClient `77a494e` (Abort + timer FIN-WAIT-2, kèm 5 test); ProxyDivert — commit "Reset a finished tunnel connection instead of half-closing it"
 
 ### C2. Keeper không bao giờ dựng lại tunnel in-process — Cao
 
@@ -266,7 +266,7 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 - [x] **Vị trí**: [KeptVpnTunnel.cs:192-207](../src/ProxyDivert.Core/Vpn/KeptVpnTunnel.cs#L192-L207), [KeptVpnTunnel.cs:126](../src/ProxyDivert.Core/Vpn/KeptVpnTunnel.cs#L126), [KeptVpnTunnel.cs:159](../src/ProxyDivert.Core/Vpn/KeptVpnTunnel.cs#L159)
 - **Vấn đề**: `Cancel` → `Wait(2s)` có thể timeout (dial mặc định 90 giây) → `_cts.Dispose()`. Loop tới `Task.Delay(delay, ct)` ném `ObjectDisposedException`, không nhánh catch nào bắt; `SetStatus(Stopped)` không chạy, fault unobserved.
 - **Cách sửa**: bỏ `_cts.Dispose()` hoặc chuyển vào `_loop.ContinueWith`.
-- **Đã sửa**: ProxyDivert `3e25b41`
+- **Đã sửa**: ProxyDivert — commit "Stop disposing the supervision token out from under its own loop"
 
 ### C6. `Outbound.SupportsUdp` và source thực tế có thể lệch nhau — Vừa
 
