@@ -41,6 +41,12 @@ internal sealed class KeptVpnTunnel : IDisposable
     // of a crash loop, so its retries start from the short delay again.
     private static readonly TimeSpan StableFor = TimeSpan.FromSeconds(60);
 
+    // How many polls in a row may find the tunnel down before this loop stops believing it will
+    // mend itself. Four at the interval above is a minute of a driver saying it is not carrying
+    // traffic — long enough to sit out any genuine re-establishment, short enough that a user who
+    // has just fixed a config does not wait on a tunnel that is never coming back.
+    private const int DownPollsBeforeRebuild = 4;
+
     private readonly Outbound _outbound;
     private readonly OutboundSourceFactory _factory;
     private readonly ILogger _logger;
@@ -101,6 +107,12 @@ internal sealed class KeptVpnTunnel : IDisposable
                 reason = await WatchAsync(tunnel, ct).ConfigureAwait(false);
                 if (ct.IsCancellationRequested) break;
 
+                // WatchAsync returning at all means this instance is finished, so throw it away.
+                // Restarting the cached one would re-run whatever already failed and would not see
+                // a configuration the user has corrected in the meantime — the same reasoning as
+                // the catch below, for the path that ends without an exception.
+                _factory.Invalidate(_outbound.Id);
+
                 if (DateTime.UtcNow - upSince >= StableFor) attempt = 0;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -153,6 +165,7 @@ internal sealed class KeptVpnTunnel : IDisposable
     private async Task<string> WatchAsync(IKeptTunnel tunnel, CancellationToken ct)
     {
         Task<string> down = tunnel.WaitUntilDownAsync(ct);
+        int downPolls = 0;
 
         while (!ct.IsCancellationRequested)
         {
@@ -169,9 +182,34 @@ internal sealed class KeptVpnTunnel : IDisposable
                 up ? VpnConnectionState.Connected : VpnConnectionState.Reconnecting,
                 up ? null : "the tunnel is re-establishing itself",
                 Status.RetryCount);
+
+            if (up) { downPolls = 0; continue; }
+
+            // ...but "re-establishing itself" has to end somewhere. An in-process driver retries
+            // without limit by default, so WaitUntilDownAsync never completes for a server that is
+            // gone or a key that was revoked: the row would read Reconnecting for good, the backoff
+            // would never run, and — because nothing rebuilds the source — a configuration the user
+            // has since corrected would never be picked up. Giving up here is what lets the outer
+            // loop throw the source away and start over from the current config.
+            if (++downPolls < DownPollsBeforeRebuild) continue;
+
+            Observe(down);
+            return $"the tunnel has been down for {(int)(DownPollsBeforeRebuild * StatusPollInterval.TotalSeconds)}s "
+                + "without re-establishing itself";
         }
 
+        Observe(down);
         return "cancelled";
+    }
+
+    // Walking away from WaitUntilDownAsync leaves a task nobody is holding; a fault in it would
+    // otherwise surface later as an unobserved exception on the finalizer thread.
+    private static void Observe(Task task)
+    {
+        _ = task.ContinueWith(
+            static t => _ = t.Exception, CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private static TimeSpan DelayFor(int attempt)

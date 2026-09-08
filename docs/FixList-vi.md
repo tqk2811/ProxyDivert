@@ -243,10 +243,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### C2. Keeper không bao giờ dựng lại tunnel in-process — Cao
 
-- [ ] **Vị trí**: [VpnClientProxySource.cs:121-136](../src/ProxyDivert.Core/Vpn/Client/VpnClientProxySource.cs#L121-L136), [KeptVpnTunnel.cs:81-175](../src/ProxyDivert.Core/Vpn/KeptVpnTunnel.cs#L81-L175); thư viện `VpnReconnectOptions.cs:20` (`MaxAttempts = 0` = vô hạn), `ReconnectingVpnConnection.cs:205`, `VpnTunnelOptions.cs:8-39` (không có nút reconnect)
+- [x] **Vị trí**: [VpnClientProxySource.cs:121-136](../src/ProxyDivert.Core/Vpn/Client/VpnClientProxySource.cs#L121-L136), [KeptVpnTunnel.cs:81-175](../src/ProxyDivert.Core/Vpn/KeptVpnTunnel.cs#L81-L175); thư viện `VpnReconnectOptions.cs:20` (`MaxAttempts = 0` = vô hạn), `ReconnectingVpnConnection.cs:205`, `VpnTunnelOptions.cs:8-39` (không có nút reconnect)
 - **Vấn đề**: `WaitUntilDownAsync` chỉ hoàn thành khi `DriverState.Disconnected`, mà driver mặc định retry vô hạn với cap 30 giây. Toàn bộ backoff, `StableFor`, `RetryCount`, và việc `Invalidate` để nhận config user vừa sửa chỉ chạy được với wireproxy.
 - **Vì sao**: server chết hoặc key bị thu hồi → UI kẹt "Reconnecting" với lý do rỗng, user sửa config cũng không được nhận vì source không bao giờ được dựng lại.
 - **Cách sửa**: trong `WatchAsync`, `IsRunning == false` liên tiếp N chu kỳ poll thì coi là down và trả reason (vòng ngoài parse lại từ đầu); lâu dài thêm `ReconnectPolicy` vào `VpnTunnelOptions` để set `MaxAttempts`.
+- **Đã sửa**: ProxyDivert — commit "Give up on a tunnel that keeps saying it is re-establishing"
 
 ### C3. `InTunnelResolver` bind UDP mới mỗi query, làm bộ đếm cổng wrap — Vừa
 
