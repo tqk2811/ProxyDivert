@@ -18,7 +18,7 @@ namespace ProxyDivert.Core.Engine;
 // sockets talking to the same server apart. Giving each source port its own tunnel makes the tunnel
 // itself the correlation key — the reply loop knows exactly which port to inject into, and on which
 // of the relay's two loopback listeners.
-public sealed class UdpProxyForwarder : IDisposable
+public sealed class UdpProxyForwarder : IDisposable, IAsyncDisposable
 {
     // A tunnel unused for this long is finished with. Browsers open a fresh source port for every
     // QUIC connection and every DNS query, so without an upper bound on their lifetime the table
@@ -137,30 +137,37 @@ public sealed class UdpProxyForwarder : IDisposable
     // Disposing waits on the tunnel's tasks, which is not something to do on the timer thread or
     // on the relay's receive path.
     private static void DisposeInBackground(Lazy<PortTunnel> tunnel)
-        => _ = Task.Run(() => Dispose(tunnel));
+        => _ = Task.Run(async () => await DisposeAsync(tunnel).ConfigureAwait(false));
 
-    // Drops the tunnels of an outbound the user has just edited or removed.
+    /// <summary>Drops the tunnels of an outbound the user has just edited or removed.</summary>
+    /// <remarks>
+    /// Removing them from the table is what stops traffic using them, and that happens here. The
+    /// closing itself goes to the thread pool, because this is called from the engine while it
+    /// holds the lock that Start, Stop and the next Save all queue behind — and each tunnel waits
+    /// up to two seconds to close. Editing one outbound with a handful of tunnels open would hold
+    /// that lock for long enough to be felt as the window not responding.
+    /// </remarks>
     public void InvalidateOutbound(Guid outboundId)
     {
         foreach (var kv in _tunnels)
         {
             if (kv.Key.OutboundId != outboundId) continue;
-            if (_tunnels.TryRemove(kv.Key, out Lazy<PortTunnel>? tunnel)) Dispose(tunnel);
+            if (_tunnels.TryRemove(kv.Key, out Lazy<PortTunnel>? tunnel)) DisposeInBackground(tunnel);
         }
     }
 
     // Waits for a tunnel still being constructed rather than skipping it: a half-built one would
     // finish and hold its socket open with nobody left to close it.
-    private static void Dispose(Lazy<PortTunnel> tunnel)
+    private static async ValueTask DisposeAsync(Lazy<PortTunnel> tunnel)
     {
-        try { tunnel.Value.Dispose(); } catch { }
+        try { await tunnel.Value.DisposeAsync().ConfigureAwait(false); } catch { }
     }
 
-    private void OnReply(ushort clientPort, IPEndPoint from, byte[] payload, bool isIpv6)
+    private async Task OnReplyAsync(ushort clientPort, IPEndPoint from, byte[] payload, bool isIpv6)
     {
         try
         {
-            _redirector.InjectUdpReplyToProcessAsync(clientPort, payload, isIpv6).GetAwaiter().GetResult();
+            await _redirector.InjectUdpReplyToProcessAsync(clientPort, payload, isIpv6).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -168,15 +175,18 @@ public sealed class UdpProxyForwarder : IDisposable
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _disposed = true;
         try { _reaper.Dispose(); } catch { }
         try { _cts.Cancel(); } catch { }
-        foreach (var kv in _tunnels) Dispose(kv.Value);
+        foreach (var kv in _tunnels) await DisposeAsync(kv.Value).ConfigureAwait(false);
         _tunnels.Clear();
         _cts.Dispose();
     }
+
+    // Bridge for the engine, which still stops synchronously. Goes with that.
+    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 
     private readonly struct TunnelKey : IEquatable<TunnelKey>
     {
@@ -203,7 +213,7 @@ public sealed class UdpProxyForwarder : IDisposable
     // One UDP ASSOCIATE dedicated to a single process source port on a single outbound.
     // The association is negotiated lazily on the first datagram; datagrams that arrive while the
     // handshake is still running are dropped.
-    private sealed class PortTunnel : IDisposable
+    private sealed class PortTunnel : IAsyncDisposable
     {
         private readonly UdpProxyForwarder _owner;
         private readonly IProxySource _source;
@@ -256,8 +266,13 @@ public sealed class UdpProxyForwarder : IDisposable
 
             try
             {
-                // Fire-and-forget: awaiting here would stall the relay's receive loop.
-                _ = tunnel.SendAsync(destination, payload, 0, payload.Length, _cts.Token);
+                // Not awaited: awaiting here would stall the relay's receive loop. But a send that
+                // fails does so asynchronously almost every time — a closed socket, a proxy that
+                // dropped the association — and the catch below sees only the failures that happen
+                // before the first await. Those went nowhere at all: the fault was never observed,
+                // and this still reported the datagram as sent.
+                Task send = tunnel.SendAsync(destination, payload, 0, payload.Length, _cts.Token);
+                if (!send.IsCompletedSuccessfully) WatchForFailure(send, destination);
                 return true;
             }
             catch (Exception ex)
@@ -266,6 +281,19 @@ public sealed class UdpProxyForwarder : IDisposable
                 return false;
             }
         }
+
+        private void WatchForFailure(Task send, IPEndPoint destination)
+            => _ = send.ContinueWith(
+                (t, state) =>
+                {
+                    var self = (PortTunnel)state!;
+                    self._owner._logger.LogWarning(
+                        t.Exception, "sending :{ClientPort} -> {Destination} failed",
+                        self._key.ClientPort, destination);
+                },
+                this, CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
 
         private async Task ReceiveLoopAsync(CancellationToken ct)
         {
@@ -286,16 +314,19 @@ public sealed class UdpProxyForwarder : IDisposable
                 }
 
                 Touch();
-                _owner.OnReply(_key.ClientPort, datagram.Source, datagram.Payload, _key.IsIpv6);
+                await _owner.OnReplyAsync(_key.ClientPort, datagram.Source, datagram.Payload, _key.IsIpv6).ConfigureAwait(false);
             }
         }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             try { _cts.Cancel(); } catch { }
-            try { _ready.Wait(TimeSpan.FromSeconds(1)); } catch { }
+            try { await _ready.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false); } catch { }
             try { _tunnel?.Dispose(); } catch { }
-            try { _receiveLoop?.Wait(TimeSpan.FromSeconds(1)); } catch { }
+            if (_receiveLoop is not null)
+            {
+                try { await _receiveLoop.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false); } catch { }
+            }
             _cts.Dispose();
         }
     }

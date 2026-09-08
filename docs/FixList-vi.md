@@ -63,9 +63,10 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A7. `ApplyConfig` giữ `_stateLock` khi dispose tuần tự PortTunnel — Vừa
 
-- [ ] **Vị trí**: [RedirectEngine.cs:184-214](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L184-L214), [RedirectEngine.cs:288-300](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L288-L300), [UdpProxyForwarder.cs:179-186](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L179-L186)
+- [x] **Vị trí**: [RedirectEngine.cs:184-214](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L184-L214), [RedirectEngine.cs:288-300](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L288-L300), [UdpProxyForwarder.cs:179-186](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L179-L186)
 - **Vấn đề**: mỗi `PortTunnel.Dispose` chờ tới 2 giây, tuần tự, dưới lock. Cộng với A2, sửa một outbound có thể khoá `_stateLock` hàng chục giây, chặn `Start`/`Stop`/`ApplyConfig` kế tiếp. `CloseWhereRouteChanged` cũng gọi `Cancel()` dưới lock nên callback huỷ chạy inline.
 - **Cách sửa**: thu thập danh sách cần bỏ dưới lock, dispose ngoài lock (hoặc trên thread pool).
+- **Đã sửa (một phần)**: commit "refactor(udp): close a tunnel without holding up the next save". `InvalidateOutbound` vẫn gỡ khỏi bảng dưới lock (đó mới là thứ chặn lưu lượng) nhưng đẩy phần đóng sang thread pool, nên `ApplyConfig` không còn chờ. `PortTunnel` chuyển sang `IAsyncDisposable`. **Còn lại**: `CloseWhereRouteChanged` vẫn gọi `Cancel()` dưới lock — làm cùng chặng `RedirectEngine.StopAsync` của E1.2.
 
 ### A8. Mode nghe socket quét bảng kernel hai lần cho mỗi pid mới — Vừa
 
@@ -76,9 +77,10 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A9. `UdpProxyForwarder`: chặn async trên vòng nhận, fire-and-forget nuốt lỗi — Vừa
 
-- [ ] **Vị trí**: [UdpProxyForwarder.cs:62](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L62), [UdpProxyForwarder.cs:147](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L147)
+- [x] **Vị trí**: [UdpProxyForwarder.cs:62](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L62), [UdpProxyForwarder.cs:147](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L147)
 - **Vấn đề**: `InjectUdpReplyToProcessAsync(...).GetAwaiter().GetResult()` chặn cả `ReceiveLoopAsync`; `_ = tunnel.SendAsync(...)` trong `try/catch` chỉ bắt lỗi đồng bộ, lỗi async thành unobserved và hàm vẫn trả `true`.
 - **Cách sửa**: `await` trong `ReceiveLoopAsync`; với `SendAsync` gắn `.ContinueWith(log, OnlyOnFaulted)` hoặc await có try/catch.
+- **Đã sửa**: cùng commit với A7. `ReceiveLoopAsync` `await` `OnReplyAsync`; `Send` giữ nguyên không await (await ở đó sẽ làm nghẽn vòng nhận của relay) nhưng gắn continuation `OnlyOnFaulted` để lỗi async được ghi log thay vì biến mất.
 
 ### A10. Các tab không đồng bộ danh sách với nhau — Cao
 
