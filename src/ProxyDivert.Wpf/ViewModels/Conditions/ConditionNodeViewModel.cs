@@ -15,10 +15,23 @@ public abstract partial class ConditionNodeViewModel : ObservableObject
 {
     protected ConditionNodeViewModel()
     {
-        // Anything at all changing on a row means the sentence at the top of the window is out of
-        // date. One subscription here beats remembering to raise it from every setter.
-        PropertyChanged += (_, _) => RaiseChanged();
+        // Almost anything changing on a row means the sentence at the top of the window is out of
+        // date, and one subscription here beats remembering to raise it from every setter. Only
+        // "almost": a row also carries state the filter itself never sees, and reporting that as
+        // an edit meant opening a filter to look at it, ticking a row and unticking it again, and
+        // then being asked whether to save changes that were never made.
+        PropertyChanged += (_, e) =>
+        {
+            if (IsPartOfTheFilter(e.PropertyName)) RaiseChanged();
+        };
     }
+
+    /// <summary>
+    /// Whether changing this property changes the filter. False for the row's own interface
+    /// state — anything <see cref="ToModel"/> does not read.
+    /// </summary>
+    protected virtual bool IsPartOfTheFilter(string? propertyName)
+        => propertyName != nameof(IsSelected);
 
     /// <summary>Raised for any edit anywhere at or below this node.</summary>
     public event Action? Changed;

@@ -105,9 +105,10 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A13. Tick checkbox chọn hàng làm filter "dirty" — Vừa
 
-- [ ] **Vị trí**: [ConditionNodeViewModel.cs:20](../src/ProxyDivert.Wpf/ViewModels/Conditions/ConditionNodeViewModel.cs#L20), [ConditionNodeViewModel.cs:35-37](../src/ProxyDivert.Wpf/ViewModels/Conditions/ConditionNodeViewModel.cs#L35-L37), [ProcessFilterViewModel.cs:193-197](../src/ProxyDivert.Wpf/ViewModels/ProcessFilterViewModel.cs#L193-L197)
+- [x] **Vị trí**: [ConditionNodeViewModel.cs:20](../src/ProxyDivert.Wpf/ViewModels/Conditions/ConditionNodeViewModel.cs#L20), [ConditionNodeViewModel.cs:35-37](../src/ProxyDivert.Wpf/ViewModels/Conditions/ConditionNodeViewModel.cs#L35-L37), [ProcessFilterViewModel.cs:193-197](../src/ProxyDivert.Wpf/ViewModels/ProcessFilterViewModel.cs#L193-L197)
 - **Vấn đề**: constructor đăng ký `PropertyChanged → RaiseChanged` cho mọi property, kể cả `IsSelected` mà doc comment nói "Never saved". Mở filter chỉ để xem, tick rồi bỏ tick, đóng → bị hỏi "chưa lưu".
 - **Cách sửa**: lọc `e.PropertyName` trong handler, bỏ `IsSelected` (và `IsNew` ở leaf).
+- **Đã sửa**: commit "fix(ui): stop the row tick boxes marking a filter as edited". Lọc qua `protected virtual bool IsPartOfTheFilter(string?)` thay vì hardcode danh sách tên trong lớp cha — leaf override để loại thêm `IsNew`. Test: `Ticking_a_condition_row_to_group_it_is_not_an_edit`, `The_caret_moving_to_a_new_row_is_not_an_edit`.
 
 ### A14. `Ungroup` âm thầm đổi ngữ nghĩa bộ lọc — Vừa
 

@@ -29,6 +29,11 @@ public sealed partial class ConditionLeafViewModel : ConditionNodeViewModel
     [ObservableProperty]
     private bool _isNew;
 
+    // Where the caret goes is the window's business, not the filter's; the view clears this once
+    // it has moved it, which would otherwise read as an edit the user never made.
+    protected override bool IsPartOfTheFilter(string? propertyName)
+        => propertyName != nameof(IsNew) && base.IsPartOfTheFilter(propertyName);
+
     public ConditionLeafViewModel()
     {
     }
