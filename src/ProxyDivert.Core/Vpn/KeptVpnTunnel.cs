@@ -6,8 +6,6 @@ using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Vpn.Models;
-using TqkLibrary.Proxy.Interfaces;
-using TqkLibrary.Proxy.Vpn.WireProxyCli;
 
 namespace ProxyDivert.Core.Vpn;
 
@@ -142,20 +140,17 @@ internal sealed class KeptVpnTunnel : IAsyncDisposable
         SetStatus(VpnConnectionState.Stopped, null, 0);
     }
 
-    // The factory hands back whatever the outbound describes; anything that cannot be held open
+    // The factory hands back whatever the outbound describes; an instance with nothing to hold open
     // means the outbound changed kind under us, which the keeper handles by dropping this tunnel.
-    // wireproxy is adapted from this side because WireGuardProxySource lives in TqkLibrary.Proxy
-    // and knows nothing about ProxyDivert; the wrapper is stateless, so making one here is free.
+    //
+    // Which engine runs the tunnel, and how that engine is made to look like something watchable,
+    // is the builder's business — this used to pattern-match the concrete source, so the supervisor
+    // had to be edited whenever a new way of running a VPN appeared.
     private IKeptTunnel Resolve()
     {
-        IProxySource source = _factory.GetOrCreate(_outbound);
-        return source switch
-        {
-            IKeptTunnel kept => kept,
-            WireGuardProxySource wireProxy => new WireProxyKeptTunnel(wireProxy),
-            _ => throw new InvalidOperationException(
-                $"Outbound '{_outbound.Name}' is no longer a VPN, so there is no tunnel to keep."),
-        };
+        IOutboundInstance instance = _factory.GetOrCreateInstance(_outbound);
+        return instance.Tunnel ?? throw new InvalidOperationException(
+            $"Outbound '{_outbound.Name}' is no longer a VPN, so there is no tunnel to keep.");
     }
 
     /// <summary>

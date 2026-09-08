@@ -703,12 +703,12 @@ public sealed class RedirectEngine : IDisposable
         // deliberately does not cache, which means disposing the factory walks an empty cache and
         // frees nothing; the source is ours alone, so we own its disposal.
         await using var factory = new OutboundSourceFactory(loggerFactory, wireProxyPath);
-        IProxySource? source = null;
+        IOutboundInstance? instance = null;
         IConnectSource? tunnel = null;
         try
         {
-            source = factory.Create(outbound);
-            tunnel = await source.GetConnectSourceAsync(Guid.NewGuid(), ct).ConfigureAwait(false);
+            instance = factory.Create(outbound);
+            tunnel = await instance.Source.GetConnectSourceAsync(Guid.NewGuid(), ct).ConfigureAwait(false);
             await tunnel.ConnectAsync(new UriBuilder("tcp", testHost, testPort).Uri, ct).ConfigureAwait(false);
             return null;
         }
@@ -719,10 +719,10 @@ public sealed class RedirectEngine : IDisposable
         finally
         {
             try { tunnel?.Dispose(); } catch { }
-            // After the tunnel: for a VPN source this is what kills wireproxy, and without it every
-            // press of Test left one more subprocess holding a SOCKS port and a WireGuard session
-            // for as long as the app ran.
-            await OutboundSourceFactory.DisposeSourceAsync(source).ConfigureAwait(false);
+            // After the tunnel: for a VPN this is what kills wireproxy, and without it every press
+            // of Test left one more subprocess holding a SOCKS port and a WireGuard session for as
+            // long as the app ran.
+            await OutboundSourceFactory.DisposeInstanceAsync(instance).ConfigureAwait(false);
         }
     }
 
