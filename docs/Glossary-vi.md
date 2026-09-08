@@ -371,6 +371,18 @@ Nguồn nào không khởi động được thì tự lùi sang nguồn kia, r�
 
 **Bẫy đã sửa cùng đợt**: `AttachChild` tạo tiến trình con với `includeChildren = false`, nên **cháu không bao giờ được nhận** — cây con dừng đúng một tầng, dù `AdoptChildren` tự mô tả là đi hết cây. Con nay kế thừa `IncludeChildren` của cha.
 
+## Tái dùng PID (PID reuse)
+
+Windows cấp lại số PID của tiến trình vừa thoát cho một tiến trình mới, nhiều khi chỉ sau vài giây. Mọi bảng cache **khoá theo pid trần** (verdict "nên track hay không", cây cha–con, danh sách con đã thấy) vì thế có thể trả lời đúng cho tiến trình cũ mà sai cho tiến trình mới cùng số. Cách phòng chuẩn: khoá theo cặp `(pid, thời điểm start)` hoặc xoá cache khi nhận sự kiện tiến trình thoát. `ProcessInventory.IsDifferentProcess` đã làm vậy; các cache trong `SocketTracker._pidDecisions` và `ProcessTreeMonitor._knownDescendants` thì chưa.
+
+## SafeHandle và P/Invoke
+
+`P/Invoke` là cách C# gọi hàm native (DLL của WinDivert, iphlpapi, ntdll). `SafeHandle` là lớp bọc handle native có đếm tham chiếu: khi tham số P/Invoke khai báo kiểu `SafeHandle`, marshaller tự `DangerousAddRef` trước lúc gọi và `Release` sau, nên `ReleaseHandle` (đóng handle thật) bị hoãn tới khi không còn lời gọi native nào đang dùng nó. Nếu code lấy `DangerousGetHandle()` ra `IntPtr` rồi truyền đi, lớp bảo vệ này mất tác dụng: một thread vẫn đang `WinDivertRecv` trên số handle mà thread khác đã đóng, và kernel có thể đã cấp số đó cho object khác.
+
+## FIN-WAIT-2 và half-close
+
+Đóng TCP là hai chiều: mỗi bên gửi FIN riêng. Bên gửi FIN trước, sau khi FIN được ACK, vào trạng thái **FIN-WAIT-2** và chờ FIN của bên kia; đây là "half-close" — chiều gửi đã đóng nhưng chiều nhận vẫn mở. Nếu peer không bao giờ gửi FIN, kết nối treo ở FIN-WAIT-2 mãi. Kernel thật có timeout cho trạng thái này; [userspace stack](#L73) của TqkLibrary.VpnClient chỉ có timer ở TIME-WAIT, nên `Dispose` của `VpnNetworkStream` (chỉ `CloseSend`, tức chỉ gửi FIN) có thể để lại kết nối sống mãi trong bảng của stack. Muốn dứt điểm phải gửi RST (abort) thay vì FIN.
+
 ## Khay hệ thống (system tray / notification area)
 
 Vùng biểu tượng nhỏ cạnh đồng hồ. Một tiến trình đăng ký biểu tượng của mình bằng `Shell_NotifyIcon`; WPF không có sẵn thứ này, ở đây dùng gói `Hardcodet.NotifyIcon.Wpf` (`TaskbarIcon`). Điểm phải nhớ: **`TaskbarIcon` gắn tay vào sự kiện của `Application` ngay trong constructor**, nên nếu đặt nó vào `Application.Resources` thì bất kỳ ai duyệt qua tài nguyên của ứng dụng — kể cả một test chạy trên luồng khác — cũng dựng ra một biểu tượng khay thật và ném `InvalidOperationException` vì sai luồng dispatcher. Vì thế `Views/TrayIcon.xaml` KHÔNG merge vào `App.xaml`, mà `App.OnStartup` tự nạp đúng một lần. Menu chuột phải là `ContextMenu` WPF thường: nó không nằm trong cây trực quan nào nên `DynamicResource` và style ngầm tự rơi về `Application.Resources`, tức là ăn sẵn theme và bản dịch.

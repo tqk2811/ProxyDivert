@@ -127,7 +127,7 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 ### A16. Nhóm mức Thấp (ProxyDivert)
 
 - [ ] Id trùng trong json làm `RoutingPolicyResolver` ném trong ctor: [RoutingPolicyResolver.cs:34-37](../src/ProxyDivert.Core/Routing/RoutingPolicyResolver.cs#L34-L37). Dùng vòng gán `dict[x.Id] = x` như `OutboundUsage`.
-- [ ] Regex của user trong `HostMatcher` không có timeout: [HostMatcher.cs:86-99](../src/ProxyDivert.Core/Routing/HostMatcher.cs#L86-L99). Truyền `TimeSpan.FromMilliseconds(50)` như `ProcessRuleMatcher` và coi `RegexMatchTimeoutException` là không khớp.
+- [ ] Regex của user trong `HostMatcher` không có timeout: [HostMatcher.cs:86-99](../src/ProxyDivert.Core/Routing/HostMatcher.cs#L86-L99). Truyền timeout **hằng số** và coi `RegexMatchTimeoutException` là không khớp — KHÔNG chép cách tính hạn của `ProcessRuleMatcher` trước A17, xem A17.
 - [ ] `DomainSuffix` với pattern `.example.com` không bao giờ khớp: [HostMatcher.cs:58-64](../src/ProxyDivert.Core/Routing/HostMatcher.cs#L58-L64). `TrimStart('.')`.
 - [ ] `OnProcessStopped` chỉ detach con trực tiếp, không lan xuống cháu: [ProcessRuleTracker.cs:369-379](../src/ProxyDivert.Core/Processes/ProcessRuleTracker.cs#L369-L379). Lặp tới khi không đổi như `FollowParents`.
 - [ ] `AttachProcessId` có thể ném `KeyNotFoundException` khi `Detach` xen giữa: [ProcessRuleTracker.cs:229](../src/ProxyDivert.Core/Processes/ProcessRuleTracker.cs#L229). `TryGetValue`.
@@ -135,6 +135,15 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 - [ ] Đổi tên policy làm mất `SelectedRule`: [RulesViewModel.cs:111-121](../src/ProxyDivert.Wpf/ViewModels/RulesViewModel.cs#L111-L121). Nhớ và gán lại sau `Insert`.
 - [ ] Timer refresh Connections/Log chạy cả khi tab ẩn, xoá selection mỗi 250ms: [ConnectionsViewModel.cs:38-41](../src/ProxyDivert.Wpf/ViewModels/ConnectionsViewModel.cs#L38-L41), [LogViewModel.cs:34-37](../src/ProxyDivert.Wpf/ViewModels/LogViewModel.cs#L34-L37). Start/Stop theo `IsVisible`.
 - [ ] Cây tiến trình có thể lặp vô hạn khi PID bị tái dùng thành vòng cha–con: [ProcessesViewModel.cs:77-98](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L77-L98). Tập đã thăm khi nối.
+
+### A17. Ngân sách regex của bộ lọc tiến trình tính theo đồng hồ tường — Cao
+
+- [x] **Vị trí**: [ProcessRuleMatcher.cs:23-34](../src/ProxyDivert.Core/Processes/ProcessRuleMatcher.cs#L23-L34), [ProcessRuleMatcher.cs:268-302](../src/ProxyDivert.Core/Processes/ProcessRuleMatcher.cs#L268-L302).
+- **Vấn đề**: `Evaluate` đóng dấu hạn `TickCount64 + 100ms` cho cả bộ lọc, `RunRegex` bỏ cuộc trả `Unknown` khi hạn hết. Nhưng khoảng thời gian đó tính cả lúc luồng **không được lịch chạy**. Đo trên máy này: 32 luồng quay ở ưu tiên cao trên 32 core làm 47/100 ms biến mất trước khi pattern kịp chạy, chưa làm việc regex nào. Máy bận hơn thì mất trọn — một regex rẻ như `^chr.*` trả `Unknown`, nghĩa là "không kết luận được", nên **bộ lọc của user âm thầm không áp dụng và không có gì báo**.
+- **Lỗi thứ hai cùng chỗ**: timeout truyền vào `Regex.IsMatch` là phần hạn còn lại nên đổi mỗi lần gọi. Khoá cache regex của .NET gồm cả timeout ⇒ mọi lần gọi đều trượt cache và **dựng lại pattern từ đầu**, trong khi hàm này chạy trên mọi tiến trình của máy ở mỗi lần quét.
+- **Phát hiện thế nào**: `ProcessRuleMatcherTests.The_plain_comparisons_still_work_with_no_readable_path(Regex, "^chr.*", "chrome.exe", true)` rớt 1 lần ở đợt 2 rồi không dựng lại được, và rớt lại ở đợt 3 đúng lượt chạy ngay sau build. Chạy riêng hoặc `--no-build` thì 5/5 xanh. Probe dựng tải CPU đo được con số 47 ms ở trên.
+- **Đã sửa**: commit "fix(core): stop charging a filter for time it did not spend matching". Tách `RegexBudget` (internal) đếm thời gian **thực sự nằm trong `Regex.IsMatch`** bằng `Stopwatch`, thay cho hạn đồng hồ tường; timeout truyền vào là hằng số nên pattern nằm yên trong cache. Đánh đổi ghi rõ trong code: pattern cuối có thể vượt ngân sách tối đa một lượt timeout, đổi lấy việc không dựng lại regex.
+- **Test**: `RegexBudgetTests` (4 test). Đã kiểm ngược: dựng lại ngữ nghĩa hạn-đồng-hồ cũ thì 3/4 đỏ. Một test "end to end" viết ban đầu đã bỏ vì nó xanh cả với code cũ — hạn cũ đóng dấu *bên trong* `Evaluate` nên nghỉ *trước* khi gọi không tái hiện được gì.
 
 ---
 

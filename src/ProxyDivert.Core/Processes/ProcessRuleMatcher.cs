@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
@@ -21,12 +22,16 @@ namespace ProxyDivert.Core.Processes;
 public static class ProcessRuleMatcher
 {
     // Patterns come from a text box and run against every process on the machine, every scan. An
-    // expression that backtracks catastrophically would hang the watcher, so it gets a deadline
+    // expression that backtracks catastrophically would hang the watcher, so it gets a budget
     // rather than the benefit of the doubt.
     //
-    // The deadline covers the whole filter, not one pattern: a tree of twenty regexes each allowed
-    // 100ms would be two seconds per process per scan.
-    private const int RegexBudgetMs = 100;
+    // The budget covers the whole filter, not one pattern: a tree of twenty regexes each allowed
+    // 100ms would be two seconds per process per scan. What it counts is time spent matching —
+    // see RegexBudget for why that distinction is the whole point.
+    private static readonly TimeSpan RegexBudgetTotal = TimeSpan.FromMilliseconds(100);
+
+    // What any single pattern is allowed, and a constant so the built expression stays cached.
+    private static readonly TimeSpan RegexTimeout = RegexBudgetTotal;
 
     // A tree this deep is not something the editor can build — it would be a hand-edited config
     // file, and the recursion has to stop somewhere short of the stack.
@@ -72,7 +77,7 @@ public static class ProcessRuleMatcher
         ProcessCondition? condition, string processName, string? executablePath, string? commandLine)
         => Evaluate(
             condition,
-            new Subject(processName, executablePath, commandLine, Environment.TickCount64 + RegexBudgetMs),
+            new Subject(processName, executablePath, commandLine, new RegexBudget(RegexBudgetTotal)),
             depth: 0);
 
     private static ConditionResult Evaluate(ProcessCondition? condition, Subject subject, int depth)
@@ -264,19 +269,28 @@ public static class ProcessRuleMatcher
     // Every pattern here came from a text box, so a typo must not take the watcher down — and must
     // not turn into a confident "no" either, because a NOT in front of it would then claim every
     // process on the machine. A pattern that will not compile, or one that runs past the filter
-    // deadline, is Unknown: the filter simply does not apply.
+    // budget, is Unknown: the filter simply does not apply.
     private static ConditionResult RunRegex(string pattern, string text, Subject subject)
     {
-        long remainingMs = subject.DeadlineTicks - Environment.TickCount64;
-        if (remainingMs <= 0) return ConditionResult.Unknown;
+        if (subject.Budget.Remaining <= TimeSpan.Zero) return ConditionResult.Unknown;
 
+        // A constant timeout, not what is left of the budget. Regex.IsMatch caches the built
+        // expression under a key that includes the timeout, so a value that shrank with every call
+        // — which is what the budget-as-a-deadline version passed — missed that cache every time
+        // and rebuilt the pattern from source. These run against every process on the machine on
+        // every scan, so that is not a small thing.
+        //
+        // The budget is enforced by not starting another pattern once it is gone, which lets the
+        // last one overshoot by up to one timeout. That is the price of the pattern staying cached,
+        // and it is bounded.
+        long started = Stopwatch.GetTimestamp();
         try
         {
             return Yes(Regex.IsMatch(
                 text,
                 pattern,
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-                TimeSpan.FromMilliseconds(remainingMs)));
+                RegexTimeout));
         }
         catch (ArgumentException)
         {
@@ -285,6 +299,10 @@ public static class ProcessRuleMatcher
         catch (RegexMatchTimeoutException)
         {
             return ConditionResult.Unknown;
+        }
+        finally
+        {
+            subject.Budget.Spend(Stopwatch.GetElapsedTime(started));
         }
     }
 
@@ -297,20 +315,20 @@ public static class ProcessRuleMatcher
     private static string NormalizePath(string path)
         => path.Trim().Replace('/', '\\').TrimEnd('\\');
 
-    // What every condition in one evaluation is asked about, plus the deadline they share.
+    // What every condition in one evaluation is asked about, plus the budget they share.
     private readonly struct Subject
     {
-        public Subject(string name, string? path, string? commandLine, long deadlineTicks)
+        public Subject(string name, string? path, string? commandLine, RegexBudget budget)
         {
             Name = name ?? string.Empty;
             Path = path;
             CommandLine = commandLine;
-            DeadlineTicks = deadlineTicks;
+            Budget = budget;
         }
 
         public string Name { get; }
         public string? Path { get; }
         public string? CommandLine { get; }
-        public long DeadlineTicks { get; }
+        public RegexBudget Budget { get; }
     }
 }

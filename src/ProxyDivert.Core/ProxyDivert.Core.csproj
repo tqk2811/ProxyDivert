@@ -8,6 +8,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<!-- The test project reaches RegexBudget, which is an internal detail of the matcher and
+		     has no business on the public surface. -->
+		<InternalsVisibleTo Include="ProxyDivert.Core.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\..\libs\TqkLibrary.WinDivert\src\TqkLibrary.WinDivert.Redirect\TqkLibrary.WinDivert.Redirect.csproj" />
 		<ProjectReference Include="..\..\libs\TqkLibrary.WinDivert\src\TqkLibrary.WinDivert.ProcessControl\TqkLibrary.WinDivert.ProcessControl.csproj" />
 		<ProjectReference Include="..\..\libs\TqkLibrary.Proxy\src\TqkLibrary.Proxy\TqkLibrary.Proxy.csproj" />
