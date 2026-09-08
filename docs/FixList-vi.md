@@ -48,10 +48,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A5. `ConfigStore.Save` không lock, tên temp cố định — Vừa
 
-- [ ] **Vị trí**: [ConfigStore.cs:64-81](../src/ProxyDivert.Core/Configuration/ConfigStore.cs#L64-L81), [AppServices.cs:150](../src/ProxyDivert.Wpf/Services/AppServices.cs#L150), [AppServices.cs:259-268](../src/ProxyDivert.Wpf/Services/AppServices.cs#L259-L268)
+- [x] **Vị trí**: [ConfigStore.cs:64-81](../src/ProxyDivert.Core/Configuration/ConfigStore.cs#L64-L81), [AppServices.cs:150](../src/ProxyDivert.Wpf/Services/AppServices.cs#L150), [AppServices.cs:259-268](../src/ProxyDivert.Wpf/Services/AppServices.cs#L259-L268)
 - **Vấn đề**: `AppServices.Save()` chạy trên UI thread, còn `SaveAndApply`/`StartEngineAsync`/`SetVpnConnectedAsync` gọi `ConfigStore.Save` trên worker queue. Hai bên chồng nhau trên cùng `FilePath + ".tmp"`.
 - **Vì sao**: hoặc `IOException` ném thẳng lên UI thread, hoặc A ghi xong `.tmp`, B truncate `.tmp`, A `File.Replace` bằng file cụt: mất toàn bộ cấu hình, mà project không có backup ngoài `.bak` lúc load hỏng.
 - **Cách sửa**: `lock` tĩnh quanh thân `Save`; tên temp duy nhất (`FilePath + "." + Guid.NewGuid():N + ".tmp"`); dài hạn thì đưa mọi Save qua worker queue (xem E).
+- **Đã sửa**: commit "fix(config): serialise saves and give each one its own temp file". Làm cả `lock` tĩnh lẫn tên temp duy nhất, thêm xoá temp khi ghi/swap ném. Test `Saving_from_two_threads_at_once_leaves_one_readable_config_and_no_litter` (40 luồng) — đã xác nhận fail 3/3 lần khi bỏ fix. Phần "mọi Save qua worker queue" vẫn để cho Đợt 3 (E1.2).
 
 ### A6. `GetOrAdd` với factory tốn tài nguyên không dispose bản thua — Vừa
 

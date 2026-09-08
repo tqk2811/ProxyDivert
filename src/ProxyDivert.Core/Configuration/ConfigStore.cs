@@ -27,6 +27,12 @@ public sealed class ConfigStore
         Converters = { new JsonStringEnumConverter() },
     };
 
+    // One save at a time. The window saves on the UI thread and the engine's worker queue saves
+    // after applying a configuration, and both write the same file: two at once meant one writing
+    // its temp file while the other replaced the config with it half-finished. Static, because the
+    // two callers hold different ConfigStore instances over the same path.
+    private static readonly object SaveLock = new object();
+
     public string FilePath { get; }
 
     public ConfigStore(string? filePath = null)
@@ -73,11 +79,28 @@ public sealed class ConfigStore
         string? dir = Path.GetDirectoryName(FilePath);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir!);
 
-        string tempPath = FilePath + ".tmp";
-        File.WriteAllText(tempPath, json);
-        // File.Replace needs an existing destination; on a first save there isn't one.
-        if (File.Exists(FilePath)) File.Replace(tempPath, FilePath, null);
-        else File.Move(tempPath, FilePath);
+        // A name of its own per save. The lock below only covers this process, and a fixed
+        // ".tmp" meant a second writer — another copy of the tool over the same folder — could
+        // truncate the file this one had just filled, leaving Replace to swap in a cut-off
+        // config. There is no backup of a good file, only a .bak of one that failed to load.
+        string tempPath = $"{FilePath}.{Guid.NewGuid():N}.tmp";
+
+        lock (SaveLock)
+        {
+            try
+            {
+                File.WriteAllText(tempPath, json);
+                // File.Replace needs an existing destination; on a first save there isn't one.
+                if (File.Exists(FilePath)) File.Replace(tempPath, FilePath, null);
+                else File.Move(tempPath, FilePath);
+            }
+            catch
+            {
+                // A temp file that never became the config is litter sitting next to it.
+                try { File.Delete(tempPath); } catch { }
+                throw;
+            }
+        }
     }
 
     // Direct and Block are the application's own, identified by fixed id. Everything about them

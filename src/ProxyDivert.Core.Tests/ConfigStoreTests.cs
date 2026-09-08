@@ -7,6 +7,7 @@ using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Routing.Models.Conditions;
 using System.Linq;
+using System.Threading.Tasks;
 using TqkLibrary.WinDivert.Redirect.Enums;
 using Xunit;
 
@@ -230,6 +231,30 @@ public class ConfigStoreTests : IDisposable
         Assert.Equal(Ipv6Support.Disabled, loaded.Outbounds.Single(o => o.Name == "vpn-ish").Ipv6Support);
         // A brand-new outbound has no answer for this yet, and must not pretend it does.
         Assert.Equal(Ipv6Support.Auto, loaded.Outbounds.Single(o => o.Kind == OutboundKind.Direct).Ipv6Support);
+    }
+
+    // The window saves on the UI thread and the engine's worker queue saves after applying a
+    // configuration. Both used to write the same fixed ".tmp" beside the config, so one could
+    // truncate what the other had just written and then swap the stump in as the real file — the
+    // user's whole setup gone, with no backup of a file that loaded fine.
+    [Fact]
+    public void Saving_from_two_threads_at_once_leaves_one_readable_config_and_no_litter()
+    {
+        var store = new ConfigStore(ConfigPath);
+        AppConfig config = AppConfig.CreateDefault();
+        config.ProcessRules.Add(new ProcessRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "chrome",
+            Condition = ConditionGroup.CreateDefault("chrome.exe"),
+            PolicyIds = { config.Policies[0].Id },
+        });
+
+        Parallel.For(0, 40, _ => new ConfigStore(ConfigPath).Save(config));
+
+        AppConfig loaded = store.Load();
+        Assert.Equal("chrome", loaded.ProcessRules.Single().Name);
+        Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
     }
 
     public void Dispose()
