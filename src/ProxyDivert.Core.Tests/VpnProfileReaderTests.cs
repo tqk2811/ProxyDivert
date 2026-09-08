@@ -134,6 +134,36 @@ public sealed class VpnProfileReaderTests : IDisposable
         Assert.Equal(path, profile.ConfigPath);
     }
 
+    // Two places answer "does this run on wireproxy": this reader, which may open the file, and
+    // RunsOnWireProxy on the routing path, which may not — it runs once per connection, so it goes
+    // by the extension. A WireGuard file NOT called .conf is the case where they disagreed:
+    // routing took it for an in-process tunnel and let UDP through to it, and the factory then
+    // built the wireproxy one, whose SOCKS5 is TCP-only. The datagram failed at the tunnel rather
+    // than being routed, or blocked, deliberately. Refusing to guess is what keeps the two in step.
+    [Fact]
+    public void A_wireguard_file_without_the_conf_extension_asks_the_user_which_engine_it_meant()
+    {
+        string path = Write("wg0.txt", "[Interface]\nPrivateKey = x\n[Peer]\nEndpoint = 1.2.3.4:51820\n");
+
+        var error = Assert.Throws<InvalidOperationException>(() => VpnProfileReader.Read(Vpn(path)));
+
+        Assert.Contains("wg0.txt", error.Message, StringComparison.Ordinal);
+        // And the routing path says the same thing about it, which is the property that matters.
+        Assert.False(VpnProfileReader.RunsOnWireProxy(VpnProtocol.Auto, path));
+    }
+
+    [Fact]
+    public void The_same_file_is_read_once_the_user_names_the_engine()
+    {
+        string path = Write("wg0.txt", "[Interface]\nPrivateKey = x\n[Peer]\nEndpoint = 1.2.3.4:51820\n");
+
+        VpnProfile onWireProxy = VpnProfileReader.Read(Vpn(path, VpnProtocol.WireGuardWireProxy));
+        VpnProfile inProcess = VpnProfileReader.Read(Vpn(path, VpnProtocol.WireGuard));
+
+        Assert.True(onWireProxy.RunsOnWireProxy);
+        Assert.False(inProcess.RunsOnWireProxy);
+    }
+
     [Fact]
     public void The_same_conf_runs_in_process_when_the_user_asks_for_it()
     {

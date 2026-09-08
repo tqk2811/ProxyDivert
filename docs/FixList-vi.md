@@ -283,9 +283,10 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### C6. `Outbound.SupportsUdp` và source thực tế có thể lệch nhau — Vừa
 
-- [ ] **Vị trí**: [Outbound.cs:72](../src/ProxyDivert.Core/Routing/Models/Outbound.cs#L72), [VpnProfileReader.cs:83-94](../src/ProxyDivert.Core/Vpn/VpnProfileReader.cs#L83-L94), [VpnProfileReader.cs:270-271](../src/ProxyDivert.Core/Vpn/VpnProfileReader.cs#L270-L271), [OutboundSourceFactory.cs:211-235](../src/ProxyDivert.Core/Outbounds/OutboundSourceFactory.cs#L211-L235)
+- [x] **Vị trí**: [Outbound.cs:72](../src/ProxyDivert.Core/Routing/Models/Outbound.cs#L72), [VpnProfileReader.cs:83-94](../src/ProxyDivert.Core/Vpn/VpnProfileReader.cs#L83-L94), [VpnProfileReader.cs:270-271](../src/ProxyDivert.Core/Vpn/VpnProfileReader.cs#L270-L271), [OutboundSourceFactory.cs:211-235](../src/ProxyDivert.Core/Outbounds/OutboundSourceFactory.cs#L211-L235)
 - **Vấn đề**: routing hỏi `RunsOnWireProxy` từ URL (`Auto` + không `.conf` → mang được UDP), factory lại `Sniff` nội dung file và trả `WireGuardWireProxy` cho bất kỳ `[Interface]` → wireproxy TCP-only. File `wg0.txt` làm UDP được route tới rồi fail ở `GetUdpAssociateSourceAsync` thay vì hạ xuống Block.
 - **Cách sửa**: `Sniff` trả `Auto` cho file WireGuard không có đuôi `.conf` (ép user chọn rõ), để hai bên cùng trả lời từ URL.
+- **Đã sửa**: commit "fix(vpn): stop guessing the engine for a WireGuard file that is not .conf". Thông điệp lỗi sẵn có của `FromFile` đã hướng dẫn đúng ("Give it a .ovpn or .conf extension, or pick the protocol by hand") nên không thêm message mới. Test: `A_wireguard_file_without_the_conf_extension_asks_the_user_which_engine_it_meant` (kiểm cả `RunsOnWireProxy` để chốt hai bên cùng câu trả lời), `The_same_file_is_read_once_the_user_names_the_engine`.
 
 ### C7. Chặn async trong chuỗi dispose tới 7 giây mỗi outbound VPN — Vừa
 

@@ -267,8 +267,20 @@ public static class VpnProfileReader
         try { text = File.ReadAllText(path); }
         catch { return VpnProtocol.Auto; }
 
+        // A WireGuard file, but only worth an answer where the extension says so too.
+        // RunsOnWireProxy decides the same thing on the routing path, from the URL alone — it runs
+        // once per connection and must not open a file — and it only recognises .conf. Answering
+        // from the content here as well meant the two disagreed about a file called "wg0.txt":
+        // routing believed the tunnel was in-process and so could carry UDP, while this built the
+        // wireproxy one, whose SOCKS5 is TCP-only. The datagram then failed at the tunnel instead
+        // of being routed, or blocked, on purpose. Auto sends the user back to say which they
+        // meant, which is the one answer that cannot be wrong.
         if (text.Contains("[Interface]", StringComparison.OrdinalIgnoreCase))
-            return VpnProtocol.WireGuardWireProxy;
+        {
+            return path.EndsWith(".conf", StringComparison.OrdinalIgnoreCase)
+                ? VpnProtocol.WireGuardWireProxy
+                : VpnProtocol.Auto;
+        }
         if (text.Contains("\nremote ", StringComparison.OrdinalIgnoreCase)
             || text.StartsWith("remote ", StringComparison.OrdinalIgnoreCase))
         {
