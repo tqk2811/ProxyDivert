@@ -73,8 +73,52 @@ public class TlsClientHelloParserTests
         }
     }
 
+    // The shape that broke this: Chrome and Edge offering X25519MLKEM768 send a ClientHello of
+    // 2.0-2.3KB whose ~1.2KB key_share sits BEFORE server_name, so the SNI lands past the 2048
+    // bytes the parser used to be given. Nothing reported the miss — routing by domain just
+    // quietly became routing by reverse DNS, or by raw address.
+    [Fact]
+    public void Reads_the_server_name_of_a_post_quantum_sized_hello()
+    {
+        byte[] hello = BuildClientHello("www.example.com", bytesBeforeSni: 2000);
+
+        Assert.True(hello.Length > 2048, "the test hello is meant to be bigger than the old ceiling");
+        Assert.True(Tls.RecommendedPeekSize >= hello.Length, "the parser asks for fewer bytes than such a hello needs");
+        Assert.True(Tls.TryReadHostName(hello, hello.Length, out string name));
+        Assert.Equal("www.example.com", name);
+    }
+
+    // Telling "the client has not finished" from "the client finished and named nothing" is what
+    // keeps the inspector from waiting out its whole peek timeout on the latter.
+    [Fact]
+    public void A_hello_that_has_all_arrived_is_not_waited_on_any_longer()
+    {
+        byte[] hello = BuildClientHello(serverName: null);
+
+        Assert.False(Tls.WantsMoreData(hello, hello.Length));
+    }
+
+    [Fact]
+    public void A_hello_still_arriving_is_waited_on()
+    {
+        byte[] hello = BuildClientHello("www.example.com", bytesBeforeSni: 2000);
+
+        Assert.True(Tls.WantsMoreData(hello, 100));
+        Assert.True(Tls.WantsMoreData(hello, hello.Length - 1));
+    }
+
+    [Fact]
+    public void An_http_request_is_waited_on_only_until_its_headers_end()
+    {
+        byte[] partial = Encoding.ASCII.GetBytes("GET / HTTP/1.1\r\nUser-Agent: x\r\n");
+        byte[] complete = Encoding.ASCII.GetBytes("GET / HTTP/1.0\r\nUser-Agent: x\r\n\r\n");
+
+        Assert.True(Http.WantsMoreData(partial, partial.Length));
+        Assert.False(Http.WantsMoreData(complete, complete.Length));
+    }
+
     // Builds a minimal but structurally valid TLS 1.2 ClientHello.
-    private static byte[] BuildClientHello(string? serverName, int extensionsBefore = 0)
+    private static byte[] BuildClientHello(string? serverName, int extensionsBefore = 0, int bytesBeforeSni = 0)
     {
         var extensions = new List<byte>();
 
@@ -84,6 +128,14 @@ public class TlsClientHelloParserTests
             extensions.AddRange(new byte[] { 0x00, (byte)(0x0A + i) });  // type
             extensions.AddRange(new byte[] { 0x00, 0x02 });              // length
             extensions.AddRange(new byte[] { 0x00, 0x00 });              // body
+        }
+
+        // One big extension ahead of the SNI, standing in for a post-quantum key_share.
+        if (bytesBeforeSni > 0)
+        {
+            extensions.AddRange(new byte[] { 0x00, 0x33 });              // key_share
+            extensions.AddRange(BE16(bytesBeforeSni));
+            extensions.AddRange(new byte[bytesBeforeSni]);
         }
 
         if (serverName != null)

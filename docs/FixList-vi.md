@@ -221,9 +221,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### B13. Peek 2048 byte không đủ cho ClientHello hậu lượng tử → mất SNI — Vừa
 
-- [ ] **Vị trí**: [TlsClientHelloParser.cs:21](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Inspection/TlsClientHelloParser.cs#L21), [TlsClientHelloParser.cs:67-72](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Inspection/TlsClientHelloParser.cs#L67-L72), [HostNameInspector.cs:54](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Inspection/HostNameInspector.cs#L54)
+- [x] **Vị trí**: [TlsClientHelloParser.cs:21](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Inspection/TlsClientHelloParser.cs#L21), [TlsClientHelloParser.cs:67-72](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Inspection/TlsClientHelloParser.cs#L67-L72), [HostNameInspector.cs:54](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Inspection/HostNameInspector.cs#L54)
 - **Vấn đề**: Chrome/Edge với X25519MLKEM768 gửi ClientHello ~2.0-2.3KB và xáo thứ tự extension; `key_share` ~1.2KB đứng trước `server_name` và vắt qua mốc 2048 là parser trả false, `HostNameInspector` trả null. Routing theo domain âm thầm tụt xuống reverse-DNS/IP.
 - **Cách sửa**: nâng `RecommendedPeekSize` lên 8192 (hoặc 16644 = record TLS tối đa).
+- **Đã sửa**: submodule WinDivert (branch `fix/wave2`), commit "fix(inspection): read the SNI of a post-quantum ClientHello". Chọn 8192.
+- **Phát hiện thêm khi sửa**: chỉ nâng peek size là **tạo hồi quy 3 giây**. `HostNameInspector` peek trong vòng lặp cho tới khi số byte không tăng nữa, nên nó không phân biệt được "client chưa nói xong" với "client nói xong và không có tên" — gói first-flight hoàn chỉnh mà không có SNI/Host phải đợi hết `HostPeekTimeout` (3s) mới được route. Lỗi này ĐÃ có sẵn với 2048, nâng lên 8192 chỉ làm nó thành phổ biến. Thêm `IHostNameParser.WantsMoreData` (TLS xét độ dài record đã khai báo, HTTP xét dòng trống kết thúc header). Test: 4 test parser + 2 test inspector đo thời gian — đã xác nhận test fail (đúng 3s) khi bỏ nhánh dừng sớm.
 
 ### B14. Nhóm mức Thấp (WinDivert)
 

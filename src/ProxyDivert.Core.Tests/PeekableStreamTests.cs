@@ -78,6 +78,40 @@ public class PeekableStreamTests
         Assert.Equal("AAAABBBB", Encoding.ASCII.GetString(stream.PeekBuffer, 0, second));
     }
 
+    // The inspector peeks in a loop, because a first flight can be split across segments. What it
+    // could not tell apart was "the client has not finished" from "the client finished and named
+    // nothing" — so a complete, nameless first message was answered only after the whole peek
+    // timeout, three seconds before the connection was routed at all. Raising the TLS peek size
+    // to fit a post-quantum ClientHello would have made that the common case rather than a rare one.
+    [Fact]
+    public async Task A_first_flight_that_names_nothing_is_answered_without_waiting()
+    {
+        byte[] payload = Encoding.ASCII.GetBytes("GET / HTTP/1.0\r\nUser-Agent: probe\r\n\r\n");
+        using var inner = new OneShotStream(payload);
+        var stream = new PeekableStream(inner);
+
+        var watch = Stopwatch.StartNew();
+        string? host = await HostNameInspector.CreateDefault()
+            .TryReadHostNameAsync(stream, TimeSpan.FromSeconds(3), CancellationToken.None);
+        watch.Stop();
+
+        Assert.Null(host);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(1), $"the inspector waited {watch.Elapsed}");
+    }
+
+    [Fact]
+    public async Task A_first_flight_that_does_name_something_still_answers_with_the_name()
+    {
+        byte[] payload = Encoding.ASCII.GetBytes("GET / HTTP/1.1\r\nHost: www.example.com\r\n\r\n");
+        using var inner = new OneShotStream(payload);
+        var stream = new PeekableStream(inner);
+
+        string? host = await HostNameInspector.CreateDefault()
+            .TryReadHostNameAsync(stream, TimeSpan.FromSeconds(3), CancellationToken.None);
+
+        Assert.Equal("www.example.com", host);
+    }
+
     // Delivers one chunk, then behaves like a peer that is waiting for a reply: the read never
     // completes on its own.
     private sealed class OneShotStream : Stream
