@@ -24,10 +24,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A2. `UdpProxyForwarder._tunnels` tăng vô hạn — Cao
 
-- [ ] **Vị trí**: [UdpProxyForwarder.cs:26](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L26), [UdpProxyForwarder.cs:39-46](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L39-L46), [RoutingPolicyResolver.cs:139-140](../src/ProxyDivert.Core/Routing/RoutingPolicyResolver.cs#L139-L140)
+- [x] **Vị trí**: [UdpProxyForwarder.cs:26](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L26), [UdpProxyForwarder.cs:39-46](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L39-L46), [RoutingPolicyResolver.cs:139-140](../src/ProxyDivert.Core/Routing/RoutingPolicyResolver.cs#L139-L140)
 - **Vấn đề**: khoá theo `(outboundId, clientPort, isIpv6)` nên mỗi cổng nguồn của tiến trình là một `PortTunnel` giữ một kết nối TCP điều khiển [SOCKS5](Glossary-vi.md#L21) + một socket UDP + hai Task. Chỉ bị xoá khi user sửa đúng outbound đó hoặc stop engine. Nhánh `UdpMode.ThroughOutbound` không đọc `BlockQuic`.
 - **Vì sao**: trình duyệt mở cổng nguồn mới cho mỗi kết nối [QUIC](Glossary-vi.md#L29) và mỗi query DNS, vài giờ là hàng nghìn tunnel, mỗi cái một socket và một kết nối tới proxy.
 - **Cách sửa**: thêm `LastUsedTicks` vào `PortTunnel`, một timer quét đóng tunnel im lặng quá 60 giây, cộng cap cứng số tunnel trên mỗi outbound. Cân nhắc áp `BlockQuic` cho cả nhánh `ThroughOutbound`.
+- **Đã sửa**: ProxyDivert — commit "Let idle UDP tunnels go, and put a ceiling on them". KHÔNG áp `BlockQuic` cho nhánh `ThroughOutbound`: ở đó datagram đi trong tunnel nên không rò IP thật, chặn chỉ làm trình duyệt mất vài giây thử QUIC rồi mới lùi về TCP — đúng cái đã sửa ở đợt 2026-09-07.
 
 ### A3. `ProcessInventory.Reconcile` retire nhầm tiến trình vừa start — Vừa
 

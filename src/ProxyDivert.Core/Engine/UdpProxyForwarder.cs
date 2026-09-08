@@ -20,9 +20,23 @@ namespace ProxyDivert.Core.Engine;
 // of the relay's two loopback listeners.
 public sealed class UdpProxyForwarder : IDisposable
 {
+    // A tunnel unused for this long is finished with. Browsers open a fresh source port for every
+    // QUIC connection and every DNS query, so without an upper bound on their lifetime the table
+    // grows for as long as the engine runs — thousands of entries in a few hours, each holding a
+    // TCP control connection to the proxy, a UDP socket and two tasks.
+    private static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(60);
+
+    private static readonly TimeSpan ReapInterval = TimeSpan.FromSeconds(15);
+
+    // And a ceiling for the case the sweep cannot keep up with: a burst faster than the idle
+    // window. Evicting the least recently used one costs that flow its tunnel — the datagram is
+    // dropped, which UDP callers tolerate — where running out of sockets costs the whole engine.
+    private const int MaxTunnelsPerOutbound = 512;
+
     private readonly IProcessRedirector _redirector;
     private readonly ILogger<UdpProxyForwarder> _logger;
     private readonly CancellationTokenSource _cts;
+    private readonly Timer _reaper;
     // Lazy, because GetOrAdd may run its factory on several threads and keep only one result. A
     // PortTunnel opens a SOCKS5 control connection and a UDP socket as it is constructed, so the
     // copies the dictionary discards would go on running with nobody holding them.
@@ -34,6 +48,9 @@ public sealed class UdpProxyForwarder : IDisposable
         _redirector = redirector ?? throw new ArgumentNullException(nameof(redirector));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // Re-armed at the end of each pass rather than periodic: disposing a tunnel waits on its
+        // tasks, and overlapping passes would pile callbacks onto the pool.
+        _reaper = new Timer(_ => Reap(), null, ReapInterval, Timeout.InfiniteTimeSpan);
     }
 
     // Queues one datagram for delivery through `source`. Returns false when the tunnel is not
@@ -44,10 +61,83 @@ public sealed class UdpProxyForwarder : IDisposable
         if (_disposed) return false;
 
         var key = new TunnelKey(outboundId, clientPort, isIpv6);
-        PortTunnel tunnel = _tunnels.GetOrAdd(key, k => new Lazy<PortTunnel>(
-            () => new PortTunnel(this, source, k), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+        if (!_tunnels.TryGetValue(key, out Lazy<PortTunnel>? entry))
+        {
+            // Only when a port is new, so the cost is per flow rather than per datagram.
+            EnforceCap(outboundId);
+            entry = _tunnels.GetOrAdd(key, k => new Lazy<PortTunnel>(
+                () => new PortTunnel(this, source, k), LazyThreadSafetyMode.ExecutionAndPublication));
+        }
+
+        PortTunnel tunnel = entry.Value;
+        tunnel.Touch();
         return tunnel.Send(destination, payload);
     }
+
+    // Closes the tunnels nothing has used lately.
+    private void Reap()
+    {
+        try
+        {
+            if (_disposed) return;
+            long cutoff = Environment.TickCount64 - (long)IdleTimeout.TotalMilliseconds;
+
+            foreach (var kv in _tunnels)
+            {
+                // A tunnel still being built has been used by definition — the caller that built it
+                // is about to send through it.
+                if (!kv.Value.IsValueCreated) continue;
+                if (kv.Value.Value.LastUsedTicks > cutoff) continue;
+                if (!_tunnels.TryRemove(kv.Key, out Lazy<PortTunnel>? idle)) continue;
+
+                _logger.LogTrace("closing the idle UDP tunnel for :{ClientPort}", kv.Key.ClientPort);
+                DisposeInBackground(idle);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "the idle-tunnel sweep failed");
+        }
+        finally
+        {
+            try { if (!_disposed) _reaper.Change(ReapInterval, Timeout.InfiniteTimeSpan); } catch { }
+        }
+    }
+
+    // Makes room for one more tunnel on this outbound by dropping the one used longest ago.
+    private void EnforceCap(Guid outboundId)
+    {
+        int count = 0;
+        long oldestTicks = 0;
+        TunnelKey oldestKey = default;
+        bool haveOldest = false;
+
+        foreach (var kv in _tunnels)
+        {
+            if (!kv.Key.OutboundId.Equals(outboundId)) continue;
+            count++;
+            if (!kv.Value.IsValueCreated) continue;
+
+            long used = kv.Value.Value.LastUsedTicks;
+            if (haveOldest && used >= oldestTicks) continue;
+            oldestTicks = used;
+            oldestKey = kv.Key;
+            haveOldest = true;
+        }
+
+        if (count < MaxTunnelsPerOutbound || !haveOldest) return;
+        if (!_tunnels.TryRemove(oldestKey, out Lazy<PortTunnel>? evicted)) return;
+
+        _logger.LogDebug(
+            "outbound {Outbound} is at its {Cap}-tunnel ceiling; dropping the one for :{ClientPort}",
+            outboundId, MaxTunnelsPerOutbound, oldestKey.ClientPort);
+        DisposeInBackground(evicted);
+    }
+
+    // Disposing waits on the tunnel's tasks, which is not something to do on the timer thread or
+    // on the relay's receive path.
+    private static void DisposeInBackground(Lazy<PortTunnel> tunnel)
+        => _ = Task.Run(() => Dispose(tunnel));
 
     // Drops the tunnels of an outbound the user has just edited or removed.
     public void InvalidateOutbound(Guid outboundId)
@@ -81,6 +171,7 @@ public sealed class UdpProxyForwarder : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        try { _reaper.Dispose(); } catch { }
         try { _cts.Cancel(); } catch { }
         foreach (var kv in _tunnels) Dispose(kv.Value);
         _tunnels.Clear();
@@ -121,15 +212,26 @@ public sealed class UdpProxyForwarder : IDisposable
         private readonly Task _ready;
         private IUdpAssociateSource? _tunnel;
         private Task? _receiveLoop;
+        private long _lastUsedTicks;
 
         public PortTunnel(UdpProxyForwarder owner, IProxySource source, TunnelKey key)
         {
             _owner = owner;
             _source = source;
             _key = key;
+            _lastUsedTicks = Environment.TickCount64;
             _cts = CancellationTokenSource.CreateLinkedTokenSource(owner._cts.Token);
             _ready = Task.Run(() => AssociateAsync(_cts.Token));
         }
+
+        /// <summary>When a datagram last went either way through this tunnel.</summary>
+        public long LastUsedTicks => Interlocked.Read(ref _lastUsedTicks);
+
+        /// <summary>
+        /// Marks the tunnel as in use. Called for both directions: a long download is silent on the
+        /// way out, and reaping it because nothing was sent would cut it off mid-transfer.
+        /// </summary>
+        public void Touch() => Interlocked.Exchange(ref _lastUsedTicks, Environment.TickCount64);
 
         private async Task AssociateAsync(CancellationToken ct)
         {
@@ -183,6 +285,7 @@ public sealed class UdpProxyForwarder : IDisposable
                     return;
                 }
 
+                Touch();
                 _owner.OnReply(_key.ClientPort, datagram.Source, datagram.Payload, _key.IsIpv6);
             }
         }
