@@ -98,9 +98,10 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A12. Cột Duration của connection đã đóng đếm mãi — Vừa
 
-- [ ] **Vị trí**: [ByteSizeConverter.cs:36-51](../src/ProxyDivert.Wpf/Converters/ByteSizeConverter.cs#L36-L51), [ConnectionsView.xaml:33-34](../src/ProxyDivert.Wpf/Views/ConnectionsView.xaml#L33-L34)
+- [x] **Vị trí**: [ByteSizeConverter.cs:36-51](../src/ProxyDivert.Wpf/Converters/ByteSizeConverter.cs#L36-L51), [ConnectionsView.xaml:33-34](../src/ProxyDivert.Wpf/Views/ConnectionsView.xaml#L33-L34)
 - **Vấn đề**: `DurationConverter` chỉ nhận `StartedUtc`, luôn tính tới `UtcNow`; `ConnectionInfo` có sẵn `EndedUtc`.
 - **Cách sửa**: [MultiBinding](Glossary-vi.md#L133) `StartedUtc` + `EndedUtc`, tính `(EndedUtc ?? UtcNow) - StartedUtc`.
+- **Đã sửa**: commit "fix(ui): measure a finished connection to when it ended". `DurationConverter` implement cả `IValueConverter` lẫn `IMultiValueConverter` (giữ được một resource key duy nhất), cột đổi sang `MultiBinding`. Test: `The_duration_column_reads_both_ends_of_a_connection` (chạy view thật — lỗi gốc nằm trong XAML nên phải kiểm ở đó) + `DurationConverterTests` cho phần tính. Bẫy: `DurationConverter` trùng tên `System.Windows.DurationConverter`, trong test phải dùng using alias.
 
 ### A13. Tick checkbox chọn hàng làm filter "dirty" — Vừa
 

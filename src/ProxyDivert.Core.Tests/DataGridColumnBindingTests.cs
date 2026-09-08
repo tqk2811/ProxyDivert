@@ -5,9 +5,11 @@ using System.Linq;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Media;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models.Conditions;
+using AppDurationConverter = ProxyDivert.Wpf.Converters.DurationConverter;
 using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.Views;
 using Xunit;
@@ -620,6 +622,43 @@ public class DataGridColumnBindingTests
             if (child is T hit) yield return hit;
             foreach (T deeper in FindVisuals<T>(child)) yield return deeper;
         }
+    }
+
+    // The duration of a connection needs both ends of it. Bound to StartedUtc alone the converter
+    // can only measure up to now, so every finished row went on counting after it closed and the
+    // column read as a clock instead of as how long the transfer took. Checked here rather than in
+    // the converter because the fault was in the XAML, which nothing compiles.
+    [Fact]
+    public void The_duration_column_reads_both_ends_of_a_connection()
+    {
+        var bound = new List<string>();
+
+        RunOnStaThread(() =>
+        {
+            EnsureApplication();
+
+            var view = new ConnectionsView { DataContext = new ViewModelStub() };
+            var window = new Window { Width = 1400, Height = 900, Content = view };
+            window.Show();
+            view.UpdateLayout();
+
+            foreach (DataGrid grid in FindVisuals<DataGrid>(view))
+            {
+                foreach (DataGridColumn column in grid.Columns)
+                {
+                    BindingBase? binding = (column as DataGridTextColumn)?.Binding;
+
+                    if (binding is MultiBinding multi && multi.Converter is AppDurationConverter)
+                        bound.AddRange(multi.Bindings.OfType<Binding>().Select(b => b.Path.Path));
+                    else if (binding is Binding single && single.Converter is AppDurationConverter)
+                        bound.Add($"one end only: {single.Path.Path}");
+                }
+            }
+
+            window.Close();
+        });
+
+        Assert.Equal(new[] { "StartedUtc", "EndedUtc" }, bound);
     }
 
     private static void RunOnStaThread(Action action)

@@ -30,8 +30,16 @@
                                         Binding="{Binding BytesUp, Converter={StaticResource ByteSize}}" Width="80"/>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Down}"
                                         Binding="{Binding BytesDown, Converter={StaticResource ByteSize}}" Width="80"/>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Duration}"
-                                        Binding="{Binding StartedUtc, Converter={StaticResource Duration}}" Width="80"/>
+                    <!-- Both ends, so a finished connection shows how long it took instead of
+                         counting up forever after it closed. -->
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Duration}" Width="80">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding Converter="{StaticResource Duration}">
+                                <Binding Path="StartedUtc"/>
+                                <Binding Path="EndedUtc"/>
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
                 </DataGrid.Columns>
 
                 <DataGrid.RowStyle>
