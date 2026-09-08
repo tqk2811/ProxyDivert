@@ -165,10 +165,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### B4. Cache verdict theo pid trần, sai khi tái dùng PID — Vừa
 
-- [ ] **Vị trí**: [SocketTracker.cs:204-231](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L204-L231), [SocketTracker.cs:315](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L315); [ProcessTreeMonitor.cs:26](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.ProcessControl/ProcessTreeMonitor.cs#L26), [ProcessTreeMonitor.cs:92-97](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.ProcessControl/ProcessTreeMonitor.cs#L92-L97)
+- [x] **Vị trí**: [SocketTracker.cs:204-231](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L204-L231), [SocketTracker.cs:315](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L315); [ProcessTreeMonitor.cs:26](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.ProcessControl/ProcessTreeMonitor.cs#L26), [ProcessTreeMonitor.cs:92-97](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.ProcessControl/ProcessTreeMonitor.cs#L92-L97)
 - **Vấn đề**: `_pidDecisions[pid] = false` chỉ bị xoá bởi `RemoveProcess`, mà `RemoveProcess` chỉ được gọi cho pid đã attach. Pid được phán `false` (chrome) thoát, Windows cấp lại số đó cho game cần redirect → `AcceptPid` trả cache `false` mãi mãi, không log. Dictionary cũng phình theo mọi tiến trình trên máy. `ProcessTreeMonitor` so `seen` với `_knownDescendants` tích luỹ toàn thời gian thay vì snapshot trước, nên con mới trúng pid cũ không bao giờ bắn `ChildSpawned`.
 - **Vì sao**: xem [tái dùng PID](Glossary-vi.md#L374); mode nghe socket dựa hoàn toàn vào cache này.
 - **Cách sửa**: khoá theo `(pid, startTime)` hoặc TTL cho verdict `false`; `ProcessTreeMonitor` gán `_knownDescendants = seen` cuối mỗi `Scan`.
+- **Đã sửa**: submodule WinDivert (branch `fix/wave2`), 2 commit — "fix(flow): expire a refused pid so a reused number is asked about again" (verdict `false` mang mốc tick, hết hạn 30s; vòng cleanup dọn entry hết hạn nên bảng không phình theo mọi tiến trình trên máy; verdict `true` giữ nguyên vì `RemoveProcess` đã dọn) và "fix(processcontrol): announce a child whose pid has been reused" (`_knownDescendants` thay bằng snapshot mỗi lần quét). Chọn TTL chứ không khoá `(pid, startTime)`, đúng ý doc "sửa tối thiểu": lấy start time phải mở handle cho **mỗi** sự kiện socket, mà `MachineWideScope` ở Đợt 4 sẽ thay hẳn chỗ này.
 
 ### B5. UDP relay khoá upstream theo cổng nguồn, đích đóng băng lần đầu — Vừa
 
@@ -179,45 +180,52 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### B6. `TcpRelayServer.HandleAsync`: phần trước `try` ném thì rò `TcpClient` — Vừa
 
-- [ ] **Vị trí**: [TcpRelayServer.cs:101](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/TcpRelayServer.cs#L101), [TcpRelayServer.cs:105-129](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/TcpRelayServer.cs#L105-L129)
+- [x] **Vị trí**: [TcpRelayServer.cs:101](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/TcpRelayServer.cs#L101), [TcpRelayServer.cs:105-129](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/TcpRelayServer.cs#L105-L129)
 - **Vấn đề**: `_ = Task.Run(() => HandleAsync(...))`; `RemoteEndPoint` và `new RedirectedTcpConnection` → `GetStream()` nằm ngoài `catch`. Client connect rồi RST ngay (QUIC fallback, racing connections) → task faulted không log, `client` không `Close()`.
 - **Cách sửa**: bọc toàn bộ thân trong `try/catch/finally` có `client.Close()`, `.ContinueWith` log lỗi.
+- **Đã sửa**: submodule WinDivert, commit "fix(redirect): close an accepted socket whose setup throws". Tách `HandleCoreAsync`; `HandleAsync` chỉ còn try/catch/finally đóng socket (không cần `.ContinueWith` nữa vì không còn gì thoát ra ngoài task).
 
 ### B7. `ProcessRedirector.Start` không rollback — Vừa
 
-- [ ] **Vị trí**: [ProcessRedirector.cs:138-176](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/ProcessRedirector.cs#L138-L176)
+- [x] **Vị trí**: [ProcessRedirector.cs:138-176](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/ProcessRedirector.cs#L138-L176)
 - **Vấn đề**: `tracker.Start()` và `StartRelays()` chạy trước `OpenNetworkHandle`. Handle mở thất bại (không elevated) → `Start()` ném ra, tracker + hai relay listener + pump task còn sống, caller thường không `Dispose` vì "Start đã fail".
 - **Cách sửa**: `try/catch` quanh thân, gọi `Dispose()` rồi rethrow.
+- **Đã sửa**: submodule WinDivert, commit "fix(redirect): unwind a redirect whose start fails". Tách `StartCore`; `Start` bọc try, gọi `Dispose()` (nuốt lỗi dọn dẹp, chỉ log Debug) rồi rethrow lỗi gốc.
 
 ### B8. `AddProcess` đua với `Dispose`, handler ném làm `RemoveProcess` dở dang — Vừa
 
-- [ ] **Vị trí**: [SocketTracker.cs:239-299](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L239-L299), [SocketTracker.cs:328-345](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L328-L345), [SocketTracker.cs:551-577](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L551-L577)
+- [x] **Vị trí**: [SocketTracker.cs:239-299](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L239-L299), [SocketTracker.cs:328-345](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L328-L345), [SocketTracker.cs:551-577](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L551-L577)
 - **Vấn đề**: `AddProcess` từ thread watcher, `Dispose` từ UI: qua được check `_cts.IsCancellationRequested` rồi `Dispose` clear xong trước `TryAdd` → handle không bao giờ đóng; task body đọc `_cts.Token` sau `_cts.Dispose()` → `ObjectDisposedException` unobserved. `RemoveProcess` gọi `TcpConnectClosed?.Invoke`/`UdpBindRemoved?.Invoke` không try/catch, một subscriber ném là handle SOCKET đã đóng nhưng flow còn nguyên.
 - **Cách sửa**: lock hoặc cờ `_disposed` kiểm lại sau `TryAdd`; chụp `_cts.Token` trước `Task.Run`; bọc từng `Invoke` như `PumpLoop`.
+- **Đã sửa**: submodule WinDivert, commit "fix(flow): stop AddProcess leaving a handle behind when Dispose races it". Đủ cả 3 phần. Điểm mấu chốt của thứ tự: entry phải vào `_pidHandles` TRƯỚC rồi mới đọc lại `_disposed` — như vậy hoặc `Dispose` thấy entry, hoặc `AddProcess` thấy cờ, không có cửa nào lọt.
 
 ### B9. `ConcurrentDictionary.Count` trên hot path mỗi sự kiện socket — Vừa
 
-- [ ] **Vị trí**: [SocketTracker.cs:504](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L504), [SocketTracker.cs:516](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L516), [SocketTracker.cs:531](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L531)
+- [x] **Vị trí**: [SocketTracker.cs:504](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L504), [SocketTracker.cs:516](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L516), [SocketTracker.cs:531](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L531)
 - **Vấn đề**: `_tcpFlows.Count` lấy **mọi** lock của dictionary và là tham số `LogTrace` nên chạy dù không bật Trace, trong khi pump NETWORK đọc `_tcpFlows` mỗi packet. Mode máy-toàn-bộ là mọi socket event trên máy.
 - **Cách sửa**: bọc `if (_logger.IsEnabled(LogLevel.Trace))` như `NatRedirectMiddleware.cs:169` đã làm.
+- **Đã sửa**: submodule WinDivert, commit "perf(flow): stop counting the flow table on every socket event". Hỏi `IsEnabled` một lần vào biến `trace` dùng cho cả 3 dòng trong `HandleEvent`.
 
 ### B10. `DnsCacheLookup.Refresh` redirect stderr không đọc, không Kill khi timeout — Vừa
 
-- [ ] **Vị trí**: [DnsCacheLookup.cs:39](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/DnsCacheLookup.cs#L39), [DnsCacheLookup.cs:67-79](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/DnsCacheLookup.cs#L67-L79)
+- [x] **Vị trí**: [DnsCacheLookup.cs:39](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/DnsCacheLookup.cs#L39), [DnsCacheLookup.cs:67-79](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/DnsCacheLookup.cs#L67-L79)
 - **Vấn đề**: `RedirectStandardError = true` nhưng chỉ `ReadToEnd()` stdout; `ipconfig` ghi đủ 4KB stderr là pipe đầy, `ReadToEnd` treo vô hạn, vòng refresh chết im lặng. `WaitForExit(10s)` không `Kill()`. `Start()` check-then-assign không atomic.
 - **Cách sửa**: bỏ redirect stderr (hoặc `BeginErrorReadLine`), `Kill()` khi timeout, `Interlocked.CompareExchange` trong `Start`.
+- **Đã sửa**: submodule WinDivert, commit "fix(flow): stop the DNS cache refresh hanging on an unread stderr pipe". Bỏ hẳn redirect stderr (không dùng `BeginErrorReadLine`: không ai cần nội dung đó). `Start` dùng `Interlocked.Exchange` trên một cờ `int` riêng chứ không CAS trên `_loopTask` — `Dispose` chờ trên `_loopTask`, nên đặt placeholder vào đó sẽ làm `Dispose` chờ nhầm một task không bao giờ xong.
 
 ### B11. `IDnsCacheLookup` transient bị root ServiceProvider giữ mãi — Vừa
 
-- [ ] **Vị trí**: [RedirectServiceCollectionExtensions.cs:44](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/DependencyInjection/RedirectServiceCollectionExtensions.cs#L44), [DnsCacheLookup.cs:26](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/DnsCacheLookup.cs#L26)
+- [x] **Vị trí**: [RedirectServiceCollectionExtensions.cs:44](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/DependencyInjection/RedirectServiceCollectionExtensions.cs#L44), [DnsCacheLookup.cs:26](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/DnsCacheLookup.cs#L26)
 - **Vấn đề**: `sp.GetRequiredService<IDnsCacheLookup>` với `sp` là root; transient `IDisposable` được root container thêm vào danh sách disposables và giữ tham chiếu mạnh tới khi app thoát. Mỗi Start/Stop là một bản rò kèm `_map` chỉ tăng.
 - **Cách sửa**: resolve từ `IServiceScope` do session sở hữu, hoặc đăng ký factory trả instance không bị container theo dõi.
+- **Đã sửa**: submodule WinDivert, commit "fix(di): stop the root container holding every DNS cache lookup". Chọn hướng factory (`TryAddSingleton<Func<IDnsCacheLookup>>`) chứ không dùng scope: session không có scope riêng và dựng scope chỉ để giữ một object sẽ phải kèm wrapper dispose scope theo. **Breaking nhỏ**: ai resolve thẳng `IDnsCacheLookup` phải chuyển sang `Func<>` — trong repo này không có chỗ nào. Test `DnsCacheLookupLifetimeTests` dùng `WeakReference` để chứng minh container không còn giữ.
 
 ### B12. `ReverseDnsTable.Trim` sort toàn bảng trên mỗi Add sau khi đầy — Vừa
 
-- [ ] **Vị trí**: [ReverseDnsTable.cs:43](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.SecureDns/ReverseDnsTable.cs#L43), [ReverseDnsTable.cs:74-90](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.SecureDns/ReverseDnsTable.cs#L74-L90)
+- [x] **Vị trí**: [ReverseDnsTable.cs:43](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.SecureDns/ReverseDnsTable.cs#L43), [ReverseDnsTable.cs:74-90](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.SecureDns/ReverseDnsTable.cs#L74-L90)
 - **Vấn đề**: trim đúng phần thừa nên `Count == _capacity` sau trim, Add kế tiếp lại copy list 20k + Sort O(n log n), trên luồng pump mỗi câu trả lời DNS.
 - **Cách sửa**: trim theo lô 10-20% capacity.
+- **Đã sửa**: submodule WinDivert, commit "perf(securedns): trim the reverse-DNS table in batches". Trim xuống dưới capacity 1/8. Test `ReverseDnsTableTests` (3 test). Lưu ý khi đọc test: bảng trim theo **hạn dùng gần nhất**, không theo thứ tự thêm — bản ghi mới với TTL ngắn vẫn có thể bị loại trước bản ghi cũ TTL dài.
 
 ### B13. Peek 2048 byte không đủ cho ClientHello hậu lượng tử → mất SNI — Vừa
 
