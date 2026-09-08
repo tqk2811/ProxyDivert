@@ -21,6 +21,15 @@ public sealed class RouteDecision
         MatchedRule = matchedRule;
     }
 
+    /// <summary>Leave it on the machine's own stack — no relay, no tunnel.</summary>
+    public bool IsDirect => Outbound.IsDirect;
+
+    /// <summary>Refuse it. Still claimed by the relay, because a blocked datagram must not leak.</summary>
+    public bool IsBlocked => Outbound.IsBlocked;
+
+    /// <summary>Carry it through an outbound: a proxy or a VPN, the only case that needs a source.</summary>
+    public bool UsesTunnel => !IsDirect && !IsBlocked;
+
     public string Reason => MatchedRule != null
         ? $"{Policy.Name}: {MatchedRule.Matcher}:{MatchedRule.Pattern}"
         : "no policy matched";

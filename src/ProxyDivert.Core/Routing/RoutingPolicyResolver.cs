@@ -127,12 +127,8 @@ public sealed class RoutingPolicyResolver
             return new RouteDecision(_outbounds[Outbound.BlockId], policy, null);
 
         RouteDecision tcpDecision = Resolve(target);
-        switch (tcpDecision.Outbound.Kind)
-        {
-            case OutboundKind.Block:
-            case OutboundKind.Direct:
-                return tcpDecision;
-        }
+        // Neither of these has an outbound to ride, so UdpMode has nothing left to decide.
+        if (!tcpDecision.UsesTunnel) return tcpDecision;
 
         switch (policy.UdpMode)
         {

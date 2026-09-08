@@ -104,7 +104,7 @@ public sealed partial class OutboundsViewModel : ObservableObject
 
     private bool CanToggleVpn(Outbound? outbound)
     {
-        if (outbound is null || outbound.Kind != OutboundKind.Vpn || !outbound.IsEnabled)
+        if (outbound is null || !_services.Vpn.CanKeep(outbound) || !outbound.IsEnabled)
             return false;
 
         // Connecting is always allowed. Disconnecting is not, while redirection is on and a filter

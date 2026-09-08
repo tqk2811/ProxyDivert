@@ -43,6 +43,19 @@ public interface IOutboundInstance : IAsyncDisposable
     IManagedProxySource? Tunnel { get; }
 
     /// <summary>
+    /// Whether this way out can carry datagrams, as built.
+    /// </summary>
+    /// <remarks>
+    /// The routing path does NOT ask this, and that is on purpose: it answers per datagram, before
+    /// anything has been built, and building a VPN is what dials it — so <see cref="Outbound"/>
+    /// works the same answer out from the configuration instead. Two answers to one question is a
+    /// place they can drift apart, which is why a test walks every kind and pins them equal. This
+    /// one is here for whoever is already holding an instance, so that reading a capability off a
+    /// built source does not mean casting it.
+    /// </remarks>
+    bool SupportsUdp { get; }
+
+    /// <summary>
     /// Turns IPv6 off (or back on) for this instance: the source then stops handing IPv6 addresses
     /// out on its own — for Direct that means name lookups return A records only, which is what
     /// makes "no IPv6 out there, use IPv4" actually happen. A no-op for a way out whose answer is

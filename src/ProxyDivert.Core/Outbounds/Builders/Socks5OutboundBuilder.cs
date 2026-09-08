@@ -23,8 +23,8 @@ public sealed class Socks5OutboundBuilder : IOutboundSourceBuilder
             ? new Socks5ProxySource(endPoint, new ProxyCredential(outbound.Username!, outbound.Password!), context.LoggerFactory)
             : new Socks5ProxySource(endPoint, context.LoggerFactory);
 
-        return new OutboundInstance(
-            outbound.Id, context.Signature, source,
-            setIpv6Support: supported => source.IsSupportIpv6 = supported);
+        // No IPv6 switch handed over: the destination goes to the upstream as a name and the
+        // upstream resolves it. See HttpProxyOutboundBuilder for the same reasoning at length.
+        return new OutboundInstance(outbound.Id, context.Signature, source);
     }
 }

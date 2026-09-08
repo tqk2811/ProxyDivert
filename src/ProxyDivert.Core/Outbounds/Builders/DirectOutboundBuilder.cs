@@ -19,6 +19,6 @@ public sealed class DirectOutboundBuilder : IOutboundSourceBuilder
         var source = new LocalProxySource();
         return new OutboundInstance(
             outbound.Id, context.Signature, source,
-            setIpv6Support: supported => source.IsSupportIpv6 = supported);
+            setIpv6Support: supported => source.AllowIpv6 = supported);
     }
 }

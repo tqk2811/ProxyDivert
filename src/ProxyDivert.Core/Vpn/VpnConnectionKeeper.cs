@@ -63,6 +63,13 @@ public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
         get { lock (_lock) return _tunnels.Values.Select(t => t.Status).ToArray(); }
     }
 
+    /// <summary>
+    /// Whether this outbound is one this keeper would supervise at all — a way out that holds
+    /// something open, as opposed to a proxy that dials per connection. What the Connect button on
+    /// the Outbounds tab asks before it offers itself.
+    /// </summary>
+    public bool CanKeep(Outbound outbound) => _registry.CanBeKeptConnected(outbound);
+
     /// <summary>The tunnel state of one outbound, or null when it is not being kept.</summary>
     public VpnStatus? StatusOf(Guid outboundId)
     {

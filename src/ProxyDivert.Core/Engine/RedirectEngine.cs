@@ -475,7 +475,7 @@ public sealed class RedirectEngine : IDisposable
 
             _logger.LogInformation("tcp pid={Pid} {Target} -> {Decision}", connection.ProcessId, target, decision);
 
-            if (decision.Outbound.Kind == OutboundKind.Block)
+            if (decision.IsBlocked)
             {
                 info.Error = "blocked by rule";
                 return;
@@ -523,7 +523,7 @@ public sealed class RedirectEngine : IDisposable
         // costs nothing — a name lets an outbound without an IPv6 route pick the A record itself.
         // Going direct, use the IP the process itself chose: re-resolving could pick a different
         // server than the one the application decided on.
-        bool byName = outbound.Kind != OutboundKind.Direct && !string.IsNullOrEmpty(host);
+        bool byName = !outbound.IsDirect && !string.IsNullOrEmpty(host);
 
         // An IPv6 literal and no name to fall back on: there is no IPv4 address to reach this
         // destination with, so an outbound without an IPv6 route cannot serve it at all. Refusing
@@ -591,7 +591,7 @@ public sealed class RedirectEngine : IDisposable
     // IPv6 connection in the first place, so one unreachable destination says nothing about it.
     private void NoteIpv6Failure(Outbound outbound, IPEndPoint destination, Exception ex)
     {
-        if (outbound.Kind == OutboundKind.Direct) return;
+        if (outbound.IsDirect) return;
         if (!_ipv6Capability.RecordIpv6Failure(outbound)) return;
 
         _outbounds.SetIpv6Support(outbound.Id, false);
@@ -624,7 +624,7 @@ public sealed class RedirectEngine : IDisposable
         var target = new RouteTarget(processId, destination, destinationPort, host, isUdp: true);
 
         RouteDecision decision = _resolver.ResolveUdp(target);
-        if (decision.Outbound.Kind != OutboundKind.Direct) return true;
+        if (!decision.IsDirect) return true;
 
         _logger.LogDebug("udp pid={Pid} -> {Target} left direct, unredirected ({Reason})",
             processId, target, decision.Reason);
@@ -647,50 +647,45 @@ public sealed class RedirectEngine : IDisposable
 
             RouteDecision decision = _resolver.ResolveUdp(target);
 
-            switch (decision.Outbound.Kind)
+            if (decision.IsBlocked) return null;
+
+            if (decision.IsDirect)
             {
-                case OutboundKind.Block:
-                    return null;
-
-                case OutboundKind.Direct:
-                    // Normally unreachable: ShouldRedirectUdpFlow keeps a Direct flow away from
-                    // the relay entirely. It is still reached when the answer changed between the
-                    // packet path and here — a DNS answer landing in between gives the flow a name
-                    // it did not have, and a rule that then claims it. Forwarding from the relay's
-                    // socket is all that is left at this point, and its reply has nowhere to go,
-                    // so the sender sees one lost datagram and retries.
-                    _logger.LogDebug(
-                        "udp pid={Pid} -> {Destination} resolved Direct after it was already redirected; "
-                        + "forwarding without a reply path, the sender will retry",
-                        datagram.ProcessId, datagram.OriginalDestination);
-                    return datagram.Payload;
-
-                default:
-                {
-                    bool isIpv6 = datagram.OriginalDestination.AddressFamily == AddressFamily.InterNetworkV6;
-                    // A UDP datagram carries no name to fall back on, so an outbound without an
-                    // IPv6 route has nothing to send it over. Dropping is the safe answer: letting
-                    // it out direct would expose the real address.
-                    if (isIpv6 && !_ipv6Capability.AllowsIpv6(decision.Outbound))
-                    {
-                        _logger.LogDebug(
-                            "udp pid={Pid} -> {Destination} dropped: {Outbound} has no IPv6 route",
-                            datagram.ProcessId, datagram.OriginalDestination, decision.Outbound.Name);
-                        return null;
-                    }
-
-                    IProxySource source = _outbounds.GetOrCreate(decision.Outbound).Source;
-                    bool queued = _udpForwarder!.Send(
-                        decision.Outbound.Id, source,
-                        (ushort)datagram.OriginalSource.Port,
-                        datagram.OriginalDestination,
-                        datagram.Payload,
-                        isIpv6);
-                    if (!queued)
-                        _logger.LogDebug("udp pid={Pid} -> {Destination} dropped, the tunnel is not ready yet", datagram.ProcessId, datagram.OriginalDestination);
-                    return null;
-                }
+                // Normally unreachable: ShouldRedirectUdpFlow keeps a Direct flow away from the
+                // relay entirely. It is still reached when the answer changed between the packet
+                // path and here — a DNS answer landing in between gives the flow a name it did not
+                // have, and a rule that then claims it. Forwarding from the relay's socket is all
+                // that is left at this point, and its reply has nowhere to go, so the sender sees
+                // one lost datagram and retries.
+                _logger.LogDebug(
+                    "udp pid={Pid} -> {Destination} resolved Direct after it was already redirected; "
+                    + "forwarding without a reply path, the sender will retry",
+                    datagram.ProcessId, datagram.OriginalDestination);
+                return datagram.Payload;
             }
+
+            bool isIpv6 = datagram.OriginalDestination.AddressFamily == AddressFamily.InterNetworkV6;
+            // A UDP datagram carries no name to fall back on, so an outbound without an IPv6 route
+            // has nothing to send it over. Dropping is the safe answer: letting it out direct would
+            // expose the real address.
+            if (isIpv6 && !_ipv6Capability.AllowsIpv6(decision.Outbound))
+            {
+                _logger.LogDebug(
+                    "udp pid={Pid} -> {Destination} dropped: {Outbound} has no IPv6 route",
+                    datagram.ProcessId, datagram.OriginalDestination, decision.Outbound.Name);
+                return null;
+            }
+
+            IProxySource source = _outbounds.GetOrCreate(decision.Outbound).Source;
+            bool queued = _udpForwarder!.Send(
+                decision.Outbound.Id, source,
+                (ushort)datagram.OriginalSource.Port,
+                datagram.OriginalDestination,
+                datagram.Payload,
+                isIpv6);
+            if (!queued)
+                _logger.LogDebug("udp pid={Pid} -> {Destination} dropped, the tunnel is not ready yet", datagram.ProcessId, datagram.OriginalDestination);
+            return null;
         }
         catch (Exception ex)
         {
@@ -710,7 +705,7 @@ public sealed class RedirectEngine : IDisposable
         ILoggerFactory? loggerFactory = null, string? wireProxyPath = null, CancellationToken ct = default)
     {
         if (outbound is null) throw new ArgumentNullException(nameof(outbound));
-        if (outbound.Kind == OutboundKind.Block) return "Block never connects anywhere.";
+        if (outbound.IsBlocked) return "Block never connects anywhere.";
 
         // A VPN test starts its own wireproxy subprocess so it never disturbs a tunnel live traffic
         // is already using — and it has to put that subprocess down itself. The factory owns

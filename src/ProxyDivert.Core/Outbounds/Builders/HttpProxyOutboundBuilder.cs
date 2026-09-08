@@ -20,8 +20,11 @@ public sealed class HttpProxyOutboundBuilder : IOutboundSourceBuilder
         if (OutboundUrl.HasCredential(outbound))
             source.Credential = new ProxyCredential(outbound.Username!, outbound.Password!);
 
-        return new OutboundInstance(
-            outbound.Id, context.Signature, source,
-            setIpv6Support: supported => source.IsSupportIpv6 = supported);
+        // No IPv6 switch handed over. CONNECT gives the upstream a name and the upstream resolves
+        // it, so nothing on this side can keep AAAA records out of that answer — the property that
+        // used to be set here existed but was read by nobody, which made the switch look enforced
+        // when it never was. What Ipv6Support=Disabled does reach is OutboundIpv6Capability in the
+        // engine, which refuses an IPv6 literal outright.
+        return new OutboundInstance(outbound.Id, context.Signature, source);
     }
 }

@@ -69,19 +69,9 @@ internal class FakeProxySource : IProxySource
     /// <summary>How many times this instance has been released. More than one is a double free.</summary>
     public int Disposals => Volatile.Read(ref _disposals);
 
-    public bool IsSupportUdp => false;
-
-    public bool IsSupportIpv6 { get; set; }
-
-    public bool IsSupportBind => false;
-
+    // Neither IUdpCapable nor IBindCapable nor IAddressFamilyPolicy: this stands in for the plainest
+    // way out there is, and nothing here opens a tunnel of any shape.
     public Task<IConnectSource> GetConnectSourceAsync(Guid tunnelId, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException("Nothing in these tests opens a tunnel.");
-
-    public Task<IBindSource> GetBindSourceAsync(Guid tunnelId, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException("Nothing in these tests opens a tunnel.");
-
-    public Task<IUdpAssociateSource> GetUdpAssociateSourceAsync(Guid tunnelId, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("Nothing in these tests opens a tunnel.");
 
     public ValueTask DisposeAsync()

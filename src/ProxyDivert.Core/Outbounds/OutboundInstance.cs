@@ -49,6 +49,13 @@ public sealed class OutboundInstance : IOutboundInstance
     /// </remarks>
     public IManagedProxySource? Tunnel => Source as IManagedProxySource;
 
+    /// <remarks>
+    /// Both halves have to pass: a way out whose protocol has no datagram does not implement
+    /// <see cref="IUdpCapable"/> at all, and one that does may still be pointed at an upstream that
+    /// refuses — a SOCKS5 server built without UDP, or wireproxy, whose listener is TCP-only.
+    /// </remarks>
+    public bool SupportsUdp => Source is IUdpCapable udp && udp.IsSupportUdp;
+
     public void SetIpv6Support(bool supported) => _setIpv6Support?.Invoke(supported);
 
     /// <remarks>

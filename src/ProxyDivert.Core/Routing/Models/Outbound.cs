@@ -78,6 +78,16 @@ public sealed class Outbound
     [JsonIgnore]
     public bool CanEverCarryIpv6 => Kind != OutboundKind.Socks4;
 
+    // The two kinds that are not a way out but an answer, named so that the code asking reads as
+    // what it means rather than as a comparison against an enum. Both are asked all over the engine
+    // and the resolver, on the packet path and the connection path, and "Kind == OutboundKind.Direct"
+    // spelled out at each of them says how the check is made instead of what it decides.
+    [JsonIgnore]
+    public bool IsDirect => Kind == OutboundKind.Direct;
+
+    [JsonIgnore]
+    public bool IsBlocked => Kind == OutboundKind.Block;
+
     // Direct and Block are the two the application creates for itself. They exist so a policy has
     // something to point at, they carry no settings anyone could sensibly change, and a rule that
     // references one by id would break if it were renamed or given a URL — so the list shows them

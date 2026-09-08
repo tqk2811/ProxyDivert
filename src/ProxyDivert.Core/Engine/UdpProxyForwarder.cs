@@ -245,7 +245,17 @@ public sealed class UdpProxyForwarder : IAsyncDisposable
         {
             try
             {
-                IUdpAssociateSource tunnel = await _source.GetUdpAssociateSourceAsync(Guid.NewGuid(), ct).ConfigureAwait(false);
+                // The routing decision already said this outbound carries UDP, so reaching here with
+                // one that does not is a disagreement between the two — worth a message that names
+                // it rather than a NotSupportedException from inside the source.
+                if (_source is not IUdpCapable udp || !udp.IsSupportUdp)
+                {
+                    throw new NotSupportedException(
+                        "This outbound was routed UDP but cannot carry it. A datagram routed through "
+                        + "an outbound without UDP should have been downgraded to Block.");
+                }
+
+                IUdpAssociateSource tunnel = await udp.GetUdpAssociateSourceAsync(Guid.NewGuid(), ct).ConfigureAwait(false);
                 await tunnel.AssociateAsync(ct).ConfigureAwait(false);
                 _tunnel = tunnel;
                 _receiveLoop = Task.Run(() => ReceiveLoopAsync(ct));

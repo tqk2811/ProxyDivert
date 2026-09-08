@@ -92,6 +92,66 @@ public class OutboundInstanceTests
         Assert.Contains("close the connection", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    // The same question has two answers, and they must not drift apart.
+    //
+    // The routing path asks Outbound.SupportsUdp, which works it out from the configuration, because
+    // it answers once per datagram and building a VPN is what dials it. The instance answers from
+    // what was actually built. If those disagree, a datagram is routed through an outbound whose
+    // source then refuses it and the datagram is dropped with nothing saying why — so the agreement
+    // is pinned here instead, where it fails in the build rather than at three in the morning.
+    [Theory]
+    [InlineData(OutboundKind.Direct, null)]
+    [InlineData(OutboundKind.HttpProxy, "http://127.0.0.1:8080")]
+    [InlineData(OutboundKind.Socks4, "socks4://127.0.0.1:1080")]
+    [InlineData(OutboundKind.Socks5, "socks5://127.0.0.1:1080")]
+    // An in-process tunnel: its own IP stack, so it really does carry datagrams.
+    [InlineData(OutboundKind.Vpn, "sstp://vpn.example.com")]
+    public async Task WhetherAnOutboundCarriesUdp_ReadsTheSameOffTheModelAndOffTheBuiltInstance(
+        OutboundKind kind, string? url)
+    {
+        var outbound = new Outbound { Id = Guid.NewGuid(), Name = "way out", Kind = kind, Url = url };
+
+        OutboundSourceFactory factory = OutboundSourceFactory.CreateDefault();
+        IOutboundInstance instance = factory.Create(outbound, loggerFactory: null, wireProxyPath: null);
+        try
+        {
+            Assert.Equal(outbound.SupportsUdp, instance.SupportsUdp);
+        }
+        finally
+        {
+            await instance.DisposeAsync();
+        }
+    }
+
+    // The wireproxy half of the same rule, which needs a real file to build and so cannot ride the
+    // theory above. Its SOCKS5 listener is TCP-only, so both answers have to be false.
+    [Fact]
+    public async Task AVpnOnWireProxy_SaysItCarriesNoUdp_OnBothSides()
+    {
+        string path = WriteTempConf("[Interface]\n[Socks5]\nBindAddress = 127.0.0.1:25345\n");
+        string binary = WriteTempFile(".exe", string.Empty);
+        try
+        {
+            Outbound outbound = Vpn(path);
+            OutboundSourceFactory factory = OutboundSourceFactory.CreateDefault();
+            IOutboundInstance instance = factory.Create(outbound, loggerFactory: null, wireProxyPath: binary);
+            try
+            {
+                Assert.False(outbound.SupportsUdp);
+                Assert.Equal(outbound.SupportsUdp, instance.SupportsUdp);
+            }
+            finally
+            {
+                await instance.DisposeAsync();
+            }
+        }
+        finally
+        {
+            try { File.Delete(path); } catch { }
+            try { File.Delete(binary); } catch { }
+        }
+    }
+
     private static Outbound Vpn(string configPath) => new Outbound
     {
         Id = Guid.NewGuid(),

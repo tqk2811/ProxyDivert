@@ -1,0 +1,4 @@
+CHANGEDa
+if (x || y)
+    go;
+b

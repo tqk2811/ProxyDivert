@@ -25,7 +25,7 @@ namespace ProxyDivert.Core.Vpn.Client;
 /// keeps it that way; the lazy start in <see cref="GetConnectSourceAsync"/> is only there so the
 /// source still works on its own, which is what the Outbounds tab's Test button uses.
 /// </remarks>
-public sealed class VpnClientProxySource : IManagedProxySource
+public sealed class VpnClientProxySource : IManagedProxySource, IUdpCapable, IAddressFamilyPolicy
 {
     private readonly VpnProfile _profile;
     private readonly ILoggerFactory? _loggerFactory;
@@ -53,19 +53,28 @@ public sealed class VpnClientProxySource : IManagedProxySource
     public bool IsSupportUdp => true;
 
     /// <summary>
-    /// True only when the user allows IPv6 AND the tunnel actually obtained a global IPv6. Reporting
-    /// it otherwise would hand the router an address the tunnel has no route for, which fails later
-    /// and less clearly than not offering it.
+    /// Whether the user allows IPv6 out of this tunnel. A policy and nothing more: setting it does
+    /// not conjure a route, and a tunnel the provider gave no global IPv6 stays without one however
+    /// this is set.
     /// </summary>
-    public bool IsSupportIpv6
+    /// <remarks>
+    /// It used to be one property whose getter and setter meant different things — reading it gave
+    /// "there is an IPv6 route", writing it set "the user permits IPv6" — so a caller that wrote
+    /// true and read back false had no way to tell which of the two it was being told.
+    /// </remarks>
+    public bool AllowIpv6
     {
-        get => _allowIpv6 && _tunnel?.AssignedAddressV6 is not null;
+        get => _allowIpv6;
         set => _allowIpv6 = value;
     }
 
-    /// <summary>The stack opens connections, it does not accept them, and the tunnel address is not
-    /// reachable from the internet anyway.</summary>
-    public bool IsSupportBind => false;
+    // The other half: what the tunnel can actually do. Offering IPv6 without this would hand the
+    // router an address the tunnel has no route for, which fails later and less clearly than not
+    // offering it at all.
+    private bool CarriesIpv6 => _allowIpv6 && _tunnel?.AssignedAddressV6 is not null;
+
+    // Not IBindCapable: the stack opens connections, it does not accept them, and the address the
+    // tunnel is given is not reachable from the internet anyway.
 
     public bool IsRunning => _tunnel?.IsUp == true;
 
@@ -139,7 +148,7 @@ public sealed class VpnClientProxySource : IManagedProxySource
     {
         (VpnTunnel tunnel, InTunnelResolver resolver) = await ReadyAsync(cancellationToken).ConfigureAwait(false);
         return new VpnClientConnectSource(
-            tunnel, resolver, IsSupportIpv6, _loggerFactory?.CreateLogger<VpnClientConnectSource>());
+            tunnel, resolver, CarriesIpv6, _loggerFactory?.CreateLogger<VpnClientConnectSource>());
     }
 
     public async Task<IUdpAssociateSource> GetUdpAssociateSourceAsync(Guid tunnelId, CancellationToken cancellationToken = default)
@@ -149,10 +158,6 @@ public sealed class VpnClientProxySource : IManagedProxySource
             tunnel, _loggerFactory?.CreateLogger<VpnClientUdpAssociateSource>());
     }
 
-    public Task<IBindSource> GetBindSourceAsync(Guid tunnelId, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException(
-            "A VPN tunnel opens connections but cannot accept them: the address it is given is private "
-            + "to the tunnel and not reachable from the internet.");
 
     private async Task<(VpnTunnel Tunnel, InTunnelResolver Resolver)> ReadyAsync(CancellationToken cancellationToken)
     {
@@ -172,7 +177,7 @@ public sealed class VpnClientProxySource : IManagedProxySource
         var options = new VpnTunnelOptions
         {
             // Asking for IPv6 costs nothing when the server has none, and a tunnel that does carry a
-            // global IPv6 is what lets IsSupportIpv6 ever be true.
+            // global IPv6 is what lets CarriesIpv6 ever be true.
             EnableIpv6 = _allowIpv6,
             LoggerFactory = _loggerFactory,
             SoftEtherWatermarkPath = _profile.SoftEtherWatermarkPath,

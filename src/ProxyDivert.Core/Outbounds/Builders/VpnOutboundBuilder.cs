@@ -54,7 +54,7 @@ public sealed class VpnOutboundBuilder : IOutboundSourceBuilder
             outbound.Id, context.Signature, source,
             // The tunnel takes the switch too, but it only ever narrows: one that got no global
             // IPv6 stays without one however this is set.
-            setIpv6Support: supported => source.IsSupportIpv6 = supported);
+            setIpv6Support: supported => source.AllowIpv6 = supported);
     }
 
     // The wireproxy engine: a subprocess running the WireGuard tunnel in user space and exposing it
@@ -74,9 +74,6 @@ public sealed class VpnOutboundBuilder : IOutboundSourceBuilder
             // wireproxy's SOCKS5 is TCP-only, so UDP must not be advertised: the router downgrades
             // "UDP through this outbound" to Block rather than letting the datagrams out direct.
             IsSupportUdp = false,
-            // Taken here rather than through the instance's switch: the subprocess is configured
-            // once, when it is started, and cannot be told otherwise afterwards.
-            IsSupportIpv6 = outbound.Ipv6Support != Ipv6Support.Disabled,
         };
 
         string text = File.ReadAllText(configPath);
@@ -96,8 +93,11 @@ public sealed class VpnOutboundBuilder : IOutboundSourceBuilder
             options.Socks5Password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18));
         }
 
-        // No IPv6 switch handed over: everything above went into the subprocess's configuration,
-        // and wireproxy is told once, when it starts.
+        // No IPv6 switch handed over, and there is no wireproxy setting for it either. The
+        // destination goes over SOCKS5 as a name and wireproxy resolves it inside the tunnel, so
+        // nothing on this side can keep an AAAA out of that answer — the option that used to be set
+        // here only reached a property nobody read. What Ipv6Support=Disabled does reach is
+        // OutboundIpv6Capability in the engine, which refuses an IPv6 literal outright.
         return new OutboundInstance(
             outbound.Id, context.Signature, new WireGuardProxySource(options, context.LoggerFactory));
     }
