@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Net;
 using Microsoft.Extensions.Logging;
@@ -26,7 +27,7 @@ namespace ProxyDivert.Core.Outbounds;
 // connection picks up the new settings.
 //
 // Block is not represented here — a blocked connection is closed, never tunnelled.
-public sealed class OutboundSourceFactory : IDisposable
+public sealed class OutboundSourceFactory : IDisposable, IAsyncDisposable
 {
     private readonly ILoggerFactory? _loggerFactory;
     private readonly ConcurrentDictionary<Guid, CachedSource> _cache = new ConcurrentDictionary<Guid, CachedSource>();
@@ -74,7 +75,8 @@ public sealed class OutboundSourceFactory : IDisposable
     /// outbound elsewhere (learned IPv6 capability, UDP tunnels) is invalidated from the returned
     /// set, so those stay in step without also being thrown away wholesale.
     /// </remarks>
-    public IReadOnlyCollection<Guid> ApplyOutbounds(IEnumerable<Outbound> outbounds, string? wireProxyPath)
+    public async Task<IReadOnlyCollection<Guid>> ApplyOutboundsAsync(
+        IEnumerable<Outbound> outbounds, string? wireProxyPath)
     {
         if (outbounds is null) throw new ArgumentNullException(nameof(outbounds));
 
@@ -92,11 +94,15 @@ public sealed class OutboundSourceFactory : IDisposable
                 || !string.Equals(kv.Value.Signature, OutboundSignature.Of(outbound, wireProxyPath), StringComparison.Ordinal);
             if (!stale) continue;
 
-            Invalidate(kv.Key);
+            await InvalidateAsync(kv.Key).ConfigureAwait(false);
             invalidated.Add(kv.Key);
         }
         return invalidated;
     }
+
+    // See Dispose: bridge for callers not yet converted.
+    public IReadOnlyCollection<Guid> ApplyOutbounds(IEnumerable<Outbound> outbounds, string? wireProxyPath)
+        => ApplyOutboundsAsync(outbounds, wireProxyPath).GetAwaiter().GetResult();
 
     /// <summary>
     /// Turns IPv6 off (or back on) for the live instance of an outbound. Used when a connection
@@ -129,16 +135,22 @@ public sealed class OutboundSourceFactory : IDisposable
     }
 
     // Call after the user edits or removes an outbound.
-    public void Invalidate(Guid outboundId)
+    public async ValueTask InvalidateAsync(Guid outboundId)
     {
-        if (_cache.TryRemove(outboundId, out CachedSource? cached)) DisposeSource(cached.SourceIfBuilt);
+        if (_cache.TryRemove(outboundId, out CachedSource? cached))
+            await DisposeSourceAsync(cached.SourceIfBuilt).ConfigureAwait(false);
     }
 
-    public void InvalidateAll()
+    public async ValueTask InvalidateAllAsync()
     {
-        foreach (var kv in _cache) DisposeSource(kv.Value.SourceIfBuilt);
+        foreach (var kv in _cache) await DisposeSourceAsync(kv.Value.SourceIfBuilt).ConfigureAwait(false);
         _cache.Clear();
     }
+
+    // See Dispose: bridges for callers not yet converted.
+    public void Invalidate(Guid outboundId) => InvalidateAsync(outboundId).AsTask().GetAwaiter().GetResult();
+
+    public void InvalidateAll() => InvalidateAllAsync().AsTask().GetAwaiter().GetResult();
 
     // Builds a source without caching it — used by the UI's "test this outbound" button, so a
     // test never disturbs the instance live traffic is using.
@@ -299,15 +311,29 @@ public sealed class OutboundSourceFactory : IDisposable
 
     /// <summary>
     /// Releases a source, whatever it happens to be underneath. Public because <see cref="Create"/>
+    /// <summary>
+    /// Releases a source, whatever it happens to be underneath. Public because <see cref="Create"/>
     /// hands ownership to its caller, and a wireproxy-backed source that nobody releases leaves a
     /// subprocess running for the life of the app.
     /// </summary>
-    public static void DisposeSource(IProxySource? source)
+    /// <remarks>
+    /// Awaited rather than blocked on. Releasing a VPN source means putting a tunnel down and
+    /// waiting for the driver to finish, and the caller that used to block on that was the reason
+    /// the source could only give it five seconds before walking away.
+    /// </remarks>
+    public static async ValueTask DisposeSourceAsync(IProxySource? source)
     {
-        try { (source as IDisposable)?.Dispose(); } catch { }
+        if (source is null) return;
+        try { await source.DisposeAsync().ConfigureAwait(false); } catch { }
     }
 
-    public void Dispose() => InvalidateAll();
+    public async ValueTask DisposeAsync() => await InvalidateAllAsync().ConfigureAwait(false);
+
+    // Bridge for the callers that are still synchronous. Every await underneath is
+    // ConfigureAwait(false), so blocking here cannot deadlock on a UI context — but it does hold
+    // the calling thread for as long as the teardown takes, which is the whole point of removing
+    // it. Goes away once the last caller is converted.
+    public void Dispose() => InvalidateAllAsync().AsTask().GetAwaiter().GetResult();
 
     // The instance plus what it was built from, so a later configuration can be compared against
     // it without rebuilding anything.

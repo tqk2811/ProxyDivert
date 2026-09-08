@@ -25,7 +25,7 @@ namespace ProxyDivert.Core.Vpn.Client;
 /// keeps it that way; the lazy start in <see cref="GetConnectSourceAsync"/> is only there so the
 /// source still works on its own, which is what the Outbounds tab's Test button uses.
 /// </remarks>
-public sealed class VpnClientProxySource : IProxySource, IKeptTunnel, IDisposable
+public sealed class VpnClientProxySource : IProxySource, IKeptTunnel
 {
     private readonly VpnProfile _profile;
     private readonly ILoggerFactory? _loggerFactory;
@@ -249,15 +249,19 @@ public sealed class VpnClientProxySource : IProxySource, IKeptTunnel, IDisposabl
         if (_disposed) throw new ObjectDisposedException(nameof(VpnClientProxySource));
     }
 
-    public void Dispose()
+    /// <remarks>
+    /// Async, and only async. Putting a tunnel down means telling the far side and waiting for the
+    /// driver to stop, which is a network operation with no useful synchronous form: the Dispose
+    /// this replaces could do no better than block for five seconds and then walk away from a
+    /// tunnel that might still be sending — the very leak this outbound exists to prevent.
+    /// </remarks>
+    public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
         _disposed = true;
 
-        // The factory disposes sources synchronously, so the teardown is waited on with a bound
-        // rather than left to finish whenever: a tunnel still sending on a stopped engine would be
-        // exactly the leak this outbound exists to prevent.
-        try { DropAsync().Wait(TimeSpan.FromSeconds(5)); } catch { }
+        try { await DropAsync().ConfigureAwait(false); }
+        catch (Exception ex) { _logger?.LogDebug(ex, "tearing the tunnel down failed"); }
         _gate.Dispose();
     }
 }
