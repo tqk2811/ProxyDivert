@@ -9,9 +9,11 @@ namespace ProxyDivert.Core.Tests;
 // and the difference between them is the whole point: a finished row used to keep counting.
 public class DurationConverterTests
 {
+    // A binding hands the converter an object[] whose entries may be null — an unset EndedUtc is
+    // exactly that — so the array is typed the way WPF types it rather than as object?[].
     private static string Convert(DateTime started, DateTime? ended)
         => (string)new AppDurationConverter().Convert(
-            new object?[] { started, ended }, typeof(string), null!, CultureInfo.InvariantCulture);
+            new object[] { started, ended! }, typeof(string), null!, CultureInfo.InvariantCulture);
 
     [Fact]
     public void A_finished_connection_shows_how_long_it_lasted_and_stops_there()
