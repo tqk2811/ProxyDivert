@@ -84,6 +84,13 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
     public string SignatureOf(Outbound outbound) => OutboundSignature.Of(outbound, _wireProxyPath);
 
     /// <summary>
+    /// Whether this outbound is one a supervisor can hold open — a way out that keeps a subprocess
+    /// or a session between requests rather than dialling one per connection. Answered without
+    /// building anything.
+    /// </summary>
+    public bool CanBeKeptConnected(Outbound outbound) => _factory.BuildsManagedSource(outbound);
+
+    /// <summary>
     /// The live instance of an outbound, built if this is the first time anything has needed it.
     /// </summary>
     public IOutboundInstance GetOrCreate(Outbound outbound)

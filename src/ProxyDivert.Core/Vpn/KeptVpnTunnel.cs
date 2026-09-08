@@ -6,6 +6,7 @@ using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Vpn.Models;
+using TqkLibrary.Proxy.Interfaces;
 
 namespace ProxyDivert.Core.Vpn;
 
@@ -17,8 +18,8 @@ namespace ProxyDivert.Core.Vpn;
 // paying for the handshake itself.
 //
 // What "the tunnel" is varies (a wireproxy subprocess, an in-process VpnClient driver), so the loop
-// only ever sees IKeptTunnel. That also settles who reconnects: a driver that heals itself is left
-// to get on with it, and this loop steps in only once the tunnel is finished for good.
+// only ever sees IManagedProxySource. That also settles who reconnects: a driver that heals itself
+// is left to get on with it, and this loop steps in only once the tunnel is finished for good.
 internal sealed class KeptVpnTunnel : IAsyncDisposable
 {
     // 1s covers a tunnel that lost a race with something; 30s is where it settles for one that is
@@ -93,7 +94,7 @@ internal sealed class KeptVpnTunnel : IAsyncDisposable
             {
                 SetStatus(VpnConnectionState.Connecting, null, attempt);
 
-                IKeptTunnel tunnel = Resolve();
+                IManagedProxySource tunnel = Resolve();
                 await tunnel.StartAsync(ct).ConfigureAwait(false);
 
                 DateTime upSince = DateTime.UtcNow;
@@ -143,21 +144,22 @@ internal sealed class KeptVpnTunnel : IAsyncDisposable
     // The registry hands back whatever the outbound describes; an instance with nothing to hold open
     // means the outbound changed kind under us, which the keeper handles by dropping this tunnel.
     //
-    // Which engine runs the tunnel, and how that engine is made to look like something watchable,
-    // is the builder's business — this used to pattern-match the concrete source, so the supervisor
-    // had to be edited whenever a new way of running a VPN appeared.
-    private IKeptTunnel Resolve()
+    // Which engine runs the tunnel is the builder's business, and whether that engine is something
+    // watchable is the source's own — this used to pattern-match the concrete source and wrap one
+    // of them in an adapter, so the supervisor had to be edited whenever a new way of running a VPN
+    // appeared.
+    private IManagedProxySource Resolve()
     {
         IOutboundInstance instance = _registry.GetOrCreate(_outbound);
         return instance.Tunnel ?? throw new InvalidOperationException(
-            $"Outbound '{_outbound.Name}' is no longer a VPN, so there is no tunnel to keep.");
+            $"Outbound '{_outbound.Name}' no longer holds anything open, so there is nothing to keep up.");
     }
 
     /// <summary>
     /// Blocks until the tunnel is finished for good, keeping the reported state fresh meanwhile,
     /// and says why it ended.
     /// </summary>
-    private async Task<string> WatchAsync(IKeptTunnel tunnel, CancellationToken ct)
+    private async Task<string> WatchAsync(IManagedProxySource tunnel, CancellationToken ct)
     {
         Task<string> down = tunnel.WaitUntilDownAsync(ct);
         int downPolls = 0;

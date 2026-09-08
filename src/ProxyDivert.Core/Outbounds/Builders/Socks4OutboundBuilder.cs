@@ -9,6 +9,9 @@ public sealed class Socks4OutboundBuilder : IOutboundSourceBuilder
 {
     public OutboundKind Kind => OutboundKind.Socks4;
 
+    // A tunnel per connection, and nothing held open between them.
+    public bool BuildsManagedSource => false;
+
     public IOutboundInstance Build(Outbound outbound, OutboundBuildContext context)
     {
         Uri uri = OutboundUrl.Parse(outbound, "socks4");

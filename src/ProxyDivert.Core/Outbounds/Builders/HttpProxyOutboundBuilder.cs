@@ -10,6 +10,9 @@ public sealed class HttpProxyOutboundBuilder : IOutboundSourceBuilder
 {
     public OutboundKind Kind => OutboundKind.HttpProxy;
 
+    // A tunnel per connection, and nothing held open between them.
+    public bool BuildsManagedSource => false;
+
     public IOutboundInstance Build(Outbound outbound, OutboundBuildContext context)
     {
         Uri uri = OutboundUrl.Parse(outbound, "http");

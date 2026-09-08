@@ -56,6 +56,22 @@ public sealed class OutboundSourceFactory
     }
 
     /// <summary>
+    /// Whether this outbound would build something a supervisor can hold open, answered without
+    /// building it — asking a VPN would mean dialling it.
+    /// </summary>
+    /// <remarks>
+    /// A kind no builder claims cannot be kept connected either, and there is no reason for the
+    /// question to throw: the caller is looping over a whole configuration, and one outbound saved
+    /// by a newer version of the application should be skipped rather than stop the loop.
+    /// </remarks>
+    public bool BuildsManagedSource(Outbound outbound)
+    {
+        if (outbound is null) throw new ArgumentNullException(nameof(outbound));
+        return _builders.TryGetValue(outbound.Kind, out IOutboundSourceBuilder? builder)
+            && builder.BuildsManagedSource;
+    }
+
+    /// <summary>
     /// Builds an instance, stamped with what it was built from. Throws with a message the user can
     /// act on when the outbound cannot produce one at all.
     /// </summary>

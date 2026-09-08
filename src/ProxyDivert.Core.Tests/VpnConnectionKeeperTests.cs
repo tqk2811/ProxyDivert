@@ -86,7 +86,7 @@ public class VpnConnectionKeeperTests
     public async Task ATunnelThatComesUp_IsReportedConnectedAndIsNotDialledTwice()
     {
         Outbound vpn = MissingConfigVpn();
-        var tunnel = new FakeKeptTunnel();
+        var tunnel = new FakeManagedProxySource();
         var builder = new FakeOutboundSourceBuilder(OutboundKind.Vpn, _ => tunnel);
 
         using var registry = RegistryOf(builder);
@@ -113,7 +113,7 @@ public class VpnConnectionKeeperTests
     {
         const string binary = @"C:\tools\wireproxy.exe";
         Outbound vpn = MissingConfigVpn();
-        var builder = new FakeOutboundSourceBuilder(OutboundKind.Vpn, _ => new FakeKeptTunnel());
+        var builder = new FakeOutboundSourceBuilder(OutboundKind.Vpn, _ => new FakeManagedProxySource());
 
         using var registry = RegistryOf(builder);
         using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);

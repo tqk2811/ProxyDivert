@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using ProxyDivert.Core.Vpn;
 using TqkLibrary.Proxy.Interfaces;
 
 namespace ProxyDivert.Core.Outbounds;
@@ -31,12 +30,17 @@ public interface IOutboundInstance : IAsyncDisposable
     IProxySource Source { get; }
 
     /// <summary>
-    /// The same instance seen as something that can be brought up ahead of the first request and
-    /// then watched, or null when this kind of way out has nothing to hold open. Only a VPN has
-    /// one — and the two VPN engines answer it differently, which is exactly why the caller must
-    /// not go looking at concrete types to find out.
+    /// The same source seen as something that can be brought up ahead of the first request and then
+    /// watched, or null when this way out has nothing to hold open.
     /// </summary>
-    IKeptTunnel? Tunnel { get; }
+    /// <remarks>
+    /// It is the source itself answering, not a decision made here: a way out that holds a
+    /// subprocess or a session says so by implementing <see cref="IManagedProxySource"/>. This
+    /// member is kept even though it is a cast, because a supervisor asking "is there anything to
+    /// keep up?" is the question the instance exists to answer — the alternative has every owner
+    /// writing the cast, which is one step from writing a type test again.
+    /// </remarks>
+    IManagedProxySource? Tunnel { get; }
 
     /// <summary>
     /// Turns IPv6 off (or back on) for this instance: the source then stops handing IPv6 addresses

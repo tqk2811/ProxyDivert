@@ -130,6 +130,37 @@ public class OutboundRegistryTests
         Assert.Equal(2, builder.Builds.Count);
     }
 
+    // The question the VPN supervisor asks of every outbound in the configuration, on every save and
+    // at startup. It has to be answered from the builder rather than from the instance, because
+    // building the instance is what dials the tunnel — asking "should I keep this connected?" must
+    // not be the thing that connects it.
+    [Fact]
+    public void WhetherAnOutboundCanBeKeptConnected_IsAnsweredWithoutBuildingIt()
+    {
+        var kept = new FakeOutboundSourceBuilder(OutboundKind.Vpn, _ => new FakeManagedProxySource());
+        var plain = new FakeOutboundSourceBuilder(OutboundKind.Socks5);
+        using var registry = Registry(kept, plain);
+
+        Assert.True(registry.CanBeKeptConnected(
+            new Outbound { Id = Guid.NewGuid(), Name = "vpn", Kind = OutboundKind.Vpn, Url = "C:/none.conf" }));
+        Assert.False(registry.CanBeKeptConnected(Socks5(Guid.NewGuid())));
+
+        Assert.Empty(kept.Builds);
+        Assert.Empty(plain.Builds);
+    }
+
+    // A kind saved by a newer version of the application, read back by this one. The supervisor is
+    // looping over the whole configuration, so the answer is "no" rather than an exception that
+    // would stop it from keeping the tunnels it does understand.
+    [Fact]
+    public void AnOutboundOfAKindNothingBuilds_SimplyCannotBeKeptConnected()
+    {
+        using var registry = Registry(new FakeOutboundSourceBuilder(OutboundKind.Socks5));
+
+        Assert.False(registry.CanBeKeptConnected(
+            new Outbound { Id = Guid.NewGuid(), Name = "from the future", Kind = (OutboundKind)99 }));
+    }
+
     // Wiring, not behaviour: whichever builder the container happened to enumerate first would win
     // silently, and the outbound would be built by something other than what its author meant.
     [Fact]

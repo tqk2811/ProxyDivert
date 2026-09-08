@@ -11,6 +11,9 @@ public sealed class DirectOutboundBuilder : IOutboundSourceBuilder
 {
     public OutboundKind Kind => OutboundKind.Direct;
 
+    // A tunnel per connection, and nothing held open between them.
+    public bool BuildsManagedSource => false;
+
     public IOutboundInstance Build(Outbound outbound, OutboundBuildContext context)
     {
         var source = new LocalProxySource();

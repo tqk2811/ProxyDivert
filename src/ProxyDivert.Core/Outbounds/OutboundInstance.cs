@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using ProxyDivert.Core.Vpn;
 using TqkLibrary.Proxy.Interfaces;
 
 namespace ProxyDivert.Core.Outbounds;
@@ -28,13 +27,11 @@ public sealed class OutboundInstance : IOutboundInstance
         Guid outboundId,
         string signature,
         IProxySource source,
-        IKeptTunnel? tunnel = null,
         Action<bool>? setIpv6Support = null)
     {
         OutboundId = outboundId;
         Signature = signature ?? throw new ArgumentNullException(nameof(signature));
         Source = source ?? throw new ArgumentNullException(nameof(source));
-        Tunnel = tunnel;
         _setIpv6Support = setIpv6Support;
     }
 
@@ -44,7 +41,13 @@ public sealed class OutboundInstance : IOutboundInstance
 
     public IProxySource Source { get; }
 
-    public IKeptTunnel? Tunnel { get; }
+    /// <remarks>
+    /// Not something the builder passes in any more. It used to, because the wireproxy source had
+    /// to be wrapped in an adapter the application owned before it looked watchable, so only the
+    /// builder knew a tunnel was in there. Now the sources say it themselves and there is nothing
+    /// left to decide here.
+    /// </remarks>
+    public IManagedProxySource? Tunnel => Source as IManagedProxySource;
 
     public void SetIpv6Support(bool supported) => _setIpv6Support?.Invoke(supported);
 

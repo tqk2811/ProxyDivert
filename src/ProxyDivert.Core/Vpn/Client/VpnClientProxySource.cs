@@ -21,11 +21,11 @@ namespace ProxyDivert.Core.Vpn.Client;
 /// protocols with no wireproxy equivalent — OpenVPN, SSTP, L2TP/IPsec, IKEv2, SoftEther — become
 /// available at all.
 ///
-/// The tunnel is dialled once and held. <see cref="IKeptTunnel"/> is how the engine's supervisor
+/// The tunnel is dialled once and held. <see cref="IManagedProxySource"/> is how the engine's supervisor
 /// keeps it that way; the lazy start in <see cref="GetConnectSourceAsync"/> is only there so the
 /// source still works on its own, which is what the Outbounds tab's Test button uses.
 /// </remarks>
-public sealed class VpnClientProxySource : IProxySource, IKeptTunnel
+public sealed class VpnClientProxySource : IManagedProxySource
 {
     private readonly VpnProfile _profile;
     private readonly ILoggerFactory? _loggerFactory;

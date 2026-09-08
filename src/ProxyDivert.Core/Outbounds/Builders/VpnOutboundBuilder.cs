@@ -21,14 +21,18 @@ namespace ProxyDivert.Core.Outbounds.Builders;
 /// before any of the other protocols existed; everything else is dialled inside this process by
 /// TqkLibrary.VpnClient, which also means those tunnels carry UDP.
 ///
-/// This is the only builder that produces an instance with a tunnel, and the reason
-/// <see cref="IOutboundInstance.Tunnel"/> exists: the supervisor used to work out what it had by
-/// pattern-matching the concrete source, which meant the knowledge of how each engine is held open
-/// lived one layer away from the code that chose the engine.
+/// Both engines produce an <see cref="TqkLibrary.Proxy.Interfaces.IManagedProxySource"/>, which is
+/// what lets the supervisor hold either one open without knowing which it got. It used to work that
+/// out by pattern-matching the concrete source and wrapping one of them in an adapter, so the
+/// knowledge of how each engine is kept alive lived one layer away from the code that chose it.
 /// </remarks>
 public sealed class VpnOutboundBuilder : IOutboundSourceBuilder
 {
     public OutboundKind Kind => OutboundKind.Vpn;
+
+    // A subprocess or an in-process driver, either way something that is up between requests and
+    // costs seconds to establish — the whole reason the supervisor exists.
+    public bool BuildsManagedSource => true;
 
     public IOutboundInstance Build(Outbound outbound, OutboundBuildContext context)
     {
@@ -47,7 +51,7 @@ public sealed class VpnOutboundBuilder : IOutboundSourceBuilder
             profile, outbound.Ipv6Support != Ipv6Support.Disabled, context.LoggerFactory);
 
         return new OutboundInstance(
-            outbound.Id, context.Signature, source, tunnel: source,
+            outbound.Id, context.Signature, source,
             // The tunnel takes the switch too, but it only ever narrows: one that got no global
             // IPv6 stays without one however this is set.
             setIpv6Support: supported => source.IsSupportIpv6 = supported);
@@ -92,11 +96,9 @@ public sealed class VpnOutboundBuilder : IOutboundSourceBuilder
             options.Socks5Password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18));
         }
 
-        var source = new WireGuardProxySource(options, context.LoggerFactory);
-        // WireGuardProxySource lives in TqkLibrary.Proxy and knows nothing about ProxyDivert, so
-        // the shape the supervisor wants is put on it from this side rather than by changing the
-        // library.
+        // No IPv6 switch handed over: everything above went into the subprocess's configuration,
+        // and wireproxy is told once, when it starts.
         return new OutboundInstance(
-            outbound.Id, context.Signature, source, tunnel: new WireProxyKeptTunnel(source));
+            outbound.Id, context.Signature, new WireGuardProxySource(options, context.LoggerFactory));
     }
 }

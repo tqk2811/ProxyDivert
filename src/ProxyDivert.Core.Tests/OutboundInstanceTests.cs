@@ -33,7 +33,10 @@ public class OutboundInstanceTests
             IOutboundInstance instance = factory.Create(Vpn(path), loggerFactory: null, wireProxyPath: binary);
             try
             {
-                Assert.NotNull(instance.Tunnel);
+                // The same object, not something wrapped around it. wireproxy used to be made
+                // watchable by an adapter this application owned, which is what let the supervisor's
+                // idea of a tunnel drift away from the source that actually is one.
+                Assert.Same(instance.Source, instance.Tunnel);
             }
             finally
             {

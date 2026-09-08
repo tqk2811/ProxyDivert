@@ -6,7 +6,6 @@ using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Routing;
-using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Vpn.Models;
@@ -90,7 +89,11 @@ public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
         var definitions = new Dictionary<Guid, Outbound>();
         foreach (Outbound outbound in outbounds)
         {
-            if (outbound.Kind != OutboundKind.Vpn || !outbound.IsEnabled || !outbound.KeepConnected)
+            // Whether a way out is something that can be held open is the builder's answer, asked
+            // through the registry. It used to be Kind == Vpn, decided here — a rule living nowhere
+            // near the builders, which would leave the next kind that keeps a session open
+            // unsupervised with nothing failing to say so.
+            if (!_registry.CanBeKeptConnected(outbound) || !outbound.IsEnabled || !outbound.KeepConnected)
                 continue;
             // Asked of the registry rather than worked out here: what makes an outbound different
             // is one rule, and a supervisor comparing by a rule of its own is how a tunnel comes to
@@ -167,7 +170,7 @@ public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
         var switchedOn = new List<Guid>();
         foreach (Outbound outbound in config.Outbounds)
         {
-            if (outbound.Kind != OutboundKind.Vpn || !outbound.IsEnabled) continue;
+            if (!_registry.CanBeKeptConnected(outbound) || !outbound.IsEnabled) continue;
             if (outbound.KeepConnected || !routed.Contains(outbound.Id)) continue;
 
             outbound.KeepConnected = true;

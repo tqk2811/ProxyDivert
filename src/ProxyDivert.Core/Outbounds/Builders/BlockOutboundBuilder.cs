@@ -18,6 +18,9 @@ public sealed class BlockOutboundBuilder : IOutboundSourceBuilder
 {
     public OutboundKind Kind => OutboundKind.Block;
 
+    // Nothing is built at all, so there is certainly nothing to keep up.
+    public bool BuildsManagedSource => false;
+
     public IOutboundInstance Build(Outbound outbound, OutboundBuildContext context)
         => throw new InvalidOperationException(
             "Block has no proxy source — the caller must close the connection instead of tunnelling it.");

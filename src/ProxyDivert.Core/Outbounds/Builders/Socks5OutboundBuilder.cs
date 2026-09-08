@@ -11,6 +11,9 @@ public sealed class Socks5OutboundBuilder : IOutboundSourceBuilder
 {
     public OutboundKind Kind => OutboundKind.Socks5;
 
+    // A tunnel per connection, and nothing held open between them.
+    public bool BuildsManagedSource => false;
+
     public IOutboundInstance Build(Outbound outbound, OutboundBuildContext context)
     {
         Uri uri = OutboundUrl.Parse(outbound, "socks5");
