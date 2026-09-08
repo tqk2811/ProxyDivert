@@ -35,6 +35,15 @@ public sealed partial class ConditionGroupViewModel : ConditionNodeViewModel
         Changed += () => UngroupCommand.NotifyCanExecuteChanged();
     }
 
+    // Whether a bracket may be dissolved is a question about BOTH operators, so changing this one
+    // answers it differently for every bracket directly inside it. Their own edits re-ask for
+    // them; this one is not theirs.
+    partial void OnOperatorChanged(ConditionOperator value)
+    {
+        foreach (ConditionGroupViewModel child in Children.OfType<ConditionGroupViewModel>())
+            child.UngroupCommand.NotifyCanExecuteChanged();
+    }
+
     public ConditionGroupViewModel(ConditionGroup model) : this()
     {
         Negate = model.Negate;
@@ -101,14 +110,32 @@ public sealed partial class ConditionGroupViewModel : ConditionNodeViewModel
 
     /// <summary>Dissolves this group into its parent.</summary>
     /// <remarks>
-    /// Blocked while the group is negated. "NOT (a OR b)" spread over a parent that joins with
-    /// "and" is not the same filter, and quietly changing what someone wrote is worse than making
-    /// them turn the NOT off first.
+    /// Offered only where it cannot change what the filter matches, which rules out two cases.
+    ///
+    /// A negated group: "NOT (a OR b)" spread over a parent that joins with "and" is a different
+    /// filter. And a group that joins its rows differently from the parent it would fall into:
+    /// dissolving "x AND (a OR b)" throws the inner operator away and leaves "x AND a AND b",
+    /// which matches far less — the rows stay on screen looking exactly as they did, so nothing
+    /// tells the user their filter has stopped catching what it used to.
+    ///
+    /// One row is always safe: a row joins with nothing, so there is no operator to lose.
+    ///
+    /// Quietly changing what someone wrote is worse than making them take the bracket apart row by
+    /// row, which is still available.
     /// </remarks>
     [RelayCommand(CanExecute = nameof(CanUngroup))]
-    private void Ungroup() => Parent?.Absorb(this);
+    private void Ungroup()
+    {
+        // Asked again here, not only through CanExecute: a command runs when it is invoked, and a
+        // button whose enabled state has not caught up yet would invoke it.
+        if (!CanUngroup()) return;
+        Parent?.Absorb(this);
+    }
 
-    private bool CanUngroup() => Parent != null && !Negate;
+    private bool CanUngroup()
+        => Parent != null
+        && !Negate
+        && (Children.Count <= 1 || Operator == Parent.Operator);
 
 
     // ==== tree surgery ====

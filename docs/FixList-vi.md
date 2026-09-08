@@ -112,9 +112,10 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A14. `Ungroup` âm thầm đổi ngữ nghĩa bộ lọc — Vừa
 
-- [ ] **Vị trí**: [ConditionGroupViewModel.cs:111-114](../src/ProxyDivert.Wpf/ViewModels/Conditions/ConditionGroupViewModel.cs#L111-L114), [ConditionGroupViewModel.cs:173-184](../src/ProxyDivert.Wpf/ViewModels/Conditions/ConditionGroupViewModel.cs#L173-L184)
+- [x] **Vị trí**: [ConditionGroupViewModel.cs:111-114](../src/ProxyDivert.Wpf/ViewModels/Conditions/ConditionGroupViewModel.cs#L111-L114), [ConditionGroupViewModel.cs:173-184](../src/ProxyDivert.Wpf/ViewModels/Conditions/ConditionGroupViewModel.cs#L173-L184)
 - **Vấn đề**: `CanUngroup` chỉ chặn khi `Negate`. Với `x AND (a OR b)`, Ungroup đổ `a`, `b` vào cha và vứt toán tử con → `x AND a AND b`.
 - **Cách sửa**: chặn (hoặc hỏi xác nhận) khi `group.Operator != Parent.Operator && Children.Count > 1`.
+- **Đã sửa**: commit "fix(ui): refuse to dissolve a bracket that means something". Chọn chặn (không hỏi xác nhận — người dùng vẫn tháo được từng dòng). Ba điểm phải làm thêm mới đủ: (1) kiểm lại trong thân `Ungroup` vì `RelayCommand.Execute` không tự hỏi `CanExecute`; (2) `OnOperatorChanged` phải notify các group con — đổi toán tử ở cha làm câu trả lời của con khác đi; (3) **phát sinh từ A13**: nút "Group selected" trước đó dựa vào `Changed` để bật, mà tick giờ không còn raise `Changed` nữa → phải nghe `PropertyChanged` của con (commit "fix(ui): re-ask for Group selected from the tick itself"). Test: `ConditionEditorTests` (5 test).
 
 ### A15. CLI: exception khi `--launch` trỏ file không tồn tại thoát ra ngoài — Vừa
 
