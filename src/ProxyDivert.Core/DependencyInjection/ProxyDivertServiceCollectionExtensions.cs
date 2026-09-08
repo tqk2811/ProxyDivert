@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Logging;
 using ProxyDivert.Core.Outbounds;
+using ProxyDivert.Core.Outbounds.Builders;
 using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Vpn;
 using TqkLibrary.WinDivert.ProcessControl.DependencyInjection;
@@ -57,15 +58,21 @@ public static class ProxyDivertServiceCollectionExtensions
         // is being redirected, so starting the engine costs a read rather than a rediscovery.
         services.TryAddSingleton<ProcessInventory>();
 
+        // One builder per kind of way out. A new kind is a new class registered here, and nothing
+        // else in the application changes.
+        foreach (IOutboundSourceBuilder builder in OutboundSourceFactory.DefaultBuilders())
+            services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IOutboundSourceBuilder), builder));
+        services.TryAddSingleton<OutboundSourceFactory>();
+
         // The outbound instances, and the VPN tunnels among them, belong to the APPLICATION rather
         // than to an engine run: a tunnel is the user's session with their provider, and switching
         // redirection off is not a reason to end it. Both are therefore singletons the engine
         // borrows — see RedirectEngine.Stop, which disposes neither.
         //
-        // Registered through a factory because the constructor's other argument is a path, and the
-        // container has no string to give it; it is set from the configuration on the first
-        // ApplyOutbounds instead.
-        services.TryAddSingleton(sp => new OutboundSourceFactory(sp.GetRequiredService<ILoggerFactory>()));
+        // Registered through a factory because the registry's other argument is optional and the
+        // container would otherwise have to be told there is a logger factory to give it.
+        services.TryAddSingleton(sp => new OutboundRegistry(
+            sp.GetRequiredService<OutboundSourceFactory>(), sp.GetRequiredService<ILoggerFactory>()));
         services.TryAddSingleton<VpnConnectionKeeper>();
 
         // ConfigStore is deliberately absent: a host has to read its configuration BEFORE building

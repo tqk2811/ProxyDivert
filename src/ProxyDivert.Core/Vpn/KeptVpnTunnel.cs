@@ -46,16 +46,16 @@ internal sealed class KeptVpnTunnel : IAsyncDisposable
     private const int DownPollsBeforeRebuild = 4;
 
     private readonly Outbound _outbound;
-    private readonly OutboundSourceFactory _factory;
+    private readonly OutboundRegistry _registry;
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
     private Task? _loop;
 
-    public KeptVpnTunnel(Outbound outbound, string signature, OutboundSourceFactory factory, ILogger logger)
+    public KeptVpnTunnel(Outbound outbound, string signature, OutboundRegistry registry, ILogger logger)
     {
         _outbound = outbound ?? throw new ArgumentNullException(nameof(outbound));
         Signature = signature ?? throw new ArgumentNullException(nameof(signature));
-        _factory = factory ?? throw new ArgumentNullException(nameof(factory));
+        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         Status = new VpnStatus(outbound.Id, outbound.Name, VpnConnectionState.Connecting);
     }
@@ -106,10 +106,10 @@ internal sealed class KeptVpnTunnel : IAsyncDisposable
                 if (ct.IsCancellationRequested) break;
 
                 // WatchAsync returning at all means this instance is finished, so throw it away.
-                // Restarting the cached one would re-run whatever already failed and would not see
-                // a configuration the user has corrected in the meantime — the same reasoning as
-                // the catch below, for the path that ends without an exception.
-                await _factory.InvalidateAsync(_outbound.Id).ConfigureAwait(false);
+                // Restarting the one that is held would re-run whatever already failed and would
+                // not see a configuration the user has corrected in the meantime — the same
+                // reasoning as the catch below, for the path that ends without an exception.
+                await _registry.DiscardAsync(_outbound.Id, reason).ConfigureAwait(false);
 
                 if (DateTime.UtcNow - upSince >= StableFor) attempt = 0;
             }
@@ -123,7 +123,7 @@ internal sealed class KeptVpnTunnel : IAsyncDisposable
                 // A source built from a config that does not work stays broken however often it is
                 // started, so it is thrown away: the retry builds a new one, and a config the user
                 // has meanwhile fixed is picked up without restarting the engine.
-                await _factory.InvalidateAsync(_outbound.Id).ConfigureAwait(false);
+                await _registry.DiscardAsync(_outbound.Id, reason).ConfigureAwait(false);
             }
 
             attempt++;
@@ -140,7 +140,7 @@ internal sealed class KeptVpnTunnel : IAsyncDisposable
         SetStatus(VpnConnectionState.Stopped, null, 0);
     }
 
-    // The factory hands back whatever the outbound describes; an instance with nothing to hold open
+    // The registry hands back whatever the outbound describes; an instance with nothing to hold open
     // means the outbound changed kind under us, which the keeper handles by dropping this tunnel.
     //
     // Which engine runs the tunnel, and how that engine is made to look like something watchable,
@@ -148,7 +148,7 @@ internal sealed class KeptVpnTunnel : IAsyncDisposable
     // had to be edited whenever a new way of running a VPN appeared.
     private IKeptTunnel Resolve()
     {
-        IOutboundInstance instance = _factory.GetOrCreateInstance(_outbound);
+        IOutboundInstance instance = _registry.GetOrCreate(_outbound);
         return instance.Tunnel ?? throw new InvalidOperationException(
             $"Outbound '{_outbound.Name}' is no longer a VPN, so there is no tunnel to keep.");
     }
@@ -241,10 +241,10 @@ internal sealed class KeptVpnTunnel : IAsyncDisposable
         }
 
         // The instance IS the tunnel — a wireproxy subprocess, or a driver holding a session — and
-        // the factory is what owns it. Ending supervision without this would stop watching a tunnel
-        // that carries on running: the user presses Disconnect, the row goes quiet, and the
+        // the registry is what owns it. Ending supervision without this would stop watching a
+        // tunnel that carries on running: the user presses Disconnect, the row goes quiet, and the
         // subprocess keeps talking to the VPN server.
-        await _factory.InvalidateAsync(_outbound.Id).ConfigureAwait(false);
+        await _registry.DiscardAsync(_outbound.Id, "it is no longer kept connected").ConfigureAwait(false);
 
         // Only once the loop is actually finished. The wait above gives up whenever the loop is
         // inside a dial, which takes up to 90 seconds, and the loop reaches Task.Delay(delay, ct)

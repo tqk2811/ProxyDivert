@@ -8,6 +8,7 @@ using System.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Outbounds;
+using ProxyDivert.Core.Outbounds.Builders;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn;
@@ -43,8 +44,8 @@ public class VpnConnectionKeeperTests
         var seen = new List<VpnStatus>();
         var secondRetry = new ManualResetEventSlim();
 
-        using var factory = new OutboundSourceFactory();
-        using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
+        using var registry = new OutboundRegistry(OutboundSourceFactory.CreateDefault());
+        using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
         keeper.StatusChanged += status =>
         {
             lock (seen) seen.Add(status);
@@ -78,14 +79,64 @@ public class VpnConnectionKeeperTests
         Assert.DoesNotContain(statuses, s => s.RetryCount > 3);
     }
 
+    // The other half, which nothing could reach until a way out became a builder: every VPN
+    // outbound meant a wireproxy subprocess or a real dial, so the only tunnel a test could produce
+    // was one that fails, and the supervision loop's success path was never run at all.
+    [Fact]
+    public async Task ATunnelThatComesUp_IsReportedConnectedAndIsNotDialledTwice()
+    {
+        Outbound vpn = MissingConfigVpn();
+        var tunnel = new FakeKeptTunnel();
+        var builder = new FakeOutboundSourceBuilder(OutboundKind.Vpn, _ => tunnel);
+
+        using var registry = RegistryOf(builder);
+        using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
+        var connected = new ManualResetEventSlim();
+        keeper.StatusChanged += status => { if (status.State == VpnConnectionState.Connected) connected.Set(); };
+
+        await keeper.SyncAsync(new[] { vpn }, null);
+
+        Assert.True(connected.Wait(TimeSpan.FromSeconds(10)), "the tunnel never came up");
+        Assert.Equal(VpnConnectionState.Connected, keeper.StatusOf(vpn.Id)?.State);
+        // A tunnel that is up is watched, not dialled again: the whole point of holding one is that
+        // the handshake is paid once.
+        Assert.Equal(1, tunnel.Starts);
+        Assert.Single(builder.Builds);
+    }
+
+    // The wireproxy path is part of what a VPN is built from, and the keeper dials at startup —
+    // before anything has applied a configuration to the engine. The path used to reach the
+    // instances only through that reconcile, so the first tunnel of a session was built as if the
+    // setting were empty, and it only came right once the user pressed Start.
+    [Fact]
+    public async Task TheWireProxyPathTheKeeperIsGiven_ReachesTheBuild()
+    {
+        const string binary = @"C:\tools\wireproxy.exe";
+        Outbound vpn = MissingConfigVpn();
+        var builder = new FakeOutboundSourceBuilder(OutboundKind.Vpn, _ => new FakeKeptTunnel());
+
+        using var registry = RegistryOf(builder);
+        using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
+        var connected = new ManualResetEventSlim();
+        keeper.StatusChanged += status => { if (status.State == VpnConnectionState.Connected) connected.Set(); };
+
+        await keeper.SyncAsync(new[] { vpn }, binary);
+
+        Assert.True(connected.Wait(TimeSpan.FromSeconds(10)), "the tunnel never came up");
+        Assert.Equal(binary, builder.Builds[0].WireProxyPath);
+    }
+
+    private static OutboundRegistry RegistryOf(FakeOutboundSourceBuilder builder)
+        => new OutboundRegistry(new OutboundSourceFactory(new IOutboundSourceBuilder[] { builder }));
+
     [Fact]
     public async Task ADisabledVpnOutbound_IsNotKept()
     {
         Outbound vpn = MissingConfigVpn();
         vpn.IsEnabled = false;
 
-        using var factory = new OutboundSourceFactory();
-        using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
+        using var registry = new OutboundRegistry(OutboundSourceFactory.CreateDefault());
+        using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
         await keeper.SyncAsync(new[] { vpn }, null);
 
         Assert.Empty(keeper.Statuses);
@@ -99,8 +150,8 @@ public class VpnConnectionKeeperTests
     {
         Outbound vpn = MissingConfigVpn();
 
-        using var factory = new OutboundSourceFactory();
-        using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
+        using var registry = new OutboundRegistry(OutboundSourceFactory.CreateDefault());
+        using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
 
         await keeper.SyncAsync(new[] { vpn }, null);
         VpnStatus? before = keeper.StatusOf(vpn.Id);
@@ -122,8 +173,8 @@ public class VpnConnectionKeeperTests
     {
         Outbound vpn = MissingConfigVpn();
 
-        using var factory = new OutboundSourceFactory();
-        using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
+        using var registry = new OutboundRegistry(OutboundSourceFactory.CreateDefault());
+        using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
         await keeper.SyncAsync(new[] { vpn }, null);
         Assert.Single(keeper.Statuses);
 
@@ -142,8 +193,8 @@ public class VpnConnectionKeeperTests
         Outbound vpn = MissingConfigVpn();
         vpn.KeepConnected = false;
 
-        using var factory = new OutboundSourceFactory();
-        using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
+        using var registry = new OutboundRegistry(OutboundSourceFactory.CreateDefault());
+        using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
         await keeper.SyncAsync(new[] { vpn }, null);
 
         Assert.Empty(keeper.Statuses);
@@ -161,8 +212,8 @@ public class VpnConnectionKeeperTests
 
         AppConfig config = BuildConfig(routed, unused, filterEnabled: true);
 
-        using var factory = new OutboundSourceFactory();
-        using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
+        using var registry = new OutboundRegistry(OutboundSourceFactory.CreateDefault());
+        using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
         IReadOnlyCollection<Guid> switchedOn = await keeper.ConnectRoutedVpnsAsync(config);
 
         Assert.Equal(new[] { routed.Id }, switchedOn);
@@ -181,8 +232,8 @@ public class VpnConnectionKeeperTests
 
         AppConfig config = BuildConfig(routed, null, filterEnabled: false);
 
-        using var factory = new OutboundSourceFactory();
-        using var keeper = new VpnConnectionKeeper(factory, NullLogger<VpnConnectionKeeper>.Instance);
+        using var registry = new OutboundRegistry(OutboundSourceFactory.CreateDefault());
+        using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
 
         Assert.Empty(await keeper.ConnectRoutedVpnsAsync(config));
         Assert.False(routed.KeepConnected);

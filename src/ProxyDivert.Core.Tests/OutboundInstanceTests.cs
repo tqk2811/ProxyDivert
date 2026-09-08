@@ -29,8 +29,8 @@ public class OutboundInstanceTests
         string binary = WriteTempFile(".exe", string.Empty);
         try
         {
-            using var factory = new OutboundSourceFactory(loggerFactory: null, wireProxyPath: binary);
-            IOutboundInstance instance = factory.Create(Vpn(path));
+            OutboundSourceFactory factory = OutboundSourceFactory.CreateDefault();
+            IOutboundInstance instance = factory.Create(Vpn(path), loggerFactory: null, wireProxyPath: binary);
             try
             {
                 Assert.NotNull(instance.Tunnel);
@@ -52,14 +52,16 @@ public class OutboundInstanceTests
     [Fact]
     public async Task ASocks5Outbound_HasNothingToHoldOpen()
     {
-        using var factory = new OutboundSourceFactory();
-        IOutboundInstance instance = factory.Create(new Outbound
-        {
-            Id = Guid.NewGuid(),
-            Name = "proxy",
-            Kind = OutboundKind.Socks5,
-            Url = "socks5://127.0.0.1:1080",
-        });
+        OutboundSourceFactory factory = OutboundSourceFactory.CreateDefault();
+        IOutboundInstance instance = factory.Create(
+            new Outbound
+            {
+                Id = Guid.NewGuid(),
+                Name = "proxy",
+                Kind = OutboundKind.Socks5,
+                Url = "socks5://127.0.0.1:1080",
+            },
+            loggerFactory: null, wireProxyPath: null);
 
         try
         {
@@ -77,10 +79,12 @@ public class OutboundInstanceTests
     [Fact]
     public void Block_SaysWhyItHasNoWayOut()
     {
-        using var factory = new OutboundSourceFactory();
+        OutboundSourceFactory factory = OutboundSourceFactory.CreateDefault();
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => factory.Create(new Outbound { Id = Outbound.BlockId, Name = "Block", Kind = OutboundKind.Block }));
+            () => factory.Create(
+                new Outbound { Id = Outbound.BlockId, Name = "Block", Kind = OutboundKind.Block },
+                loggerFactory: null, wireProxyPath: null));
 
         Assert.Contains("close the connection", error.Message, StringComparison.OrdinalIgnoreCase);
     }

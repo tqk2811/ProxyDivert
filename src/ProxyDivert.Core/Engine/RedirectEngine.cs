@@ -52,7 +52,7 @@ public sealed class RedirectEngine : IDisposable
     private readonly IProcessRedirectorFactory _redirectorFactory;
     private readonly ProcessInventory _inventory;
     private readonly IHostNameInspector _hostNameInspector;
-    private readonly OutboundSourceFactory _outboundFactory;
+    private readonly OutboundRegistry _outbounds;
     private readonly object _stateLock = new object();
     // Start, Stop and ApplyConfig are mutually exclusive, and each of them now awaits work that
     // must not happen under _stateLock — closing a UDP tunnel, putting a VPN tunnel down, unloading
@@ -103,7 +103,7 @@ public sealed class RedirectEngine : IDisposable
     /// The machine-wide process table. It is started by the host and outlives every engine run, so
     /// it is NOT owned here and never disposed by Stop.
     /// </param>
-    /// <param name="outboundFactory">
+    /// <param name="outbounds">
     /// The live instance of every outbound. Like the process table it belongs to the application:
     /// a VPN outbound's instance IS its tunnel, and a tunnel must not be torn down because the user
     /// switched redirection off. Stop therefore leaves it alone, and Start only reconciles it with
@@ -113,16 +113,21 @@ public sealed class RedirectEngine : IDisposable
         IProcessRedirectorFactory redirectorFactory,
         ProcessInventory inventory,
         IHostNameInspector hostNameInspector,
-        OutboundSourceFactory outboundFactory,
+        OutboundRegistry outbounds,
         ILoggerFactory loggerFactory)
     {
         _redirectorFactory = redirectorFactory ?? throw new ArgumentNullException(nameof(redirectorFactory));
         _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
         _hostNameInspector = hostNameInspector ?? throw new ArgumentNullException(nameof(hostNameInspector));
-        _outboundFactory = outboundFactory ?? throw new ArgumentNullException(nameof(outboundFactory));
+        _outbounds = outbounds ?? throw new ArgumentNullException(nameof(outbounds));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<RedirectEngine>();
         _resolver = BuildResolver(_config, new Dictionary<uint, IReadOnlyList<Guid>>());
+        // Every instance this engine routes through is dropped by its owner, and this is how the
+        // things keyed by outbound hear about it. Subscribed for the life of the engine rather than
+        // of a run: a VPN tunnel can die while redirection is switched off, and the UDP tunnels
+        // built on it are just as dead either way.
+        _outbounds.InstanceDropped += OnOutboundInstanceDropped;
     }
 
     public async Task StartAsync(AppConfig config)
@@ -352,21 +357,30 @@ public sealed class RedirectEngine : IDisposable
     // only exists because the options are built before the tracker is.
     private bool? ShouldRedirectProcess(uint processId) => _tracker?.ShouldRedirect(processId);
 
-    // Rebuilds only the outbound instances the configuration has actually changed, and tells
-    // everything keyed by outbound that theirs is gone. Shared by Start and ApplyConfig: an edit
-    // made while the engine was off has to reach the cache exactly as one made while it runs.
-    private async Task ReconcileOutboundsAsync(AppConfig config)
+    // Rebuilds only the outbound instances the configuration has actually changed. Shared by Start
+    // and ApplyConfig: an edit made while the engine was off has to reach the registry exactly as
+    // one made while it runs. What follows from a drop is not handled here — see
+    // OnOutboundInstanceDropped, which covers the drops nobody asked this engine for as well.
+    private Task ReconcileOutboundsAsync(AppConfig config)
+        => _outbounds.ReconcileAsync(config.Outbounds, config.WireProxyPath);
+
+    // An outbound's instance has been thrown away, by an edit or by the VPN supervisor giving up on
+    // a tunnel. Everything else keyed by that outbound is now pointing at something that no longer
+    // exists.
+    //
+    // Raised on whichever thread dropped it, which is the supervision thread as often as the UI's.
+    // Both of these are safe there: the capability table is concurrent, and the forwarder hands the
+    // slow part of closing a tunnel to the thread pool. The forwarder field itself may be read as
+    // null by a drop that lands while the engine is stopped, which is right — there are no tunnels.
+    private void OnOutboundInstanceDropped(Guid outboundId)
     {
-        IReadOnlyCollection<Guid> changed =
-            await _outboundFactory.ApplyOutboundsAsync(config.Outbounds, config.WireProxyPath).ConfigureAwait(false);
-        foreach (Guid outboundId in changed)
-        {
-            // The edit may be exactly the fix for what we learned (a proxy that now has an IPv6
-            // route), so an outbound that was rebuilt gets a clean slate.
-            _ipv6Capability.Reset(outboundId);
-            // Its UDP tunnels are pointed at an instance that no longer exists.
-            _udpForwarder?.InvalidateOutbound(outboundId);
-        }
+        // The edit may be exactly the fix for what we learned (a proxy that now has an IPv6 route),
+        // so an outbound that will be rebuilt gets a clean slate.
+        _ipv6Capability.Reset(outboundId);
+        // Its UDP tunnels are pointed at an instance that no longer exists. Missing this is how a
+        // VPN that dropped and came back carried TCP again while its UDP stayed dead: the
+        // supervisor threw the instance away, and nothing told the forwarder.
+        _udpForwarder?.InvalidateOutbound(outboundId);
     }
 
     // ---- process scope ----------------------------------------------------------------------
@@ -525,7 +539,7 @@ public sealed class RedirectEngine : IDisposable
             return;
         }
 
-        IProxySource source = _outboundFactory.GetOrCreate(outbound);
+        IProxySource source = _outbounds.GetOrCreate(outbound).Source;
         IConnectSource? tunnel = null;
         Guid tunnelId = Guid.NewGuid();
         try
@@ -580,7 +594,7 @@ public sealed class RedirectEngine : IDisposable
         if (outbound.Kind == OutboundKind.Direct) return;
         if (!_ipv6Capability.RecordIpv6Failure(outbound)) return;
 
-        _outboundFactory.SetIpv6Support(outbound.Id, false);
+        _outbounds.SetIpv6Support(outbound.Id, false);
         _logger.LogInformation(ex,
             "outbound {Outbound} marked IPv4-only after {Destination} failed. Later IPv6 destinations go "
             + "out over IPv4, by name where one is known; set Ipv6Support=Enabled to override",
@@ -665,7 +679,7 @@ public sealed class RedirectEngine : IDisposable
                         return null;
                     }
 
-                    IProxySource source = _outboundFactory.GetOrCreate(decision.Outbound);
+                    IProxySource source = _outbounds.GetOrCreate(decision.Outbound).Source;
                     bool queued = _udpForwarder!.Send(
                         decision.Outbound.Id, source,
                         (ushort)datagram.OriginalSource.Port,
@@ -699,15 +713,14 @@ public sealed class RedirectEngine : IDisposable
         if (outbound.Kind == OutboundKind.Block) return "Block never connects anywhere.";
 
         // A VPN test starts its own wireproxy subprocess so it never disturbs a tunnel live traffic
-        // is already using — and it has to put that subprocess down itself. Factory.Create
-        // deliberately does not cache, which means disposing the factory walks an empty cache and
-        // frees nothing; the source is ours alone, so we own its disposal.
-        await using var factory = new OutboundSourceFactory(loggerFactory, wireProxyPath);
+        // is already using — and it has to put that subprocess down itself. The factory owns
+        // nothing it builds, so what comes back is ours alone and its disposal is ours too.
+        OutboundSourceFactory factory = OutboundSourceFactory.CreateDefault();
         IOutboundInstance? instance = null;
         IConnectSource? tunnel = null;
         try
         {
-            instance = factory.Create(outbound);
+            instance = factory.Create(outbound, loggerFactory, wireProxyPath);
             tunnel = await instance.Source.GetConnectSourceAsync(Guid.NewGuid(), ct).ConfigureAwait(false);
             await tunnel.ConnectAsync(new UriBuilder("tcp", testHost, testPort).Uri, ct).ConfigureAwait(false);
             return null;
@@ -722,13 +735,26 @@ public sealed class RedirectEngine : IDisposable
             // After the tunnel: for a VPN this is what kills wireproxy, and without it every press
             // of Test left one more subprocess holding a SOCKS port and a WireGuard session for as
             // long as the app ran.
-            await OutboundSourceFactory.DisposeInstanceAsync(instance).ConfigureAwait(false);
+            if (instance is not null)
+            {
+                try { await instance.DisposeAsync().ConfigureAwait(false); } catch { }
+            }
         }
     }
 
-    public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
+    public async ValueTask DisposeAsync()
+    {
+        _outbounds.InstanceDropped -= OnOutboundInstanceDropped;
+        await StopAsync().ConfigureAwait(false);
+    }
 
     // What the container calls: ServiceProvider.Dispose refuses a singleton that offers
     // DisposeAsync alone. The application itself goes through DisposeAsync.
-    public void Dispose() => StopAsync().GetAwaiter().GetResult();
+    public void Dispose()
+    {
+        // The registry outlives this engine, so leaving the subscription behind would keep a
+        // disposed engine reachable and being told about drops it can do nothing with.
+        _outbounds.InstanceDropped -= OnOutboundInstanceDropped;
+        StopAsync().GetAwaiter().GetResult();
+    }
 }

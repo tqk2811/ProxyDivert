@@ -40,15 +40,15 @@ namespace ProxyDivert.Core.Vpn;
 /// </remarks>
 public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
 {
-    private readonly OutboundSourceFactory _factory;
+    private readonly OutboundRegistry _registry;
     private readonly ILogger<VpnConnectionKeeper> _logger;
     private readonly object _lock = new object();
     private readonly Dictionary<Guid, KeptVpnTunnel> _tunnels = new Dictionary<Guid, KeptVpnTunnel>();
     private bool _disposed;
 
-    public VpnConnectionKeeper(OutboundSourceFactory factory, ILogger<VpnConnectionKeeper> logger)
+    public VpnConnectionKeeper(OutboundRegistry registry, ILogger<VpnConnectionKeeper> logger)
     {
-        _factory = factory ?? throw new ArgumentNullException(nameof(factory));
+        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -80,13 +80,22 @@ public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
     {
         if (outbounds is null) throw new ArgumentNullException(nameof(outbounds));
 
+        // Before anything is compared or built. This runs at startup, before the engine has ever
+        // applied a configuration, and the registry is where the path a VPN is built from lives: a
+        // tunnel dialled first and told about the setting afterwards was built as if the box were
+        // empty, and only came right once the user pressed Start.
+        _registry.UseWireProxyPath(wireProxyPath);
+
         var wanted = new Dictionary<Guid, string>();
         var definitions = new Dictionary<Guid, Outbound>();
         foreach (Outbound outbound in outbounds)
         {
             if (outbound.Kind != OutboundKind.Vpn || !outbound.IsEnabled || !outbound.KeepConnected)
                 continue;
-            wanted[outbound.Id] = OutboundSignature.Of(outbound, wireProxyPath);
+            // Asked of the registry rather than worked out here: what makes an outbound different
+            // is one rule, and a supervisor comparing by a rule of its own is how a tunnel comes to
+            // be dropped for an edit that did not touch it.
+            wanted[outbound.Id] = _registry.SignatureOf(outbound);
             definitions[outbound.Id] = outbound;
         }
 
@@ -118,7 +127,7 @@ public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
             {
                 if (_tunnels.ContainsKey(kv.Key)) continue;
 
-                var tunnel = new KeptVpnTunnel(definitions[kv.Key], kv.Value, _factory, _logger);
+                var tunnel = new KeptVpnTunnel(definitions[kv.Key], kv.Value, _registry, _logger);
                 tunnel.StatusChanged += OnTunnelStatusChanged;
                 _tunnels[kv.Key] = tunnel;
                 starting.Add(tunnel);
