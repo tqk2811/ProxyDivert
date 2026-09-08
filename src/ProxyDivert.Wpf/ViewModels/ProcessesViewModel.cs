@@ -124,7 +124,7 @@ public sealed partial class ProcessesViewModel : ObservableObject
         ProcessRule rule = NewRule(policy, pattern, ConditionGroup.CreateDefault(pattern));
 
         if (!Edit(rule)) return;
-        Add(rule);
+        _ = Add(rule);
     }
 
     [RelayCommand]
@@ -150,7 +150,7 @@ public sealed partial class ProcessesViewModel : ObservableObject
 
         ProcessRule rule = NewRule(policy, row.Name, condition);
         if (!Edit(rule)) return;
-        Add(rule);
+        _ = Add(rule);
     }
 
     [RelayCommand]
@@ -215,18 +215,23 @@ public sealed partial class ProcessesViewModel : ObservableObject
             PolicyIds = { policy.Id },
         };
 
-    private void Add(ProcessRule rule)
+    /// <summary>
+    /// Adds a filter and starts saving it. The returned task completes once the engine has taken
+    /// the new configuration — which matters to anyone whose next step depends on the rule being
+    /// in force, since <see cref="AppServices.SaveAndApply"/> only queues the work.
+    /// </summary>
+    private Task Add(ProcessRule rule)
     {
         _services.Config.ProcessRules.Add(rule);
         Rules.Add(rule);
         SelectedRule = rule;
-        _services.SaveAndApply();
+        return _services.SaveAndApply();
     }
 
     // Starts a program suspended, lets the engine attach, then resumes it. This is the only way to
     // guarantee that not a single connection escapes before the redirect is in place.
     [RelayCommand]
-    private void LaunchSuspended()
+    private async Task LaunchSuspendedAsync()
     {
         var dialog = new OpenFileDialog
         {
@@ -246,6 +251,7 @@ public sealed partial class ProcessesViewModel : ObservableObject
             // wildcard or by name is just as good and a second one would be noise.
             RoutingPolicy? policy = Policies.FirstOrDefault();
             string name = Path.GetFileNameWithoutExtension(dialog.FileName);
+            Task applied = Task.CompletedTask;
 
             if (policy != null && !_services.Config.ProcessRules.Any(
                     r => ProcessRuleMatcher.IsMatch(r, name, dialog.FileName)))
@@ -265,8 +271,14 @@ public sealed partial class ProcessesViewModel : ObservableObject
                         },
                     });
 
-                Add(rule);
+                applied = Add(rule);
             }
+
+            // Awaited, because SaveAndApply only queues the work. Scanning and resuming without
+            // this matched the process against the configuration as it was a moment ago, and the
+            // program then ran unredirected until the next scan — the very SYN leak this whole
+            // feature exists to close.
+            await applied.ConfigureAwait(true);
 
             // The watcher sees the suspended process on its next scan; resuming only after that
             // is what closes the SYN race.

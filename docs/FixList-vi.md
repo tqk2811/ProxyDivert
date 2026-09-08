@@ -86,10 +86,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A11. `LaunchSuspended` resume trước khi luật mới tới engine — Cao
 
-- [ ] **Vị trí**: [ProcessesViewModel.cs:268-274](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L268-L274), [AppServices.cs:173-195](../src/ProxyDivert.Wpf/Services/AppServices.cs#L173-L195)
+- [x] **Vị trí**: [ProcessesViewModel.cs:268-274](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L268-L274), [AppServices.cs:173-195](../src/ProxyDivert.Wpf/Services/AppServices.cs#L173-L195)
 - **Vấn đề**: `Add(rule)` gọi `SaveAndApply()` là hàm **enqueue** lên worker rồi trả Task không ai await. Ngay dòng sau `ForceProcessScan()` khớp với config cũ rồi `suspended.Resume()`.
 - **Vì sao**: đúng [rò rỉ SYN](Glossary-vi.md#L37) mà tính năng launch-suspended sinh ra để bịt; tiến trình chạy mà không được redirect tới lần scan sau.
 - **Cách sửa**: đổi command thành `async Task`, `await _services.SaveAndApply()` (hoặc `WhenIdleAsync()`) trước `ForceProcessScan()` + `Resume()`.
+- **Đã sửa**: ProxyDivert — commit "fix(processes): wait for the new filter before resuming a suspended launch"
 
 ### A12. Cột Duration của connection đã đóng đếm mãi — Vừa
 
