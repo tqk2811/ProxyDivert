@@ -263,9 +263,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### C3. `InTunnelResolver` bind UDP mới mỗi query, làm bộ đếm cổng wrap — Vừa
 
-- [ ] **Vị trí**: [InTunnelResolver.cs:113-131](../src/ProxyDivert.Core/Vpn/Client/InTunnelResolver.cs#L113-L131); thư viện `TcpIpStack.cs:35,77,80-81,92`
+- [x] **Vị trí**: [InTunnelResolver.cs:113-131](../src/ProxyDivert.Core/Vpn/Client/InTunnelResolver.cs#L113-L131); thư viện `TcpIpStack.cs:35,77,80-81,92`
 - **Vấn đề**: `_nextPort` dùng chung cho `ConnectAsync` và `BindUdp`, `(ushort)Interlocked.Increment` wrap sau 16k lần rồi quay vòng cả dải; `_connections[localPort] = connection` ghi đè kết nối sống, `Closed` của nạn nhân xoá nhầm entry mới. Resolver bind tới 12 socket mỗi tên (2 lần × 3 server × A/AAAA).
 - **Cách sửa**: một `UdpConnection` sống lâu trong `InTunnelResolver`, khớp trả lời theo DNS id; thư viện cấp phát cổng bỏ qua cổng đang có trong bảng.
+- **Đã sửa**: **chỉ nửa thư viện** — submodule VpnClient, commit "fix(ipstack): keep ephemeral ports inside their range and out of live flows". Cấp phát gập counter vào đúng dải 49152-65535, bỏ qua cổng còn trong bảng, và lấy cổng bằng `TryAdd` thay cho indexer (chính indexer mới là chỗ ghi đè kết nối sống). Test `EphemeralPortAllocationTests` (3 test, chạy 20k lần cấp phát).
+- **Cố ý CHƯA làm**: phần "một `UdpConnection` sống lâu trong `InTunnelResolver`". Sau khi cấp phát cổng đã đúng thì bind-per-query không còn gây hỏng, chỉ còn tốn — mà E6.2 sẽ chuyển hẳn resolver này sang lib VpnClient, nên dựng cơ chế ghép kênh theo DNS id ở đây rồi bỏ đi là phí. Để lại cho E6.2.
 
 ### C4. WireGuard in-process không có PersistentKeepalive — Vừa
 
