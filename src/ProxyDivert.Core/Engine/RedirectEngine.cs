@@ -616,13 +616,16 @@ public sealed class RedirectEngine : IDisposable
         if (outbound is null) throw new ArgumentNullException(nameof(outbound));
         if (outbound.Kind == OutboundKind.Block) return "Block never connects anywhere.";
 
-        // A VPN test starts its own wireproxy subprocess and tears it down with the factory, so it
-        // never disturbs a tunnel that live traffic is already using.
+        // A VPN test starts its own wireproxy subprocess so it never disturbs a tunnel live traffic
+        // is already using — and it has to put that subprocess down itself. Factory.Create
+        // deliberately does not cache, which means disposing the factory walks an empty cache and
+        // frees nothing; the source is ours alone, so we own its disposal.
         using var factory = new OutboundSourceFactory(loggerFactory, wireProxyPath);
+        IProxySource? source = null;
         IConnectSource? tunnel = null;
         try
         {
-            IProxySource source = factory.Create(outbound);
+            source = factory.Create(outbound);
             tunnel = await source.GetConnectSourceAsync(Guid.NewGuid(), ct).ConfigureAwait(false);
             await tunnel.ConnectAsync(new UriBuilder("tcp", testHost, testPort).Uri, ct).ConfigureAwait(false);
             return null;
@@ -634,6 +637,10 @@ public sealed class RedirectEngine : IDisposable
         finally
         {
             try { tunnel?.Dispose(); } catch { }
+            // After the tunnel: for a VPN source this is what kills wireproxy, and without it every
+            // press of Test left one more subprocess holding a SOCKS port and a WireGuard session
+            // for as long as the app ran.
+            OutboundSourceFactory.DisposeSource(source);
         }
     }
 

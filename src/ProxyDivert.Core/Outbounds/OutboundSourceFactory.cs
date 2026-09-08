@@ -128,12 +128,12 @@ public sealed class OutboundSourceFactory : IDisposable
     // Call after the user edits or removes an outbound.
     public void Invalidate(Guid outboundId)
     {
-        if (_cache.TryRemove(outboundId, out CachedSource? cached)) Dispose(cached.Source);
+        if (_cache.TryRemove(outboundId, out CachedSource? cached)) DisposeSource(cached.Source);
     }
 
     public void InvalidateAll()
     {
-        foreach (var kv in _cache) Dispose(kv.Value.Source);
+        foreach (var kv in _cache) DisposeSource(kv.Value.Source);
         _cache.Clear();
     }
 
@@ -294,7 +294,12 @@ public sealed class OutboundSourceFactory : IDisposable
         return new IPEndPoint(addresses[0], uri.Port);
     }
 
-    private static void Dispose(IProxySource source)
+    /// <summary>
+    /// Releases a source, whatever it happens to be underneath. Public because <see cref="Create"/>
+    /// hands ownership to its caller, and a wireproxy-backed source that nobody releases leaves a
+    /// subprocess running for the life of the app.
+    /// </summary>
+    public static void DisposeSource(IProxySource? source)
     {
         try { (source as IDisposable)?.Dispose(); } catch { }
     }

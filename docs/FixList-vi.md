@@ -16,10 +16,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A1. Nút Test outbound VPN để lại `wireproxy.exe` chạy mãi — Cao
 
-- [ ] **Vị trí**: [RedirectEngine.cs:621-637](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L621-L637), [OutboundSourceFactory.cs:142-152](../src/ProxyDivert.Core/Outbounds/OutboundSourceFactory.cs#L142-L152)
+- [x] **Vị trí**: [RedirectEngine.cs:621-637](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L621-L637), [OutboundSourceFactory.cs:142-152](../src/ProxyDivert.Core/Outbounds/OutboundSourceFactory.cs#L142-L152)
 - **Vấn đề**: `factory.Create(outbound)` cố ý không ghi vào `_cache`, nên `using var factory` khi dispose duyệt một cache rỗng. Chỉ `tunnel` (IConnectSource) được dispose; `IProxySource` không. Với outbound VPN, [wireproxy](Glossary-vi.md#L93) chỉ bị `Kill()` trong `WireProxyProcessRunner.Dispose`, mà không ai gọi.
 - **Vì sao**: mỗi lần bấm Test là thêm một tiến trình con mồ côi giữ cổng SOCKS và khoá UDP; comment ở dòng 619-620 nói ngược với điều đang xảy ra.
 - **Cách sửa**: đưa `source` ra biến ngoài `try`, thêm `(source as IDisposable)?.Dispose()` trong `finally` (sau khi dispose `tunnel`).
+- **Đã sửa**: ProxyDivert — commit "Put down the tunnel the Test button started"
 
 ### A2. `UdpProxyForwarder._tunnels` tăng vô hạn — Cao
 
