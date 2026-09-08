@@ -263,9 +263,10 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### C5. `KeptVpnTunnel.Dispose` dispose CTS khi loop còn chạy — Vừa
 
-- [ ] **Vị trí**: [KeptVpnTunnel.cs:192-207](../src/ProxyDivert.Core/Vpn/KeptVpnTunnel.cs#L192-L207), [KeptVpnTunnel.cs:126](../src/ProxyDivert.Core/Vpn/KeptVpnTunnel.cs#L126), [KeptVpnTunnel.cs:159](../src/ProxyDivert.Core/Vpn/KeptVpnTunnel.cs#L159)
+- [x] **Vị trí**: [KeptVpnTunnel.cs:192-207](../src/ProxyDivert.Core/Vpn/KeptVpnTunnel.cs#L192-L207), [KeptVpnTunnel.cs:126](../src/ProxyDivert.Core/Vpn/KeptVpnTunnel.cs#L126), [KeptVpnTunnel.cs:159](../src/ProxyDivert.Core/Vpn/KeptVpnTunnel.cs#L159)
 - **Vấn đề**: `Cancel` → `Wait(2s)` có thể timeout (dial mặc định 90 giây) → `_cts.Dispose()`. Loop tới `Task.Delay(delay, ct)` ném `ObjectDisposedException`, không nhánh catch nào bắt; `SetStatus(Stopped)` không chạy, fault unobserved.
 - **Cách sửa**: bỏ `_cts.Dispose()` hoặc chuyển vào `_loop.ContinueWith`.
+- **Đã sửa**: ProxyDivert `3e25b41`
 
 ### C6. `Outbound.SupportsUdp` và source thực tế có thể lệch nhau — Vừa
 

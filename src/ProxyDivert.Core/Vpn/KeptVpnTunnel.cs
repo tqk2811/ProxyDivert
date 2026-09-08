@@ -203,6 +203,15 @@ internal sealed class KeptVpnTunnel : IDisposable
         // subprocess keeps talking to the VPN server.
         _factory.Invalidate(_outbound.Id);
 
-        _cts.Dispose();
+        // Deliberately not disposed here. The wait above times out whenever the loop is inside a
+        // dial, which takes up to 90 seconds, and the loop reaches Task.Delay(delay, ct) after
+        // that — on a disposed source that throws ObjectDisposedException, which no catch in
+        // RunAsync is looking for. The status would stay on "Reconnecting" forever and the fault
+        // would go unobserved. Letting the loop finish and hand the source to the GC costs one
+        // registration; getting it wrong costs the row.
+        if (_loop is null) { try { _cts.Dispose(); } catch { } return; }
+        _loop.ContinueWith(
+            static (_, state) => { try { ((CancellationTokenSource)state!).Dispose(); } catch { } },
+            _cts, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 }
