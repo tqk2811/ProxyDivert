@@ -444,3 +444,7 @@ Kiểu nhỏ, bất biến, so sánh theo giá trị, dùng để thay chuỗi/s
 ## Single-writer và Channel<T>
 
 Mô hình một thread duy nhất được phép ghi vào một bảng trạng thái; mọi nguồn sự kiện (socket pump, reconcile từ bảng kernel, Add/Remove từ UI) chỉ đẩy yêu cầu vào `Channel<T>`, consumer đọc tuần tự và áp dụng. Lợi ích chính là **hợp đồng rõ** (sự kiện bắn ra từ đúng một thread, không cần `Interlocked` throttle hay cặp `TryAdd/else overwrite`), không hẳn là hiệu năng; đọc từ thread khác vẫn cần `ConcurrentDictionary`. Áp dụng cho `FlowTable` tách từ `SocketTracker` và cho chuỗi attach/detach của `ProcessRuleTracker`.
+
+## Builder theo kind và registry sở hữu instance
+
+Hai vai tách rời cho cùng một thứ. **Builder** trả lời "loại này dựng ra sao": một `IOutboundSourceBuilder` cho mỗi `OutboundKind`, chọn theo `Kind` thay cho `switch`, nên thêm một cách đi ra là thêm một class chứ không phải sửa một hàm dài (cùng họ với [Strategy](#L424)). **Registry** trả lời "ai sở hữu cái đã dựng": giữ một instance cho mỗi outbound, và là chỗ DUY NHẤT gọi dispose. Khi cache nằm chung trong factory thì mỗi bên cần huỷ instance lại tự gọi `Invalidate`, không có gì trong code nói bên nào được phép — registry biến việc đó thành hai động từ khác nhau (`Reconcile` cho cấu hình đổi, `Discard` cho người giám sát) và bắn một sự kiện để mọi thứ khoá theo outbound (tunnel UDP, kết luận IPv6 đã học) biết mà bỏ theo.
