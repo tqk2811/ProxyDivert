@@ -367,16 +367,33 @@ ProxyDivert chỉ tham chiếu `TqkLibrary.Proxy` (phía client: `LocalProxySour
 
 ### D6. Phía server TqkLibrary.Proxy (chỉ `ProxyDivert.Cli --self-host-port`)
 
-- [ ] **Cao** `TransferAsync` quay vòng 100% CPU khi nguồn đóng sớm (không kiểm `byte_read == 0`): [StreamExtensions.cs:23-29](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/StreamHelpers/StreamExtensions.cs#L23-L29). Ném `EndOfStreamException`.
-- [ ] **Cao** `HttpProxyServer` dispose stream client sau mỗi request nên keep-alive chết từ request thứ 2: [HttpProxyServer.cs:134](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/HttpProxyServer.cs#L134), [HttpProxyServer.cs:165](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/HttpProxyServer.cs#L165), [BaseProxyServerHandler.cs:73-76](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/Handlers/BaseProxyServerHandler.cs#L73-L76). Chỉ `using` khi handler trả instance khác.
-- [ ] **Cao** Request line mất query string (`AbsolutePath` thay vì `PathAndQuery`): [HttpProxyServer.cs:149](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/HttpProxyServer.cs#L149).
-- [ ] **Cao** Response chunked / close-delimited không bao giờ được forward body: [HttpProxyServer.cs:168-184](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/HttpProxyServer.cs#L168-L184), [HttpUtilities.cs:7-20](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/HttpUtilities.cs#L7-L20).
-- [ ] **Vừa** `Socks5_Request.Uri` tạo URI sai cho đích IPv6 (thiếu ngoặc): [Socks5_Request.cs:53-67](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/Helpers/Socks5_Request.cs#L53-L67). Mọi CONNECT ATYP=0x04 ném tại [Socks5ProxyServer.cs:113-114](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks5ProxyServer.cs#L113-L114).
-- [ ] **Vừa** Server SOCKS4/5 không trả reply lỗi khi connect upstream thất bại: [Socks5ProxyServer.cs:158-165](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks5ProxyServer.cs#L158-L165), [Socks4ProxyServer.cs:145-150](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks4ProxyServer.cs#L145-L150).
+**Đã sửa 8/13** trong submodule TqkLibrary.Proxy (branch `fix/wave2`), 4 commit. Test mới:
+`src/TestProxy/ServerTest/HttpProxyServerForwardingTest.cs` (4 test, dựng origin server giả trên
+loopback — không phụ thuộc internet như bộ test cũ) và `Socks5FailureReplyTest.cs` (2 test). Đã xác
+nhận cả 4 test HTTP fail khi hoàn nguyên fix, và test IPv6 fail khi bỏ dấu ngoặc.
+
+- **Lưu ý về commit**: 4 mục **Cao** nằm chung một commit "fix(proxyserver): stop a source that
+  ends early spinning the transfer loop" — lẽ ra mỗi mục một commit. Thân commit đó cũng mất một
+  từ (viết `` `size` `` trong `-m` của bash → backtick bị shell nuốt). Không amend theo quy tắc
+  `~/.claude/git.md`; nội dung đầy đủ ghi ở đây. Bài học đã lưu vào `~/.claude/experience-git.md`.
+- **Chưa làm — BIND reply thứ hai**: cần sửa đồng bộ cả `Socks5ProxyServer`, `Socks4ProxyServer`
+  và `Socks5ProxySource.BindTunnel`, mà ProxyDivert không dùng BIND ở bất kỳ đường nào và không có
+  cách kiểm thật ngoài tự viết cả hai đầu. Rủi ro cao hơn giá trị trong đợt này.
+- **Chưa làm — 3 mục Thấp**: ngoài phạm vi Đợt 2.
+- Mục **SOCKS4 rò rỉ DNS**: đã chuyển `Dns.GetHostAddresses` sang `GetHostAddressesAsync` (bỏ chặn
+  luồng). Phần "rò rỉ" thì **không bịt được**: reply SOCKS4 bắt buộc mang địa chỉ IPv4, nên tên
+  buộc phải phân giải tại máy này. Đó là giới hạn của giao thức, không phải của hàm.
+
+- [x] **Cao** `TransferAsync` quay vòng 100% CPU khi nguồn đóng sớm (không kiểm `byte_read == 0`): [StreamExtensions.cs:23-29](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/StreamHelpers/StreamExtensions.cs#L23-L29). Ném `EndOfStreamException`.
+- [x] **Cao** `HttpProxyServer` dispose stream client sau mỗi request nên keep-alive chết từ request thứ 2: [HttpProxyServer.cs:134](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/HttpProxyServer.cs#L134), [HttpProxyServer.cs:165](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/HttpProxyServer.cs#L165), [BaseProxyServerHandler.cs:73-76](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/Handlers/BaseProxyServerHandler.cs#L73-L76). Chỉ `using` khi handler trả instance khác.
+- [x] **Cao** Request line mất query string (`AbsolutePath` thay vì `PathAndQuery`): [HttpProxyServer.cs:149](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/HttpProxyServer.cs#L149).
+- [x] **Cao** Response chunked / close-delimited không bao giờ được forward body: [HttpProxyServer.cs:168-184](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/HttpProxyServer.cs#L168-L184), [HttpUtilities.cs:7-20](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/HttpUtilities.cs#L7-L20).
+- [x] **Vừa** `Socks5_Request.Uri` tạo URI sai cho đích IPv6 (thiếu ngoặc): [Socks5_Request.cs:53-67](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/Helpers/Socks5_Request.cs#L53-L67). Mọi CONNECT ATYP=0x04 ném tại [Socks5ProxyServer.cs:113-114](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks5ProxyServer.cs#L113-L114).
+- [x] **Vừa** Server SOCKS4/5 không trả reply lỗi khi connect upstream thất bại: [Socks5ProxyServer.cs:158-165](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks5ProxyServer.cs#L158-L165), [Socks4ProxyServer.cs:145-150](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks4ProxyServer.cs#L145-L150).
 - [ ] **Vừa** BIND thiếu reply thứ hai cả hai phía: [Socks5ProxyServer.cs:399-419](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks5ProxyServer.cs#L399-L419), [Socks5ProxySource.BindTunnel.cs:52-59](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxySources/Socks5ProxySource.BindTunnel.cs#L52-L59), tương tự Socks4.
-- [ ] **Vừa** SOCKS4 server resolve DNS đồng bộ và cục bộ ([rò rỉ DNS](Glossary-vi.md#L113)): [Socks4ProxyServer.cs:114](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks4ProxyServer.cs#L114), [Socks4ProxyServer.cs:143](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks4ProxyServer.cs#L143).
-- [ ] **Vừa** `PreReadAsync` chỉ `ReadAsync` một lần, read ngắn bị coi là hết stream: [PreReadStream.cs:17-39](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/StreamHelpers/PreReadStream.cs#L17-L39), [PreReadStream.cs:63-64](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/StreamHelpers/PreReadStream.cs#L63-L64).
-- [ ] **Vừa** Body response ghi thẳng `_clientStream` bỏ qua stream handler đã bọc (throttling/đếm byte mất body): [HttpProxyServer.cs:178-184](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/HttpProxyServer.cs#L178-L184).
+- [x] **Vừa** SOCKS4 server resolve DNS đồng bộ và cục bộ ([rò rỉ DNS](Glossary-vi.md#L113)): [Socks4ProxyServer.cs:114](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks4ProxyServer.cs#L114), [Socks4ProxyServer.cs:143](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks4ProxyServer.cs#L143).
+- [x] **Vừa** `PreReadAsync` chỉ `ReadAsync` một lần, read ngắn bị coi là hết stream: [PreReadStream.cs:17-39](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/StreamHelpers/PreReadStream.cs#L17-L39), [PreReadStream.cs:63-64](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/StreamHelpers/PreReadStream.cs#L63-L64).
+- [x] **Vừa** Body response ghi thẳng `_clientStream` bỏ qua stream handler đã bọc (throttling/đếm byte mất body): [HttpProxyServer.cs:178-184](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/HttpProxyServer.cs#L178-L184).
 - [ ] **Thấp** `HeaderRequestParse`/`HeaderResponseParse` `Split(':')` vứt header có dấu `:` trong value: [HeaderRequestParse.cs:66-72](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/Helpers/HeaderRequestParse.cs#L66-L72). `Split(':', 2)`.
 - [ ] **Thấp** `client_isKeepAlive` gán sau `continue` của nhánh 407: [HttpProxyServer.cs:84-92](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/HttpProxyServer.cs#L84-L92).
 - [ ] **Thấp** Input SOCKS5 dị dạng ném exception thay vì reply (NMETHODS=0, domain length=0, VER không kiểm): [Socks5ProxyServer.cs:79-80](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/ProxyServers/Socks5ProxyServer.cs#L79-L80), [Socks5_DSTADDR.cs:87-93](../libs/TqkLibrary.Proxy/src/TqkLibrary.Proxy/Helpers/Socks5_DSTADDR.cs#L87-L93).
