@@ -40,10 +40,11 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A4. `RebuildResolver` ghi `_resolver` ngoài `_stateLock` — Vừa
 
-- [ ] **Vị trí**: [RedirectEngine.cs:332-337](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L332-L337), gọi từ [RedirectEngine.cs:304-330](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L304-L330) và [RedirectEngine.cs:184-194](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L184-L194)
+- [x] **Vị trí**: [RedirectEngine.cs:332-337](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L332-L337), gọi từ [RedirectEngine.cs:304-330](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L304-L330) và [RedirectEngine.cs:184-194](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L184-L194)
 - **Vấn đề**: thread sự kiện tiến trình đọc `_config` cũ, UI thread `ApplyConfig` gán `_config` mới và dựng resolver mới, rồi thread sự kiện gán đè `_resolver` bằng bản dựng từ config cũ. Field cũng không `Volatile`.
 - **Vì sao**: user vừa Save, log báo "configuration applied", nhưng mọi kết nối mới đi theo policy cũ cho tới lần attach/detach kế tiếp; rất khó tái hiện.
 - **Cách sửa**: chụp `_config` vào biến local dưới `_stateLock` rồi `Volatile.Write(ref _resolver, ...)`, hoặc bọc thân `RebuildResolver` trong lock.
+- **Đã sửa**: commit "fix(engine): rebuild the route resolver under the state lock". Bọc cả thân trong lock (kể cả `BuildPolicyMap` — để ngoài thì hai attach song song, cái xong sau ghi đè bằng map thiếu tiến trình của cái kia), field đổi thành `volatile`. Không deadlock: `ProcessRuleTracker` chỉ giữ `_rulesLock` trong một dòng gán/đọc, không raise event khi đang giữ.
 
 ### A5. `ConfigStore.Save` không lock, tên temp cố định — Vừa
 

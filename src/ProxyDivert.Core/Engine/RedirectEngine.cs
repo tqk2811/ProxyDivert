@@ -59,7 +59,12 @@ public sealed class RedirectEngine : IDisposable
     private readonly OutboundIpv6Capability _ipv6Capability = new OutboundIpv6Capability();
 
     private AppConfig _config = AppConfig.CreateDefault();
-    private RoutingPolicyResolver _resolver;
+
+    // Volatile because it is replaced under _stateLock but read without it, from the packet path.
+    // Each read takes the whole resolver and routes one connection with it, so a read that lands a
+    // moment before a rebuild routes by the previous configuration — which is what "takes effect on
+    // the next connection" means — rather than seeing a half-published object.
+    private volatile RoutingPolicyResolver _resolver;
     private ProcessRuleTracker? _tracker;
     private IProcessRedirector? _redirector;
     private IConnectionHostNameResolver? _hostNames;
@@ -329,11 +334,23 @@ public sealed class RedirectEngine : IDisposable
         ProcessDetached?.Invoke(process);
     }
 
+    // Called from two directions: the UI thread applying an edited configuration, and the process
+    // event thread every time a process is attached or detached.
+    //
+    // All of it is under the lock, and both halves have to be. Reading _config outside it let the
+    // event thread build a resolver from the configuration as it was BEFORE a save and then write
+    // that over the one ApplyConfig had just published: the log said "configuration applied" while
+    // every new connection kept following the old policies until the next attach happened to
+    // rebuild it again. Building the policy map outside it has the same shape — two attaches at
+    // once, the one that finishes second overwrites with a map that is missing the other's process.
     private void RebuildResolver()
     {
-        IReadOnlyDictionary<uint, IReadOnlyList<Guid>> policyMap
-            = _tracker?.BuildPolicyMap() ?? new Dictionary<uint, IReadOnlyList<Guid>>();
-        _resolver = BuildResolver(_config, policyMap);
+        lock (_stateLock)
+        {
+            IReadOnlyDictionary<uint, IReadOnlyList<Guid>> policyMap
+                = _tracker?.BuildPolicyMap() ?? new Dictionary<uint, IReadOnlyList<Guid>>();
+            _resolver = BuildResolver(_config, policyMap);
+        }
     }
 
     private static RoutingPolicyResolver BuildResolver(
