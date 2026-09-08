@@ -119,9 +119,10 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ### A15. CLI: exception khi `--launch` trỏ file không tồn tại thoát ra ngoài — Vừa
 
-- [ ] **Vị trí**: [Program.cs:229-262](../src/ProxyDivert.Cli/Program.cs#L229-L262)
+- [x] **Vị trí**: [Program.cs:229-262](../src/ProxyDivert.Cli/Program.cs#L229-L262)
 - **Vấn đề**: khối chỉ có `finally`, không `catch`; stack trace và exit code lạ thay vì một dòng lỗi.
 - **Cách sửa**: thêm `catch (Exception ex)` ghi `Console.Error` và `return 1`.
+- **Đã sửa**: commit "fix(cli): report a failed launch instead of throwing out of main". Chỉ build-verified — chạy thử thật cần quyền admin và sẽ nạp driver WinDivert lên máy, nên không chạy.
 
 ### A16. Nhóm mức Thấp (ProxyDivert)
 

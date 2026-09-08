@@ -260,6 +260,14 @@ try
     try { await Task.Delay(Timeout.Infinite, exitCts.Token); }
     catch (OperationCanceledException) { }
 }
+catch (Exception ex)
+{
+    // --launch on a path that is not there is the everyday one, and it used to come back as a
+    // stack trace and whatever exit code the runtime picked for an unhandled exception. A tool
+    // that is meant to be run from a script says what went wrong in one line and returns 1.
+    Console.Error.WriteLine($"{ex.GetType().Name}: {ex.Message}");
+    return 1;
+}
 finally
 {
     Console.WriteLine();
