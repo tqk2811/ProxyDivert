@@ -43,120 +43,223 @@
             <Setter Property="FontSize" Value="13"/>
         </Style>
 
-        <!-- ==== one condition ==== -->
+        <!-- ==== picking a row up, and seeing where it would land ====
+             The grip is what you drag by, rather than the row itself: a condition row is combo
+             boxes and a text box, and dragging one of those has to keep meaning what it means. -->
+        <Style x:Key="DragGrip" TargetType="TextBlock">
+            <Setter Property="Text" Value="&#xE76F;"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="4,7"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Opacity" Value="0.45"/>
+            <!-- Transparent rather than unset: an unset background is not there to be grabbed. -->
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="SizeAll"/>
+            <Setter Property="ToolTip" Value="{DynamicResource Str.Cond.DragHint}"/>
+            <Setter Property="b:DragReorderBehavior.IsDragHandle" Value="True"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="1"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The insertion line. It is always there and only ever changes opacity: a line that took
+             up room the moment it appeared would shove the row it is pointing at out from under
+             the pointer. Each variant watches the zone it sits in for the mark the drag left. -->
+        <Style x:Key="DropLine" TargetType="Border">
+            <Setter Property="Height" Value="2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Background" Value="{DynamicResource Brush.Accent}"/>
+            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+        </Style>
+
+        <Style x:Key="DropLineBefore" TargetType="Border" BasedOn="{StaticResource DropLine}">
+            <Style.Triggers>
+                <DataTrigger Value="Before"
+                             Binding="{Binding (b:DragReorderBehavior.DropMark),
+                                       RelativeSource={RelativeSource AncestorType=Grid}}">
+                    <Setter Property="Opacity" Value="1"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DropLineAfter" TargetType="Border" BasedOn="{StaticResource DropLine}">
+            <Style.Triggers>
+                <DataTrigger Value="After"
+                             Binding="{Binding (b:DragReorderBehavior.DropMark),
+                                       RelativeSource={RelativeSource AncestorType=Grid}}">
+                    <Setter Property="Opacity" Value="1"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DropLineInside" TargetType="Border" BasedOn="{StaticResource DropLine}">
+            <Style.Triggers>
+                <DataTrigger Value="Inside"
+                             Binding="{Binding (b:DragReorderBehavior.DropMark),
+                                       RelativeSource={RelativeSource AncestorType=Grid}}">
+                    <Setter Property="Opacity" Value="1"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The strip under a group's last row belongs to the group's own border, so this one
+             watches that instead of the nearest grid. -->
+        <Style x:Key="DropLineTail" TargetType="Border" BasedOn="{StaticResource DropLine}">
+            <Style.Triggers>
+                <DataTrigger Value="After"
+                             Binding="{Binding (b:DragReorderBehavior.DropMark),
+                                       RelativeSource={RelativeSource AncestorType=Border}}">
+                    <Setter Property="Opacity" Value="1"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- ==== one condition ====
+             The gaps above and below the row are inside the row rather than around it. A strip
+             that belongs to nothing falls through to the bracket behind it, and the line then
+             offers to drop after the whole group while the pointer is between two of its rows. -->
         <DataTemplate DataType="{x:Type cvm:ConditionLeafViewModel}">
-            <Grid Margin="0,3">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="126"/>
-                    <ColumnDefinition Width="150"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+            <Grid Background="Transparent" b:DragReorderBehavior.DropZone="Row">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="4"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="4"/>
+                </Grid.RowDefinitions>
 
-                <CheckBox Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"
-                          IsChecked="{Binding IsSelected}"
-                          ToolTip="{DynamicResource Str.Cond.SelectHint}"/>
+                <Border Grid.Row="0" Style="{StaticResource DropLineBefore}"/>
+                <Border Grid.Row="2" Style="{StaticResource DropLineAfter}"/>
 
-                <Button Grid.Column="1" Style="{StaticResource NotButton}" Margin="0,0,6,0"
-                        Content="{DynamicResource Str.Cond.Not}"
-                        Command="{Binding ToggleNegateCommand}"
-                        ToolTip="{DynamicResource Str.Cond.NotHint}"/>
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="126"/>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <ComboBox Grid.Column="2" Margin="0,0,6,0"
-                          ItemsSource="{Binding Subjects}"
-                          SelectedItem="{Binding Subject}"
-                          ItemTemplate="{StaticResource EnumItemTemplate}"/>
+                    <TextBlock Grid.Column="0" Style="{StaticResource DragGrip}"/>
 
-                <ComboBox Grid.Column="3" Margin="0,0,6,0"
-                          ItemsSource="{Binding Matchers}"
-                          SelectedItem="{Binding Matcher}"
-                          ItemTemplate="{StaticResource EnumItemTemplate}"/>
+                    <Button Grid.Column="1" Style="{StaticResource NotButton}" Margin="0,0,6,0"
+                            Content="{DynamicResource Str.Cond.Not}"
+                            Command="{Binding ToggleNegateCommand}"
+                            ToolTip="{DynamicResource Str.Cond.NotHint}"/>
 
-                <!-- Enter adds the next condition to the same group, so a run of them can be typed
-                     without going back to the mouse. -->
-                <TextBox Grid.Column="4" Margin="0,0,6,0"
-                         Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
-                         b:FocusBehavior.FocusWhen="{Binding IsNew, Mode=TwoWay}">
-                    <TextBox.Style>
-                        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-                            <Setter Property="Tag" Value="{DynamicResource Str.Process.TargetHint}"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Subject}" Value="CommandLine">
-                                    <Setter Property="Tag" Value="{DynamicResource Str.Process.ArgumentHint}"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBox.Style>
-                    <TextBox.InputBindings>
-                        <KeyBinding Key="Return" Command="{Binding Parent.AddConditionCommand}"/>
-                    </TextBox.InputBindings>
-                </TextBox>
+                    <ComboBox Grid.Column="2" Margin="0,0,6,0"
+                              ItemsSource="{Binding Subjects}"
+                              SelectedItem="{Binding Subject}"
+                              ItemTemplate="{StaticResource EnumItemTemplate}"/>
 
-                <StackPanel Grid.Column="5" Orientation="Horizontal">
-                    <Button Style="{StaticResource RowButton}" Content="▲"
-                            Command="{Binding MoveUpCommand}" ToolTip="{DynamicResource Str.App.Up}"/>
-                    <Button Style="{StaticResource RowButton}" Content="▼"
-                            Command="{Binding MoveDownCommand}" ToolTip="{DynamicResource Str.App.Down}"/>
-                    <Button Style="{StaticResource RowButton}" Content="✕"
-                            Command="{Binding RemoveCommand}" ToolTip="{DynamicResource Str.App.Remove}"/>
-                </StackPanel>
+                    <ComboBox Grid.Column="3" Margin="0,0,6,0"
+                              ItemsSource="{Binding Matchers}"
+                              SelectedItem="{Binding Matcher}"
+                              ItemTemplate="{StaticResource EnumItemTemplate}"/>
+
+                    <!-- Enter adds the next condition to the same group, so a run of them can be
+                         typed without going back to the mouse. -->
+                    <TextBox Grid.Column="4" Margin="0,0,6,0"
+                             Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
+                             b:FocusBehavior.FocusWhen="{Binding IsNew, Mode=TwoWay}">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                <Setter Property="Tag" Value="{DynamicResource Str.Process.TargetHint}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Subject}" Value="CommandLine">
+                                        <Setter Property="Tag" Value="{DynamicResource Str.Process.ArgumentHint}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBox.Style>
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Return" Command="{Binding Parent.AddConditionCommand}"/>
+                        </TextBox.InputBindings>
+                    </TextBox>
+
+                    <StackPanel Grid.Column="5" Orientation="Horizontal">
+                        <Button Style="{StaticResource RowButton}" Content="▲"
+                                Command="{Binding MoveUpCommand}" ToolTip="{DynamicResource Str.App.Up}"/>
+                        <Button Style="{StaticResource RowButton}" Content="▼"
+                                Command="{Binding MoveDownCommand}" ToolTip="{DynamicResource Str.App.Down}"/>
+                        <Button Style="{StaticResource RowButton}" Content="✕"
+                                Command="{Binding RemoveCommand}" ToolTip="{DynamicResource Str.App.Remove}"/>
+                    </StackPanel>
+                </Grid>
             </Grid>
         </DataTemplate>
 
         <!-- ==== a group, which holds conditions and more groups ====
              This template puts an ItemsControl over Children, and Children hold groups again, so
-             the nesting draws itself. The vertical rule down the left is the bracket. -->
+             the nesting draws itself. The vertical rule down the left is the bracket.
+
+             Three things can be dropped on a group and they have to stay apart, which is why the
+             border and its header row are two zones rather than one: the top of the header means
+             above the whole bracket, the bottom of it means into the bracket, and the strip under
+             its last row means after the whole bracket. -->
         <DataTemplate DataType="{x:Type cvm:ConditionGroupViewModel}">
-            <Border Margin="0,3" Padding="9,5,5,5" CornerRadius="8"
+            <Border Margin="0,3" Padding="9,0,5,6" CornerRadius="8"
                     BorderThickness="2,1,1,1"
                     Background="{DynamicResource Brush.Surface.Alt}"
-                    BorderBrush="{DynamicResource Brush.Surface.BorderBrush}">
+                    BorderBrush="{DynamicResource Brush.Surface.BorderBrush}"
+                    b:DragReorderBehavior.DropZone="GroupTail">
                 <StackPanel>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
+                    <Grid Background="Transparent" b:DragReorderBehavior.DropZone="GroupHeader">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="5"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="4"/>
+                        </Grid.RowDefinitions>
 
-                        <CheckBox Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"
-                                  IsChecked="{Binding IsSelected}"
-                                  ToolTip="{DynamicResource Str.Cond.SelectHint}"
-                                  Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
+                        <Border Grid.Row="0" Style="{StaticResource DropLineBefore}"/>
+                        <Border Grid.Row="2" Style="{StaticResource DropLineInside}"/>
 
-                        <Button Grid.Column="1" Style="{StaticResource NotButton}" Margin="0,0,6,0"
-                                Content="{DynamicResource Str.Cond.Not}"
-                                Command="{Binding ToggleNegateCommand}"
-                                ToolTip="{DynamicResource Str.Cond.NotGroupHint}"/>
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                        <ComboBox Grid.Column="2" Width="168"
-                                  ItemsSource="{Binding Operators}"
-                                  SelectedItem="{Binding Operator}"
-                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
+                            <!-- The outermost group is the tree itself: there is nowhere to drag it. -->
+                            <TextBlock Grid.Column="0" Style="{StaticResource DragGrip}"
+                                       Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
 
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.AddCondition}"
-                                    Command="{Binding AddConditionCommand}"/>
-                            <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.AddGroup}"
-                                    Command="{Binding AddGroupCommand}"/>
-                            <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.GroupSelected}"
-                                    Command="{Binding GroupSelectedCommand}"
-                                    ToolTip="{DynamicResource Str.Cond.GroupSelectedHint}"/>
-                            <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.Ungroup}"
-                                    Command="{Binding UngroupCommand}"
-                                    ToolTip="{DynamicResource Str.Cond.UngroupHint}"
-                                    Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
-                            <Button Style="{StaticResource RowButton}" Margin="6,0,0,0" Content="✕"
-                                    Command="{Binding RemoveCommand}"
-                                    ToolTip="{DynamicResource Str.App.Remove}"
-                                    Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
-                        </StackPanel>
+                            <Button Grid.Column="1" Style="{StaticResource NotButton}" Margin="0,0,6,0"
+                                    Content="{DynamicResource Str.Cond.Not}"
+                                    Command="{Binding ToggleNegateCommand}"
+                                    ToolTip="{DynamicResource Str.Cond.NotGroupHint}"/>
+
+                            <ComboBox Grid.Column="2" Width="168"
+                                      ItemsSource="{Binding Operators}"
+                                      SelectedItem="{Binding Operator}"
+                                      ItemTemplate="{StaticResource EnumItemTemplate}"/>
+
+                            <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.AddCondition}"
+                                        Command="{Binding AddConditionCommand}"/>
+                                <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.AddGroup}"
+                                        Command="{Binding AddGroupCommand}"/>
+                                <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.Ungroup}"
+                                        Command="{Binding UngroupCommand}"
+                                        ToolTip="{DynamicResource Str.Cond.UngroupHint}"
+                                        Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
+                                <Button Style="{StaticResource RowButton}" Margin="6,0,0,0" Content="✕"
+                                        Command="{Binding RemoveCommand}"
+                                        ToolTip="{DynamicResource Str.App.Remove}"
+                                        Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
+                            </StackPanel>
+                        </Grid>
                     </Grid>
 
-                    <ItemsControl Margin="16,2,0,0" ItemsSource="{Binding Children}"/>
+                    <ItemsControl Margin="16,0,0,0" ItemsSource="{Binding Children}"/>
+
+                    <Border Style="{StaticResource DropLineTail}" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
         </DataTemplate>
@@ -244,7 +347,11 @@
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0" Padding="6">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <!-- The scroller is where a drop is worked out, for every row inside it at once:
+                         it is the one element that is always under the pointer, and it is also the
+                         thing that has to scroll while a row is being held over its edge. -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  b:DragReorderBehavior.IsDropSurface="True">
                         <ContentControl Content="{Binding Root}"/>
                     </ScrollViewer>
                 </Border>
@@ -282,7 +389,7 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-    
+
                                                 <!-- Only the ticked rows are numbered: an order among
                                                      rows nothing uses would be noise. -->
                                                 <TextBlock VerticalAlignment="Center" FontSize="11"
@@ -299,11 +406,11 @@
                                                         </Style>
                                                     </TextBlock.Style>
                                                 </TextBlock>
-    
+
                                                 <CheckBox Grid.Column="1" VerticalAlignment="Center"
                                                           Content="{Binding Name}"
                                                           IsChecked="{Binding IsSelected}"/>
-    
+
                                                 <Button Grid.Column="2" Content="▲" Width="26" Padding="0"
                                                         Command="{Binding DataContext.MovePolicyUpCommand,
                                                                   RelativeSource={RelativeSource AncestorType=Window}}"

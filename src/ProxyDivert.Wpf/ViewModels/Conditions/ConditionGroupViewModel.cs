@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models.Conditions;
+using ProxyDivert.Wpf.Bindings.Enums;
 
 namespace ProxyDivert.Wpf.ViewModels.Conditions;
 
@@ -28,10 +29,7 @@ public sealed partial class ConditionGroupViewModel : ConditionNodeViewModel
 
     public ConditionGroupViewModel()
     {
-        // Turning NOT on takes "ungroup" away, and that arrives here as an edit coming up from a
-        // row. Ticking a row does NOT: a tick is not an edit of the filter, so it deliberately
-        // does not raise Changed, and "group the ticked rows" is re-asked from the row's own
-        // PropertyChanged in OnChildPropertyChanged instead.
+        // Turning NOT on takes "ungroup" away, and that arrives here as an edit coming up from a row.
         Changed += () => UngroupCommand.NotifyCanExecuteChanged();
     }
 
@@ -80,34 +78,6 @@ public sealed partial class ConditionGroupViewModel : ConditionNodeViewModel
         Attach(group);
     }
 
-    /// <summary>Puts the ticked rows of this group into a bracket of their own.</summary>
-    /// <remarks>
-    /// The one operation that makes a tree editor usable. People write conditions flat, discover
-    /// halfway through that two of them belong together, and are not going to delete and retype
-    /// them to get a bracket. The new group joins with "any", because wanting a bracket almost
-    /// always means wanting an OR inside an AND.
-    /// </remarks>
-    [RelayCommand(CanExecute = nameof(CanGroupSelected))]
-    private void GroupSelected()
-    {
-        List<ConditionNodeViewModel> selected = Children.Where(child => child.IsSelected).ToList();
-        if (selected.Count < 2) return;
-
-        int index = Children.IndexOf(selected[0]);
-        var group = new ConditionGroupViewModel { Operator = ConditionOperator.Any };
-
-        foreach (ConditionNodeViewModel child in selected) Detach(child);
-        foreach (ConditionNodeViewModel child in selected)
-        {
-            child.IsSelected = false;
-            group.Attach(child);
-        }
-
-        Attach(group, index);
-    }
-
-    private bool CanGroupSelected() => Children.Count(child => child.IsSelected) >= 2;
-
     /// <summary>Dissolves this group into its parent.</summary>
     /// <remarks>
     /// Offered only where it cannot change what the filter matches, which rules out two cases.
@@ -138,36 +108,42 @@ public sealed partial class ConditionGroupViewModel : ConditionNodeViewModel
         && (Children.Count <= 1 || Operator == Parent.Operator);
 
 
+    // ==== being dropped on ====
+
+    /// <remarks>
+    /// A group is the only row with an inside, and the only one a drop can mean two things on.
+    /// </remarks>
+    protected override (ConditionGroupViewModel Group, int Index)? LandingFor(DropWhere where)
+    {
+        // The lower half of a group row is the bracket itself, so a row dropped there goes in at
+        // the top of it — right where the pointer is.
+        if (where == DropWhere.Inside) return (this, 0);
+
+        // Nothing sits beside the outermost group, so the strip under its last row cannot mean
+        // "after me". It means the end of the tree, which is the one place it could sensibly be.
+        if (IsRoot) return where == DropWhere.After ? (this, Children.Count) : null;
+
+        return base.LandingFor(where);
+    }
+
     // ==== tree surgery ====
 
     private void Attach(ConditionNodeViewModel node, int index = -1)
     {
         node.Parent = this;
         node.Changed += RaiseChanged;
-        node.PropertyChanged += OnChildPropertyChanged;
 
         if (index < 0) Children.Add(node);
         else Children.Insert(index, node);
 
-        GroupSelectedCommand.NotifyCanExecuteChanged();
         RaiseChanged();
     }
 
     private void Detach(ConditionNodeViewModel node)
     {
         node.Changed -= RaiseChanged;
-        node.PropertyChanged -= OnChildPropertyChanged;
         node.Parent = null;
         Children.Remove(node);
-        GroupSelectedCommand.NotifyCanExecuteChanged();
-    }
-
-    // Whether "group the ticked rows" is offered is a question about the rows' tick boxes, and a
-    // tick is not an edit — it never reaches Changed. Listened for directly, so the button comes
-    // alive on the second tick instead of waiting for an unrelated edit to wake it.
-    private void OnChildPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(IsSelected)) GroupSelectedCommand.NotifyCanExecuteChanged();
     }
 
     internal void RemoveChild(ConditionNodeViewModel node)
@@ -185,6 +161,54 @@ public sealed partial class ConditionGroupViewModel : ConditionNodeViewModel
 
         Children.Move(index, target);
         RaiseChanged();
+    }
+
+    /// <summary>Takes a row from wherever it is and puts it in this group at <paramref name="index"/>.</summary>
+    /// <remarks>
+    /// What a drag ends in. Within one group it is a move rather than a remove and an add, so the
+    /// row keeps its place in the list rather than being rebuilt at the end of it and jumping.
+    /// </remarks>
+    public void MoveInto(ConditionNodeViewModel node, int index)
+    {
+        ConditionGroupViewModel? source = node.Parent;
+        if (source is null || IsAtOrBelow(node)) return;
+
+        if (ReferenceEquals(source, this))
+        {
+            int from = Children.IndexOf(node);
+            if (from < 0) return;
+
+            // The gap the row is asked to fill is measured with the row still in the list, and
+            // taking it out closes one place ahead of it.
+            if (index > from) index--;
+
+            index = Math.Clamp(index, 0, Children.Count - 1);
+            if (index == from) return;
+
+            Children.Move(from, index);
+            RaiseChanged();
+            return;
+        }
+
+        source.Detach(node);
+        Attach(node, Math.Clamp(index, 0, Children.Count));
+        source.PruneIfEmpty();
+    }
+
+    // Dragging the last row out of a bracket leaves a bracket around nothing, which means nothing
+    // and would be saved as a group with no children.
+    //
+    // Only emptiness, deliberately. The other half of the rule a deletion applies — one row left,
+    // so the bracket is noise — would dissolve a bracket the user is halfway through filling, and
+    // could swallow the very bracket the row was just dropped into.
+    private void PruneIfEmpty()
+    {
+        if (Children.Count > 0 || Parent is null) return;
+
+        ConditionGroupViewModel parent = Parent;
+        parent.Detach(this);
+        parent.RaiseChanged();
+        parent.PruneIfEmpty();
     }
 
     // Deleting rows must not leave brackets behind that mean nothing: an empty group disappears,

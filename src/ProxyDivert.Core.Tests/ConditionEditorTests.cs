@@ -2,14 +2,15 @@ using System;
 using System.Linq;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models.Conditions;
+using ProxyDivert.Wpf.Bindings.Enums;
 using ProxyDivert.Wpf.ViewModels.Conditions;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;
 
-// The buttons on a condition row rewrite the filter, and the two that change its shape — group the
-// ticked rows, dissolve this bracket — are the ones that can change what it MEANS without saying
-// so. These pin down when each is offered.
+// The things you can do to a condition row rewrite the filter, and the two that change its shape —
+// dragging a row somewhere else, dissolving a bracket — are the ones that can change what it MEANS
+// without saying so. These pin down what each of them is allowed to do.
 public class ConditionEditorTests
 {
     private static ConditionGroupViewModel Tree(ConditionOperator outer, ConditionOperator inner)
@@ -38,23 +39,89 @@ public class ConditionEditorTests
     private static ConditionGroupViewModel InnerOf(ConditionGroupViewModel root)
         => root.Children.OfType<ConditionGroupViewModel>().Single();
 
-    // Ticking rows is how you pick what to put in a bracket together, so the button has to come
-    // alive the moment the second row is ticked. The tick is deliberately NOT an edit of the
-    // filter, which is why it needs a signal of its own rather than riding on the edit one.
+    // A row dropped below another one lands under it, in that row's group. Re-ordering is the
+    // whole of what a drag does now: the arrows still work, they are just no longer the only way.
     [Fact]
-    public void Group_selected_becomes_available_as_soon_as_two_rows_are_ticked()
+    public void A_row_dropped_below_another_lands_under_it()
     {
         ConditionGroupViewModel root = Tree(ConditionOperator.All, ConditionOperator.Any);
-        int raised = 0;
-        root.GroupSelectedCommand.CanExecuteChanged += (_, _) => raised++;
+        ConditionNodeViewModel first = root.Children[0];
+        ConditionGroupViewModel inner = InnerOf(root);
 
-        Assert.False(root.GroupSelectedCommand.CanExecute(null));
+        Assert.True(inner.CanAccept(first, DropWhere.After));
+        inner.Accept(first, DropWhere.After);
 
-        root.Children[0].IsSelected = true;
-        root.Children[1].IsSelected = true;
+        Assert.Same(inner, root.Children[0]);
+        Assert.Same(first, root.Children[1]);
+    }
 
-        Assert.True(root.GroupSelectedCommand.CanExecute(null));
-        Assert.NotEqual(0, raised);
+    // The lower half of a group row is the bracket itself, and this is now the only way a row gets
+    // INTO one: there is no "tick two rows and press group" any more.
+    [Fact]
+    public void A_row_dropped_on_a_group_row_goes_inside_the_bracket()
+    {
+        ConditionGroupViewModel root = Tree(ConditionOperator.All, ConditionOperator.Any);
+        ConditionNodeViewModel first = root.Children[0];
+        ConditionGroupViewModel inner = InnerOf(root);
+
+        inner.Accept(first, DropWhere.Inside);
+
+        Assert.Same(first, inner.Children[0]);
+        Assert.Equal(3, inner.Children.Count);
+        Assert.Single(root.Children);
+    }
+
+    // Dropping a bracket into itself cuts a branch out of the tree and pastes it into itself,
+    // which leaves a loop hanging off nothing. Refused rather than tidied up afterwards.
+    [Fact]
+    public void A_bracket_cannot_be_dropped_inside_itself()
+    {
+        ConditionGroupViewModel root = Tree(ConditionOperator.All, ConditionOperator.Any);
+        ConditionGroupViewModel inner = InnerOf(root);
+        ConditionNodeViewModel insideIt = inner.Children[0];
+
+        Assert.False(insideIt.CanAccept(inner, DropWhere.Before));
+        Assert.False(inner.CanAccept(inner, DropWhere.Inside));
+
+        // Asked again by the move itself, not only by the offer: the view is what draws the line,
+        // and a view that got it wrong would take the tree apart.
+        insideIt.Accept(inner, DropWhere.Before);
+
+        Assert.Same(inner, root.Children[1]);
+        Assert.Equal(2, inner.Children.Count);
+    }
+
+    // Nothing sits beside the outermost group — but the strip under its last row still has to mean
+    // something, and the only thing it can sensibly mean is the end of the tree.
+    [Fact]
+    public void The_outermost_group_takes_a_row_at_its_end_but_not_beside_itself()
+    {
+        ConditionGroupViewModel root = Tree(ConditionOperator.All, ConditionOperator.Any);
+        ConditionNodeViewModel first = root.Children[0];
+
+        Assert.False(root.CanAccept(first, DropWhere.Before));
+        Assert.True(root.CanAccept(first, DropWhere.After));
+
+        root.Accept(first, DropWhere.After);
+
+        Assert.Same(first, root.Children[1]);
+    }
+
+    // Dragging the last row out of a bracket leaves a bracket around nothing, which is not a
+    // filter any more. It goes with the row rather than being left behind to be saved.
+    [Fact]
+    public void Dragging_the_last_row_out_of_a_bracket_takes_the_bracket_with_it()
+    {
+        ConditionGroupViewModel root = Tree(ConditionOperator.All, ConditionOperator.Any);
+        ConditionGroupViewModel inner = InnerOf(root);
+        ConditionNodeViewModel first = inner.Children[0];
+        ConditionNodeViewModel second = inner.Children[1];
+
+        root.Accept(first, DropWhere.Inside);
+        root.Accept(second, DropWhere.Inside);
+
+        Assert.Empty(root.Children.OfType<ConditionGroupViewModel>());
+        Assert.Equal(3, root.Children.Count);
     }
 
     // "x AND (a OR b)" is not "x AND a AND b". Dissolving the bracket throws the inner operator

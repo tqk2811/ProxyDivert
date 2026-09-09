@@ -75,23 +75,8 @@ public class ProcessFilterDirtyTests
         Assert.True(model.IsDirty);
     }
 
-    // The tick box on a condition row is how you pick rows to put in a group together. It is never
-    // saved, and the filter reads exactly the same with it on or off — so opening a filter, ticking
-    // a row and closing must not be answered with "you have unsaved changes".
-    [Fact]
-    public void Ticking_a_condition_row_to_group_it_is_not_an_edit()
-    {
-        ProcessFilterViewModel model = Open();
-        ConditionNodeViewModel row = model.Root.Children[0];
-
-        row.IsSelected = true;
-        row.IsSelected = false;
-
-        Assert.False(model.IsDirty);
-    }
-
-    // Same for the flag that tells the window where to put the caret: the view clears it as soon
-    // as it has, which is not the user editing anything either.
+    // The flag that tells the window where to put the caret is the row's own business and not the
+    // filter's: the view clears it as soon as it has moved the caret, which is not an edit either.
     [Fact]
     public void The_caret_moving_to_a_new_row_is_not_an_edit()
     {

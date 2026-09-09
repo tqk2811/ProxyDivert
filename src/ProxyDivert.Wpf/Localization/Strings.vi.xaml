@@ -69,11 +69,9 @@
     <sys:String x:Key="Str.Cond.NotGroupHint">Đảo ngược cả nhóm này</sys:String>
     <sys:String x:Key="Str.Cond.AddCondition">+ Điều kiện</sys:String>
     <sys:String x:Key="Str.Cond.AddGroup">+ Nhóm</sys:String>
-    <sys:String x:Key="Str.Cond.GroupSelected">Gộp nhóm</sys:String>
-    <sys:String x:Key="Str.Cond.GroupSelectedHint">Đưa các dòng đang tích vào chung một nhóm</sys:String>
     <sys:String x:Key="Str.Cond.Ungroup">Gỡ nhóm</sys:String>
     <sys:String x:Key="Str.Cond.UngroupHint">Đổ các dòng trong nhóm này ra nhóm cha (tắt KHÔNG trước đã)</sys:String>
-    <sys:String x:Key="Str.Cond.SelectHint">Tích để gộp chung nhóm với dòng khác</sys:String>
+    <sys:String x:Key="Str.Cond.DragHint">Kéo để chuyển dòng này sang chỗ khác</sys:String>
     <sys:String x:Key="Str.Cond.AndJoin"> VÀ </sys:String>
     <sys:String x:Key="Str.Cond.OrJoin"> HOẶC </sys:String>
     <sys:String x:Key="Str.Cond.NotFormat">KHÔNG {0}</sys:String>

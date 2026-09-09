@@ -69,11 +69,9 @@
     <sys:String x:Key="Str.Cond.NotGroupHint">Invert this whole group</sys:String>
     <sys:String x:Key="Str.Cond.AddCondition">+ Condition</sys:String>
     <sys:String x:Key="Str.Cond.AddGroup">+ Group</sys:String>
-    <sys:String x:Key="Str.Cond.GroupSelected">Group ticked</sys:String>
-    <sys:String x:Key="Str.Cond.GroupSelectedHint">Put the ticked rows into a group of their own</sys:String>
     <sys:String x:Key="Str.Cond.Ungroup">Ungroup</sys:String>
     <sys:String x:Key="Str.Cond.UngroupHint">Spill this group into the one above it (turn NOT off first)</sys:String>
-    <sys:String x:Key="Str.Cond.SelectHint">Tick to group this row with another</sys:String>
+    <sys:String x:Key="Str.Cond.DragHint">Drag to move this row somewhere else</sys:String>
     <sys:String x:Key="Str.Cond.AndJoin"> AND </sys:String>
     <sys:String x:Key="Str.Cond.OrJoin"> OR </sys:String>
     <sys:String x:Key="Str.Cond.NotFormat">NOT {0}</sys:String>
