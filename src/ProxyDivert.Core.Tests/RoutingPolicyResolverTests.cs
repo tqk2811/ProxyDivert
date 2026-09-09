@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using ProxyDivert.Core.Routing;
+using ProxyDivert.Core.Routing.Compiled;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using Xunit;
@@ -342,5 +343,75 @@ public class RoutingPolicyResolverTests
         RouteDecision decision = resolver.Resolve(Target(host: null));
 
         Assert.Equal(OutboundKind.Socks5, decision.Outbound.Kind);
+    }
+
+    // Answers a different list each time it is asked, which is what the real table does while a
+    // filter edit is re-describing processes in place.
+    private sealed class ShiftingPolicySource : IProcessPolicySource
+    {
+        private readonly Guid[] _first;
+        private readonly Guid[] _rest;
+
+        public ShiftingPolicySource(Guid first, Guid rest)
+        {
+            _first = new[] { first };
+            _rest = new[] { rest };
+        }
+
+        public int Reads { get; private set; }
+
+        public bool TryGetPolicyIds(uint processId, out IReadOnlyList<Guid> policyIds)
+        {
+            policyIds = Reads++ == 0 ? _first : _rest;
+            return true;
+        }
+    }
+
+    // ResolveUdp used to ask twice: GetPolicy(pid) for the UDP settings, then Resolve(target) for
+    // the rules. That was harmless while the resolver held a frozen copy of the table. It is not
+    // harmless now that the table is read live — the two reads can land either side of a filter
+    // edit, and the datagram is then answered with one policy's BlockQuic against another policy's
+    // rules, which is a combination the user never configured.
+    [Fact]
+    public void ResolveUdp_asks_which_policies_a_process_has_exactly_once()
+    {
+        var other = new RoutingPolicy { Id = Guid.NewGuid(), Name = "other", OutboundId = ProxyId };
+        var source = new ShiftingPolicySource(PolicyId, other.Id);
+        var resolver = new RoutingPolicyResolver(
+            CompiledRuleSet.Compile(new[] { Policy(Rule(HostMatcherType.Wildcard, "*")), other }),
+            new[] { Socks5() },
+            source);
+
+        resolver.ResolveUdp(Target("www.google.com", port: 443, isUdp: true));
+
+        Assert.Equal(1, source.Reads);
+    }
+
+    // The same thing said in terms of the answer rather than the count: everything about one
+    // datagram comes from one reading of the table.
+    [Fact]
+    public void ResolveUdp_answers_from_one_reading_and_not_a_mix_of_two()
+    {
+        // First reading: a policy that claims everything. Second: one with no rules at all.
+        // Reading twice takes the settings off the first and the rules off the second, and the
+        // datagram comes back under a policy the first reading never named.
+        var claiming = new RoutingPolicy
+        {
+            Id = PolicyId,
+            Name = "claiming",
+            OutboundId = ProxyId,
+            UdpMode = UdpMode.Direct,
+            BlockQuic = false,
+        };
+        claiming.Rules.Add(Rule(HostMatcherType.Wildcard, "*"));
+
+        var empty = new RoutingPolicy { Id = Guid.NewGuid(), Name = "empty", OutboundId = ProxyId };
+        var source = new ShiftingPolicySource(claiming.Id, empty.Id);
+        var resolver = new RoutingPolicyResolver(
+            CompiledRuleSet.Compile(new[] { claiming, empty }), new[] { Socks5() }, source);
+
+        RouteDecision decision = resolver.ResolveUdp(Target("www.google.com", port: 443, isUdp: true));
+
+        Assert.Equal(claiming.Id, decision.Policy.Id);
     }
 }

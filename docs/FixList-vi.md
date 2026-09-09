@@ -164,6 +164,26 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 
 ---
 
+### A18. `ResolveUdp` hỏi bảng pid hai lần cho cùng một datagram — Vừa
+
+- [x] **Vị trí**: `RoutingPolicyResolver.ResolveUdp` — gọi `GetPolicy(target.ProcessId)` lấy thiết lập UDP, rồi gọi `Resolve(target)` vốn tự đọc bảng pid **lần nữa**.
+- **Vấn đề**: hai lần đọc có thể rơi vào hai phía của một lần sửa bộ lọc. Datagram khi đó được trả lời bằng `UdpMode`/`BlockQuic` của policy này ghép với **rule của policy kia** — một tổ hợp user chưa bao giờ cấu hình.
+- **Vì sao mới thành lỗi**: trước E5.3 resolver ôm một **bản chụp đông cứng** của bảng pid, nên hai lần đọc luôn cho cùng kết quả và đây chỉ là thừa. Từ khi bảng pid đọc **sống** (tracker trả lời trực tiếp) thì nó thành lỗi thật. Đây là loại lỗi sinh ra bởi chính thay đổi thiết kế, không phải lỗi có sẵn.
+- **Hậu quả cụ thể**: `ReconcileTrackedWithRules` sửa mô tả tiến trình **tại chỗ** trên mọi lần Save, nên cửa sổ này mở đúng vào lúc user bấm Save trong khi trình duyệt đang chạy QUIC. Kết quả sai lệch về phía nguy hiểm: `BlockQuic=false` của policy mới ghép với rule tunnel của policy cũ ⇒ datagram đi thẳng mang địa chỉ thật.
+- **Đã sửa**: cùng đợt E5.3, commit `1eb59bf`. Đọc một lần vào biến local rồi dùng chung cho cả thiết lập lẫn rule ([RoutingPolicyResolver.cs:149](../src/ProxyDivert.Core/Routing/RoutingPolicyResolver.cs#L149)).
+- **Test**: `ResolveUdp_asks_which_policies_a_process_has_exactly_once` (đếm số lần đọc) và `ResolveUdp_answers_from_one_reading_and_not_a_mix_of_two` (nguồn giả trả danh sách khác nhau mỗi lần hỏi). **Đã kiểm ngược**: dựng lại dạng đọc hai lần thì cả hai đỏ.
+
+### A19. Hai policy trùng `Id` làm engine không khởi động được — Vừa
+
+- [x] **Vị trí**: `RoutingPolicyResolver` ctor cũ — `policies.ToDictionary(p => p.Id)`.
+- **Vấn đề**: `ToDictionary` **ném `ArgumentException`** khi có khoá trùng. Lời gọi nằm trong `BuildRun` nên exception thoát ra từ `StartAsync`.
+- **Vì sao cần sửa**: file cấu hình json sửa tay (chính cách dự án này chấp nhận cho việc sửa dữ liệu debug — xem [ba tầng cấu hình](Glossary-vi.md#L300), không có migration) hoàn toàn có thể copy-paste ra hai policy cùng `Id`. Khi đó máy **không có redirect nào cả**, và thông báo là một `ArgumentException` về "duplicate key" không nói gì về policy nào. Bỏ redirect toàn máy là cái giá đắt hơn nhiều so với việc chọn một trong hai.
+- **Đã sửa**: cùng đợt E5.3, commit `1eb59bf`. `CompiledRuleSet.Compile` gán bằng indexer (`byId[policy.Id] = ...`) nên bản sau cùng thắng, engine vẫn chạy ([CompiledRuleSet.cs:52](../src/ProxyDivert.Core/Routing/Compiled/CompiledRuleSet.cs#L52)).
+- **Còn hở**: chưa có gì **báo** cho user biết cấu hình có id trùng — mới chỉ là không sập nữa. Chỗ đúng để báo là `AppConfig.Normalize()` của E5.1, nơi đã nhận việc dọn cấu hình lúc `Load`.
+- **Test**: `TwoPoliciesSharingAnId_DoNotStopTheEngineFromStarting`.
+
+---
+
 ## B. Lỗi tiềm ẩn — TqkLibrary.WinDivert
 
 ### B1. Đóng handle khi thread khác còn đang `Recv` — Cao
@@ -675,10 +695,10 @@ Bảng phán quyết (giữ nguyên: `UdpMode`, `HostMatcherType`, `ProcessMatch
   - Rule `IsEnabled=false` bị **loại lúc compile**, phần còn lại sắp theo `Order` một lần. `Resolve` chỉ còn duyệt mảng ([RoutingPolicyResolver.cs:89](../src/ProxyDivert.Core/Routing/RoutingPolicyResolver.cs#L89)).
   - CIDR **mask ngay lúc compile**, nên `10.1.2.3/8` nghĩa đúng như `10.0.0.0/8` chứ không phụ thuộc bên nào được mask lúc so.
   - `_regexCache` tĩnh không xoá **đã bỏ hẳn**. `HostMatcher` còn lại đúng một hàm adapter compile-rồi-so, không nằm trên đường kết nối nữa — 11 test cũ giữ nguyên.
-- **Sửa thêm (không có trong kế hoạch)**:
-  - `ResolveUdp` trước đây gọi `GetPolicy(pid)` rồi `Resolve(target)` — **hai lần đọc** bảng pid. Với bảng đọc sống thì hai lần đọc có thể rơi vào hai trạng thái khác nhau: `BlockQuic` của policy này áp lên rule của policy kia. Giờ đọc một lần rồi dùng chung ([:149](../src/ProxyDivert.Core/Routing/RoutingPolicyResolver.cs#L149)).
-  - Hai policy trùng `Id` (file json sửa tay) trước đây làm `ToDictionary` **ném** ngay trong `StartAsync` ⇒ máy không có redirect nào và không có lời giải thích. Giờ lấy bản sau cùng, có test.
-  - `RedirectEngine._config` sau khi bỏ `RebuildResolver` **chỉ còn được ghi, không ai đọc**. Đã xoá field và cả hai lệnh gán, bớt luôn một lần `lock (_stateLock)`.
+- **Sửa thêm (không có trong kế hoạch)** — hai lỗi thật, đã tách thành mục riêng ở phần A để tra được từ danh sách bug:
+  - **A18**: `ResolveUdp` đọc bảng pid hai lần ⇒ thiết lập của policy này ghép rule của policy kia. Lỗi do chính thay đổi này sinh ra (bảng pid chuyển từ chụp đông cứng sang đọc sống).
+  - **A19**: hai policy trùng `Id` làm `ToDictionary` ném ngay trong `StartAsync` ⇒ máy không có redirect nào.
+  - (Dọn, không phải lỗi) `RedirectEngine._config` sau khi bỏ `RebuildResolver` **chỉ còn được ghi, không ai đọc**. Đã xoá field và cả hai lệnh gán, bớt luôn một lần `lock (_stateLock)`.
 - **Khác dự kiến**:
   - **Không** có `ProcessPolicyMap` do tracker sở hữu như kế hoạch ghi. Một `ConcurrentDictionary` thứ hai đặt cạnh `_tracked` là thêm một thứ phải giữ đồng bộ ở **sáu** chỗ `_tracked` thay đổi, trong đó hai chỗ (`ReconcileTrackedWithRules` sửa tại chỗ, `FollowParents` dời con theo cha) không raise event nào. Thay vào đó `ProcessRuleTracker` **tự** implement [IProcessPolicySource.TryGetPolicyIds:87](../src/ProxyDivert.Core/Processes/ProcessRuleTracker.cs#L87) đọc thẳng `_tracked` ⇒ không có bản sao nào để lệch. `BuildPolicyMap()` xoá hẳn.
   - `ProcessPolicyMap` vẫn tồn tại nhưng là bản đứng riêng cho test và cho ctor nhận dictionary ([ProcessPolicyMap.cs](../src/ProxyDivert.Core/Routing/ProcessPolicyMap.cs)); engine chạy thật không dùng.
