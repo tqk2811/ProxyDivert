@@ -42,10 +42,10 @@ public class ConditionDragDropTests
             ConditionNodeViewModel leaf = editor.Model.Root.Children[0];
             expected = leaf;
 
-            FrameworkElement row = editor.ZoneOf(leaf, DropZoneKind.Row);
+            FrameworkElement row = editor.ZoneOf(editor.Tree, leaf, DropZoneKind.Row);
             TextBox pattern = Descendants<TextBox>(row).First();
 
-            (kind, hitContext) = editor.ZoneUnder(Centre(pattern, editor.Surface));
+            (kind, hitContext) = editor.ZoneUnder(editor.Tree, Centre(pattern, editor.Tree));
         });
 
         Assert.Equal(DropZoneKind.Row, kind);
@@ -70,13 +70,40 @@ public class ConditionDragDropTests
                 .OfType<ConditionGroupViewModel>().Single();
             expected = inner;
 
-            FrameworkElement bracket = editor.ZoneOf(inner, DropZoneKind.GroupTail);
+            FrameworkElement bracket = editor.ZoneOf(editor.Tree, inner, DropZoneKind.GroupTail);
             var strip = new Point(bracket.ActualWidth / 2, bracket.ActualHeight - 2);
 
-            (kind, hitContext) = editor.ZoneUnder(bracket.TransformToAncestor(editor.Surface).Transform(strip));
+            (kind, hitContext) = editor.ZoneUnder(
+                editor.Tree, bracket.TransformToAncestor(editor.Tree).Transform(strip));
         });
 
         Assert.Equal(DropZoneKind.GroupTail, kind);
+        Assert.Same(expected, hitContext);
+    }
+
+    // The action list is arranged by dragging for the same reason the tree is: its order IS the
+    // priority. Its rows are check boxes, which answer a drag by themselves given the chance.
+    [Fact]
+    public void The_point_over_a_policy_row_resolves_to_that_policy()
+    {
+        DropZoneKind kind = DropZoneKind.None;
+        object? hitContext = null;
+        object? expected = null;
+
+        RunOnStaThread(() =>
+        {
+            using Editor editor = Editor.Open();
+
+            ProcessFilterViewModel.PolicyChoice policy = editor.Model.Policies[0];
+            expected = policy;
+
+            FrameworkElement row = editor.ZoneOf(editor.Actions, policy, DropZoneKind.Row);
+            CheckBox tick = Descendants<CheckBox>(row).First();
+
+            (kind, hitContext) = editor.ZoneUnder(editor.Actions, Centre(tick, editor.Actions));
+        });
+
+        Assert.Equal(DropZoneKind.Row, kind);
         Assert.Same(expected, hitContext);
     }
 
@@ -93,16 +120,17 @@ public class ConditionDragDropTests
         {
             using Editor editor = Editor.Open();
 
-            grips = Descendants<FrameworkElement>(editor.Surface)
+            grips = Descendants<FrameworkElement>(editor.Tree)
                 .Count(element => DragReorderBehavior.GetIsDragHandle(element)
                                   && element.IsVisible);
 
-            // Two conditions at the top level, the bracket, and the two conditions inside it.
-            rows = Descendants<FrameworkElement>(editor.Surface)
+            // One condition at the top level, the bracket, and the two conditions inside it, plus
+            // the outermost group's own row.
+            rows = Descendants<FrameworkElement>(editor.Tree)
                 .Count(element => DragReorderBehavior.GetDropZone(element) is DropZoneKind.Row
                                                                            or DropZoneKind.GroupHeader);
 
-            rootHasOne = Descendants<FrameworkElement>(editor.Surface)
+            rootHasOne = Descendants<FrameworkElement>(editor.Tree)
                 .Any(element => DragReorderBehavior.GetIsDragHandle(element)
                                 && element.IsVisible
                                 && ReferenceEquals(element.DataContext, editor.Model.Root));
@@ -126,8 +154,11 @@ public class ConditionDragDropTests
 
         public ProcessFilterViewModel Model { get; }
 
-        /// <summary>The scroller the drop is worked out on: every zone is somewhere under it.</summary>
-        public ScrollViewer Surface { get; private set; } = null!;
+        /// <summary>The scroller the condition tree is drawn in, and worked out drops against.</summary>
+        public ScrollViewer Tree { get; private set; } = null!;
+
+        /// <summary>The same, for the policy list under "then".</summary>
+        public ScrollViewer Actions { get; private set; } = null!;
 
         public static Editor Open()
         {
@@ -146,27 +177,32 @@ public class ConditionDragDropTests
             window.Show();
             window.UpdateLayout();
 
-            var editor = new Editor(window, model)
-            {
-                Surface = Descendants<ScrollViewer>(window)
-                    .First(DragReorderBehavior.GetIsDropSurface),
-            };
+            List<ScrollViewer> surfaces = Descendants<ScrollViewer>(window)
+                .Where(DragReorderBehavior.GetIsDropSurface)
+                .ToList();
 
-            return editor;
+            return new Editor(window, model)
+            {
+                Tree = surfaces.First(surface => Descendants<ContentControl>(surface)
+                    .Any(content => content.Content is ConditionGroupViewModel)),
+
+                Actions = surfaces.First(surface => Descendants<ItemsControl>(surface)
+                    .Any(list => list.ItemsSource is IEnumerable<ProcessFilterViewModel.PolicyChoice>)),
+            };
         }
 
         public void Dispose() => _window.Close();
 
         /// <summary>The element that stands for one row, as the drag sees it.</summary>
-        public FrameworkElement ZoneOf(object row, DropZoneKind kind)
-            => Descendants<FrameworkElement>(Surface)
+        public FrameworkElement ZoneOf(ScrollViewer surface, object row, DropZoneKind kind)
+            => Descendants<FrameworkElement>(surface)
                 .First(element => DragReorderBehavior.GetDropZone(element) == kind
                                   && ReferenceEquals(element.DataContext, row));
 
         /// <summary>What a drop at this point would be worked out against, the way the drag does it.</summary>
-        public (DropZoneKind Kind, object? Row) ZoneUnder(Point point)
+        public (DropZoneKind Kind, object? Row) ZoneUnder(ScrollViewer surface, Point point)
         {
-            HitTestResult? hit = VisualTreeHelper.HitTest(Surface, point);
+            HitTestResult? hit = VisualTreeHelper.HitTest(surface, point);
             if (hit is null) return (DropZoneKind.None, null);
 
             for (DependencyObject? at = hit.VisualHit; at != null; at = VisualTreeHelper.GetParent(at))

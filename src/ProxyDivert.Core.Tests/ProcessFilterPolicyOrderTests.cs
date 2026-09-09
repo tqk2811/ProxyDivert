@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Wpf.Bindings.Enums;
 using ProxyDivert.Wpf.ViewModels;
 using Xunit;
 
@@ -57,6 +58,42 @@ public class ProcessFilterPolicyOrderTests
 
         // The whole arrangement is saved, not only the ticked part of it.
         Assert.Equal(new[] { Work.Id, Games.Id, Streaming.Id }, rule.PolicyOrder);
+    }
+
+    // Dragging is the other way to arrange the list, and it asks a different question than the
+    // arrows do: which gap to fill, rather than how many places to step.
+    [Fact]
+    public void Dropping_a_policy_below_another_puts_it_there()
+    {
+        var rule = Filter(Work.Id, Streaming.Id, Games.Id);
+        var model = new ProcessFilterViewModel(rule, All);
+
+        ProcessFilterViewModel.PolicyChoice work = model.Policies[0];
+        model.Policies[2].Accept(work, DropWhere.After);
+        model.ApplyTo(rule);
+
+        Assert.Equal(new[] { "Streaming", "Games", "Work" }, model.Policies.Select(p => p.Name));
+        Assert.Equal(new[] { Streaming.Id, Games.Id, Work.Id }, rule.PolicyIds);
+        Assert.Equal(new[] { 1, 2, 3 }, model.Policies.Select(p => p.Rank));
+    }
+
+    // A row let go where it already is has not been arranged, and answering the close button with
+    // "you have unsaved changes" over a drag that moved nothing is how that question stops meaning
+    // anything.
+    [Fact]
+    public void A_policy_dropped_where_it_already_is_is_not_an_edit()
+    {
+        var model = new ProcessFilterViewModel(Filter(Work.Id), All);
+        ProcessFilterViewModel.PolicyChoice work = model.Policies[0];
+
+        Assert.False(work.CanAccept(work, DropWhere.After));
+        work.Accept(work, DropWhere.After);
+
+        // Straight back into the gap above the row under it, which is the one it fills already.
+        model.Policies[1].Accept(work, DropWhere.Before);
+
+        Assert.False(model.IsDirty);
+        Assert.Equal(new[] { "Work", "Streaming", "Games" }, model.Policies.Select(p => p.Name));
     }
 
     [Fact]

@@ -378,47 +378,65 @@
                         <Border Margin="0,8,0,0" CornerRadius="6" Padding="4"
                                 BorderThickness="1"
                                 BorderBrush="{DynamicResource Brush.Surface.BorderBrush}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <!-- Dragged the same way as the tree, and for the same reason: the order
+                                 of this list IS the priority, so arranging it is the point of it. -->
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          b:DragReorderBehavior.IsDropSurface="True">
                                 <ItemsControl ItemsSource="{Binding Policies}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid Margin="0,1">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="26"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
+                                            <Grid Background="Transparent" b:DragReorderBehavior.DropZone="Row">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="3"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="3"/>
+                                                </Grid.RowDefinitions>
 
-                                                <!-- Only the ticked rows are numbered: an order among
-                                                     rows nothing uses would be noise. -->
-                                                <TextBlock VerticalAlignment="Center" FontSize="11"
-                                                           HorizontalAlignment="Center"
-                                                           Foreground="{DynamicResource Brush.Accent}"
-                                                           Text="{Binding Rank}">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Rank}" Value="0">
-                                                                    <Setter Property="Visibility" Value="Hidden"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
+                                                <Border Grid.Row="0" Style="{StaticResource DropLineBefore}"/>
+                                                <Border Grid.Row="2" Style="{StaticResource DropLineAfter}"/>
 
-                                                <CheckBox Grid.Column="1" VerticalAlignment="Center"
-                                                          Content="{Binding Name}"
-                                                          IsChecked="{Binding IsSelected}"/>
+                                                <Grid Grid.Row="1">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="22"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
 
-                                                <Button Grid.Column="2" Content="▲" Width="26" Padding="0"
-                                                        Command="{Binding DataContext.MovePolicyUpCommand,
-                                                                  RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}"/>
-                                                <Button Grid.Column="3" Content="▼" Width="26" Padding="0" Margin="4,0,0,0"
-                                                        Command="{Binding DataContext.MovePolicyDownCommand,
-                                                                  RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}"/>
+                                                    <TextBlock Grid.Column="0" Style="{StaticResource DragGrip}"
+                                                               Padding="2,4" FontSize="11"/>
+
+                                                    <!-- Only the ticked rows are numbered: an order among
+                                                         rows nothing uses would be noise. -->
+                                                    <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="11"
+                                                               HorizontalAlignment="Center"
+                                                               Foreground="{DynamicResource Brush.Accent}"
+                                                               Text="{Binding Rank}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Rank}" Value="0">
+                                                                        <Setter Property="Visibility" Value="Hidden"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+
+                                                    <CheckBox Grid.Column="2" VerticalAlignment="Center"
+                                                              Content="{Binding Name}"
+                                                              IsChecked="{Binding IsSelected}"/>
+
+                                                    <Button Grid.Column="3" Content="▲" Width="26" Padding="0"
+                                                            Command="{Binding DataContext.MovePolicyUpCommand,
+                                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"/>
+                                                    <Button Grid.Column="4" Content="▼" Width="26" Padding="0" Margin="4,0,0,0"
+                                                            Command="{Binding DataContext.MovePolicyDownCommand,
+                                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"/>
+                                                </Grid>
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>

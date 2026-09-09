@@ -6,6 +6,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Routing.Models.Conditions;
+using ProxyDivert.Wpf.Bindings.Enums;
+using ProxyDivert.Wpf.Bindings.Interfaces;
 using ProxyDivert.Wpf.Helpers;
 using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.ViewModels.Conditions;
@@ -120,13 +122,13 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
         {
             RoutingPolicy? policy = all.FirstOrDefault(p => p.Id == id);
             if (policy != null && !Policies.Any(c => c.Policy.Id == id))
-                Policies.Add(new PolicyChoice(policy) { IsSelected = chosen.Contains(id) });
+                Policies.Add(new PolicyChoice(this, policy) { IsSelected = chosen.Contains(id) });
         }
 
         // Whatever is left is a policy the filter has never named, so it comes up unticked.
         foreach (RoutingPolicy policy in all)
             if (!Policies.Any(c => c.Policy.Id == policy.Id))
-                Policies.Add(new PolicyChoice(policy));
+                Policies.Add(new PolicyChoice(this, policy));
 
         // Only the tick: Rank is written by RenumberPolicies itself, and reacting to it would both
         // loop back into it and call opening the window an edit.
@@ -160,6 +162,27 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
         IsDirty = true;
     }
 
+    /// <summary>Puts a policy at <paramref name="index"/>, counted in the list as it stands now.</summary>
+    /// <remarks>
+    /// Where a drag ends, and why this is not the arrows in disguise: an arrow is told how far to
+    /// step, while a drop is told which gap to fill — and the gaps are counted with the row still
+    /// in the list, so taking it out closes one of them ahead of it.
+    /// </remarks>
+    private void MovePolicyTo(PolicyChoice choice, int index)
+    {
+        int from = Policies.IndexOf(choice);
+        if (from < 0) return;
+
+        if (index > from) index--;
+
+        index = Math.Clamp(index, 0, Policies.Count - 1);
+        if (index == from) return;
+
+        Policies.Move(from, index);
+        RenumberPolicies();
+        IsDirty = true;
+    }
+
     // The number shown against a ticked row, and the sentence under the list. Both are derived from
     // the list, so they are recomputed rather than maintained.
     private void RenumberPolicies()
@@ -174,9 +197,17 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
     }
 
     /// <summary>One policy in the list: whether this filter uses it, and where in the order.</summary>
-    public sealed partial class PolicyChoice : ObservableObject
+    public sealed partial class PolicyChoice : ObservableObject, IDragRow
     {
-        public PolicyChoice(RoutingPolicy policy) => Policy = policy;
+        // The list a row belongs to, because being dragged is a question about the list and not
+        // about the row: it is the list that has to renumber and to call the move an edit.
+        private readonly ProcessFilterViewModel _owner;
+
+        public PolicyChoice(ProcessFilterViewModel owner, RoutingPolicy policy)
+        {
+            _owner = owner;
+            Policy = policy;
+        }
 
         public RoutingPolicy Policy { get; }
 
@@ -188,6 +219,19 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
         /// <summary>1 for the first policy tried, 2 for the next; 0 while the row is not ticked.</summary>
         [ObservableProperty]
         private int _rank;
+
+        // Above or below, and nothing else: a policy row is one line with no inside to drop into.
+        public bool CanAccept(object source, DropWhere where)
+            => source is PolicyChoice moved
+            && !ReferenceEquals(moved, this)
+            && where is DropWhere.Before or DropWhere.After;
+
+        public void Accept(object source, DropWhere where)
+        {
+            if (!CanAccept(source, where) || source is not PolicyChoice moved) return;
+
+            _owner.MovePolicyTo(moved, _owner.Policies.IndexOf(this) + (where == DropWhere.After ? 1 : 0));
+        }
     }
 
     private void OnTreeChanged()
