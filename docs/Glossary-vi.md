@@ -76,7 +76,7 @@ TqkLibrary.VpnClient tự hiện thực TCP/IP ở tầng ứng dụng thay vì 
 
 ## DPAPI (Data Protection API)
 
-API mã hoá sẵn có của Windows. Với `DataProtectionScope.CurrentUser`, chuỗi mã hoá ra chỉ giải mã lại được bằng đúng tài khoản Windows đã mã hoá nó, không cần tự quản khoá. Trong ProxyDivert dùng để mã hoá mật khẩu proxy trước khi ghi vào `proxydivert.config.json`. Lưu ý phạm vi bảo vệ: nó chống việc chép file sang máy/tài khoản khác, KHÔNG chống mã độc chạy dưới chính tài khoản đó.
+API mã hoá sẵn có của Windows. Với `DataProtectionScope.CurrentUser`, chuỗi mã hoá ra chỉ giải mã lại được bằng đúng tài khoản Windows đã mã hoá nó, không cần tự quản khoá. **ProxyDivert từng dùng nó để bọc mật khẩu proxy/VPN trong `proxydivert.config.json` (tiền tố `dpapi:`), nhưng cơ chế này ĐÃ GỠ 09/09/2026**: mật khẩu giờ nằm thô trong file, đọc lên là nạp thẳng vào giao diện. Lý do gỡ: phạm vi `CurrentUser` khiến file chép sang máy/tài khoản khác trả về mật khẩu rỗng, còn nó vốn KHÔNG chống được mã độc chạy dưới chính tài khoản đó — tức chịu phiền phức mà không đổi lấy bao nhiêu an toàn. Bảo vệ file giờ là việc của thư mục chứa nó.
 
 ## Happy Eyeballs (RFC 8305)
 
@@ -116,7 +116,7 @@ Tình trạng lưu lượng đi qua VPN nhưng **việc tra tên miền thì kh�
 
 ## PSK (Pre-Shared Key) của IPsec
 
-Một chuỗi bí mật **dùng chung cho cả nhóm**, dùng ở pha 1 của IPsec để hai đầu tin nhau trước khi hỏi tới tài khoản/mật khẩu của từng người. L2TP/IPsec và IKEv2 cần nó; SSTP, SoftEther, OpenVPN, WireGuard thì không. Nó là bí mật thật (ai có nó đều bắt đầu bắt tay được) nên ProxyDivert để riêng một ô và mã hoá bằng [DPAPI](#L77) như mật khẩu, thay vì nhét vào ô URL nơi nó sẽ nằm thô trong file cấu hình.
+Một chuỗi bí mật **dùng chung cho cả nhóm**, dùng ở pha 1 của IPsec để hai đầu tin nhau trước khi hỏi tới tài khoản/mật khẩu của từng người. L2TP/IPsec và IKEv2 cần nó; SSTP, SoftEther, OpenVPN, WireGuard thì không. Nó là bí mật thật (ai có nó đều bắt đầu bắt tay được) nên ProxyDivert để riêng một ô thay vì nhét vào ô URL, cho dễ sửa và dễ che trên màn hình — còn trong file cấu hình thì nó nằm thô như mật khẩu, xem [DPAPI](#L77).
 
 ## Watermark của SoftEther
 
@@ -299,7 +299,7 @@ Kết nối TCP mà bắt tay (SYN) đã diễn ra **trước khi** công cụ k
 
 ## Ba tầng cấu hình (giao diện → snapshot RAM → file json)
 
-Cấu hình sống ở ba nơi, và chỉ đi theo một chiều. **Tầng giao diện** là `AppServices.Config` — thứ các ViewModel bind và sửa thẳng, kể cả khi đang gõ dở. **Tầng snapshot** là bản deep-copy (`ConfigStore.Clone`, JSON round-trip) được lấy đúng lúc bấm Save và giao cho engine (`RedirectEngine.Start/ApplyConfig`); engine, `ProcessRuleTracker` và `RoutingPolicyResolver` chỉ nhìn bản này, không chia sẻ một `List` nào với giao diện. **Tầng file** là `proxydivert.config.json`, ghi từ cùng snapshot đó (mật khẩu được DPAPI bọc lại trên một bản copy nữa). Lúc mở app: file → tầng giao diện; snapshot chỉ xuất hiện khi bật tool hoặc Save.
+Cấu hình sống ở ba nơi, và chỉ đi theo một chiều. **Tầng giao diện** là `AppServices.Config` — thứ các ViewModel bind và sửa thẳng, kể cả khi đang gõ dở. **Tầng snapshot** là bản deep-copy (`ConfigStore.Clone`, JSON round-trip) được lấy đúng lúc bấm Save và giao cho engine (`RedirectEngine.Start/ApplyConfig`); engine, `ProcessRuleTracker` và `RoutingPolicyResolver` chỉ nhìn bản này, không chia sẻ một `List` nào với giao diện. **Tầng file** là `proxydivert.config.json`, ghi thẳng từ cùng snapshot đó, không qua bản copy nào nữa. Lúc mở app: file → tầng giao diện; snapshot chỉ xuất hiện khi bật tool hoặc Save.
 
 Lý do tách: trước đây engine giữ CÙNG tham chiếu với giao diện, nên một luật vừa thêm vào lưới đã được so khớp với tiến trình mới trước khi bấm Save, và luồng WMI duyệt `_rules` đúng lúc lưới đang `Add` vào cùng danh sách. Save, ghi file và `ApplyConfig` chạy trên thread pool, xếp hàng tuần tự (`AppServices.Enqueue`), không bao giờ trên UI thread.
 

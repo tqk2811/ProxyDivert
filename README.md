@@ -75,8 +75,9 @@ and `WinDivert64.sys` copied next to it.
    under the process that spawned it. The **Connections** tab lists every connection with its host
    name, outbound and byte counts.
 
-Configuration lives in `proxydivert.config.json` beside the executable; proxy passwords are encrypted
-with DPAPI, so only the Windows account that saved them can read them back.
+Configuration lives in `proxydivert.config.json` beside the executable. It is plain JSON, passwords
+included: the file can be edited by hand and carried to another machine as it is, so keep it
+somewhere only you can read.
 
 ## Language and theme
 
@@ -157,9 +158,9 @@ a scheme names the protocol outright, and a file is recognised by its extension 
 one thing it cannot guess is which of two engines should run a WireGuard `.conf`, so that is what
 the column is really for; see the next section.
 
-Passwords and pre-shared keys go in their own boxes rather than into the URL, so they are encrypted
-with DPAPI along with every other password here instead of sitting in the configuration file in the
-clear.
+Passwords and pre-shared keys go in their own boxes rather than into the URL, so they can be edited
+and hidden on screen on their own. They are written to the configuration file as typed, like
+everything else here.
 
 ### Two engines, and which one you get
 
@@ -193,8 +194,8 @@ assigned none, still inside the tunnel. The machine's own resolver is never aske
 ### A `.vpn` file
 
 If you would rather keep a server in a file than in the outbound row, point the URL box at a small
-ini. Anything you also put in the outbound's own boxes wins over the file, because those are
-encrypted and the file is not.
+ini. Anything you also put in the outbound's own boxes wins over the file, because the row is what
+the tool actually saves.
 
 ```ini
 [Vpn]

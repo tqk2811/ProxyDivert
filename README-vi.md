@@ -72,8 +72,8 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
    engine đang thực sự áp dụng, tiến trình con nhận theo **Cả tiến trình con** nằm lồng dưới tiến
    trình đã sinh ra nó. Tab **Kết nối** hiện từng kết nối kèm tên miền, đường ra và số byte.
 
-Cấu hình lưu ở `proxydivert.config.json` cạnh exe; mật khẩu proxy được mã hoá bằng DPAPI
-(chỉ tài khoản Windows đã lưu mới đọc lại được).
+Cấu hình lưu ở `proxydivert.config.json` cạnh exe. File là JSON thuần, kể cả mật khẩu: sửa tay được
+và chép sang máy khác dùng luôn được, nên hãy để nó ở chỗ chỉ mình bạn đọc được.
 
 ## Ngôn ngữ và giao diện
 
@@ -148,8 +148,8 @@ Cột **Giao thức VPN** để `Auto` là tool tự đoán từ ô URL — có 
 thức, là file thì nhận theo đuôi và nội dung. Thứ duy nhất nó **không** đoán được là file `.conf`
 WireGuard nên chạy bằng engine nào; cột đó thật ra sinh ra vì lý do này, xem mục kế tiếp.
 
-Mật khẩu và khoá chung nằm ở ô riêng chứ không nhét vào URL, để chúng được mã hoá
-[DPAPI](docs/Glossary-vi.md#L77) như mọi mật khẩu khác thay vì nằm thô trong file cấu hình.
+Mật khẩu và [khoá chung](docs/Glossary-vi.md#L117) nằm ở ô riêng chứ không nhét vào URL, để sửa
+riêng và che được trên màn hình. Trong file cấu hình chúng nằm thô đúng như bạn gõ.
 
 ### Hai engine, và khi nào dùng cái nào
 
@@ -182,7 +182,7 @@ không cấp thì 1.1.1.1 rồi 8.8.8.8, vẫn gửi trong đường hầm. Khô
 ### File `.vpn`
 
 Muốn giữ thông tin máy chủ trong file thay vì trên dòng đường ra thì trỏ ô URL vào một file ini nhỏ.
-Ô nào bạn điền ở dòng đường ra sẽ **thắng** giá trị trong file, vì ô đó được mã hoá còn file thì không.
+Ô nào bạn điền ở dòng đường ra sẽ **thắng** giá trị trong file, vì dòng đường ra mới là thứ tool lưu lại.
 
 ```ini
 [Vpn]
