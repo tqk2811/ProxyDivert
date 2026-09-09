@@ -41,7 +41,7 @@ public class ProcessFilterPolicyOrderTests
         // Numbered where the number means something, and nowhere else.
         Assert.Equal(new[] { 1, 2, 0 }, model.Policies.Select(p => p.Rank));
 
-        Assert.Equal("Games → Work", model.PolicySummary);
+        Assert.Equal("Games, Work", model.PolicySummary);
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public class ProcessFilterPolicyOrderTests
         model.ApplyTo(rule);
 
         Assert.Equal(new[] { Work.Id, Games.Id }, rule.PolicyIds);
-        Assert.Equal("Work → Games", model.PolicySummary);
+        Assert.Equal("Work, Games", model.PolicySummary);
 
         // The whole arrangement is saved, not only the ticked part of it.
         Assert.Equal(new[] { Work.Id, Games.Id, Streaming.Id }, rule.PolicyOrder);

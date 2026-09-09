@@ -192,7 +192,7 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
             choice.Rank = choice.IsSelected ? ++rank : 0;
 
         PolicySummary = string.Join(
-            " → ",
+            ", ",
             Policies.Where(c => c.IsSelected).Select(c => c.Policy.Name));
     }
 

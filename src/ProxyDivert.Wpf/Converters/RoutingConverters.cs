@@ -10,7 +10,7 @@ using ProxyDivert.Wpf.Localization;
 namespace ProxyDivert.Wpf.Converters;
 
 /// <summary>
-/// The policies a filter applies, named and in priority order: "Work → Streaming".
+/// The policies a filter applies, named and in priority order: "Work, Streaming".
 /// </summary>
 /// <remarks>
 /// A filter stores policy ids, and a grid cell has to show names — so the list of policies is the
@@ -29,8 +29,8 @@ public sealed class PolicyNamesConverter : IMultiValueConverter
             ? rawPolicies.OfType<RoutingPolicy>().ToList()
             : new List<RoutingPolicy>();
 
-        // A policy the user deleted is dropped rather than shown as a blank arrow: the routing does
-        // the same thing, and a cell that says "Work → " reads as a bug in the cell.
+        // A policy the user deleted is dropped rather than shown as an empty gap: the routing does
+        // the same thing, and a cell that says "Work, " reads as a bug in the cell.
         List<string> names = ids
             .Select(id => policies.FirstOrDefault(p => p.Id == id))
             .Where(policy => policy != null)
@@ -38,7 +38,7 @@ public sealed class PolicyNamesConverter : IMultiValueConverter
             .ToList();
 
         return names.Count > 0
-            ? string.Join(" → ", names)
+            ? string.Join(", ", names)
             : LocalizationManager.Get("Str.Process.NoPolicy");
     }
 
