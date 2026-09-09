@@ -1,15 +1,8 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ProxyDivert.Core.Configuration.Models;
-using ProxyDivert.Core.Routing.Enums;
-using ProxyDivert.Core.Routing.Models;
-using ProxyDivert.Core.Routing.Models.Conditions;
-using ProxyDivert.Core.Vpn.Enums;
-using TqkLibrary.WinDivert.Redirect.Enums;
 
 namespace ProxyDivert.Core.Configuration;
 
@@ -61,8 +54,11 @@ public sealed class ConfigStore
             string json = File.ReadAllText(FilePath);
             AppConfig? config = JsonSerializer.Deserialize<AppConfig>(json, SerializerOptions);
             if (config == null) return AppConfig.CreateDefault();
-            RestoreBuiltInOutbounds(config);
-            return config;
+
+            // The file is plain JSON and the user is invited to edit it, so what comes back may
+            // reference a policy that is not there any more. AppConfig knows what a whole
+            // configuration looks like; this only has to ask.
+            return config.Normalize();
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
@@ -107,33 +103,6 @@ public sealed class ConfigStore
         }
     }
 
-    // Direct and Block are the application's own, identified by fixed id. Everything about them
-    // except their name is fixed too — Direct is the machine's own stack and Block is the absence
-    // of one, so a kind, a URL or a credential on either is meaningless, and switching Direct off
-    // would leave traffic nothing to fall back to.
-    //
-    // Repaired on load rather than merely prevented, because for a while the interface let it
-    // happen: the outbound grid was read-only, which stopped the text cells but not the combo
-    // columns — those show a live ComboBox regardless — so one stray click turned Direct into an
-    // HTTP proxy with no URL, and saving kept it. A file already in that state has to come back
-    // usable, not just stop getting worse. The name is left alone: rules reference these by id, so
-    // renaming one is the user's business.
-    private static void RestoreBuiltInOutbounds(AppConfig config)
-    {
-        foreach (Outbound outbound in config.Outbounds)
-        {
-            if (!outbound.IsBuiltIn) continue;
-
-            outbound.Kind = outbound.Id == Outbound.DirectId ? OutboundKind.Direct : OutboundKind.Block;
-            outbound.Url = null;
-            outbound.Username = null;
-            outbound.Password = null;
-            outbound.PreSharedKey = null;
-            outbound.VpnProtocol = VpnProtocol.Auto;
-            outbound.IsEnabled = true;
-        }
-    }
-
     /// <summary>
     /// A deep copy that shares nothing with <paramref name="config"/> — not a list, not a rule.
     /// </summary>
@@ -146,12 +115,17 @@ public sealed class ConfigStore
     ///
     /// Round-tripping through JSON is the cheapest correct deep copy here: the model is plain
     /// data, and this runs once per save, not per connection.
+    ///
+    /// The copy is normalised, the original is not. This is the last point before the engine, and
+    /// the engine should never have to reason about a reference that goes nowhere; the instance the
+    /// window is editing stays exactly as the user left it, because repairing it under them mid-edit
+    /// would move rows they are looking at.
     /// </remarks>
     public static AppConfig Clone(AppConfig config)
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
         string json = JsonSerializer.Serialize(config, SerializerOptions);
-        return JsonSerializer.Deserialize<AppConfig>(json, SerializerOptions)!;
+        return JsonSerializer.Deserialize<AppConfig>(json, SerializerOptions)!.Normalize();
     }
 
     private void TryBackupCorruptFile()

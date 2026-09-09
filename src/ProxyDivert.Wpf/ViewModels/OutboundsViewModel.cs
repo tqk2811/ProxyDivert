@@ -168,18 +168,14 @@ public sealed partial class OutboundsViewModel : ObservableObject
     [RelayCommand]
     private void Remove()
     {
-        if (Selected is null || IsBuiltIn(Selected)) return;
+        if (Selected is null) return;
 
-        Guid removedId = Selected.Id;
-        _services.Config.Outbounds.Remove(Selected);
+        // The configuration repoints at Block every policy that used this way out — "nowhere" must
+        // not quietly become Direct, which is the user's own address on the wire — and refuses the
+        // two built-ins outright. Both answers belong to the configuration, not to this grid.
+        if (!_services.Config.RemoveOutbound(Selected.Id)) return;
+
         Outbounds.Remove(Selected);
-
-        // A policy pointing at a deleted outbound would send its traffic nowhere, and "nowhere"
-        // must not quietly become Direct — that is the user's address on the wire. Repointed at
-        // Block so the mistake is visible from the first connection instead.
-        foreach (RoutingPolicy policy in _services.Config.Policies.Where(p => p.OutboundId == removedId))
-            policy.OutboundId = Outbound.BlockId;
-
         Selected = null;
         _services.SaveAndApply();
     }

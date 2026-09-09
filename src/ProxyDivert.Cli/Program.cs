@@ -173,6 +173,11 @@ if (options.ProcessPattern != null)
     });
 }
 
+// Assembled by hand rather than loaded, so it has never been through the checks a saved file gets.
+// The same call the store makes on load: it costs nothing here and means the engine is handed one
+// shape of configuration whichever way the tool was started.
+config.Normalize();
+
 Console.WriteLine($"Rule: {options.RuleMatcher} \"{options.RulePattern}\" -> {outbound.Name}; everything else direct.");
 Console.WriteLine($"UDP: {options.UdpMode}, QUIC blocked: {options.BlockQuic}, IPv6: {options.Ipv6} (outbound {options.OutboundIpv6})");
 

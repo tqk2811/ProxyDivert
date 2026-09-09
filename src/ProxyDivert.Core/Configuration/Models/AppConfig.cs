@@ -1,14 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Processes.Enums;
+using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Vpn.Enums;
 using TqkLibrary.WinDivert.Redirect.Enums;
 
 namespace ProxyDivert.Core.Configuration.Models;
 
-// Everything the tool remembers between runs. Serialised to JSON next to the executable;
-// passwords are encrypted before they get there (see ConfigStore).
+// Everything the tool remembers between runs, and the rules that keep it consistent.
+//
+// Serialised to JSON next to the executable, passwords included and in the clear — the file is
+// meant to be readable and editable by hand (see ConfigStore), which is exactly why the integrity
+// rules at the bottom of this file exist rather than being assumed.
 public sealed class AppConfig
 {
     public List<Outbound> Outbounds { get; set; } = new List<Outbound>();
@@ -80,5 +86,181 @@ public sealed class AppConfig
             Outbounds = { Outbound.CreateDirect(), Outbound.CreateBlock() },
             Policies = { policy },
         };
+    }
+
+    // ==== integrity ====
+    //
+    // The three lists reference each other by id: a policy names an outbound, a filter names
+    // policies. Nothing in the type system keeps those in step, and for a while four separate
+    // places patched them up after the fact — one view model on deleting a policy, another on
+    // deleting an outbound, the config store on load, and the resolver quietly skipping what it
+    // could not find. They did not agree with each other, and the one caller that patched nothing
+    // at all (the command line, which builds a configuration from scratch) could hand the engine
+    // something none of those repairs had ever seen.
+    //
+    // So the rules live here instead, on the object that owns both sides of every reference.
+
+    /// <summary>
+    /// Removes a policy and every reference to it. False when there is no such policy, or when it
+    /// is the last one left.
+    /// </summary>
+    /// <remarks>
+    /// The last policy stays because a filter must always have somewhere to point. A filter that
+    /// catches processes and then has no rules at all does not stop redirecting them — it sends
+    /// them out direct, under the user's own address, which is the one outcome that must never
+    /// happen by accident.
+    /// </remarks>
+    public bool RemovePolicy(Guid id)
+    {
+        RoutingPolicy? policy = Policies.FirstOrDefault(p => p.Id == id);
+        if (policy is null || Policies.Count <= 1) return false;
+
+        Policies.Remove(policy);
+        DropMissingPolicyReferences();
+        return true;
+    }
+
+    /// <summary>
+    /// Removes an outbound and repoints at Block every policy that used it. False for the two
+    /// built-ins, which are not the user's to delete, and for an id that is not in the list.
+    /// </summary>
+    /// <remarks>
+    /// Block rather than Direct on purpose: a policy whose way out has gone is a mistake, and a
+    /// mistake that shows up as a failed connection is one the user can find. Falling back to
+    /// Direct would put their own address on the wire and say nothing about it.
+    /// </remarks>
+    public bool RemoveOutbound(Guid id)
+    {
+        Outbound? outbound = Outbounds.FirstOrDefault(o => o.Id == id);
+        if (outbound is null || outbound.IsBuiltIn) return false;
+
+        Outbounds.Remove(outbound);
+        foreach (RoutingPolicy policy in Policies)
+            if (policy.OutboundId == id) policy.OutboundId = Outbound.BlockId;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Puts every reference in the configuration back into a state that resolves, and returns this
+    /// same instance so it can be written as one expression.
+    /// </summary>
+    /// <remarks>
+    /// Called on the way in from the file and on the way out to the engine, because those are the
+    /// two doors a configuration that was never edited through this object comes in by: the file is
+    /// plain JSON anyone may open in an editor, and the command line assembles its own. Edits made
+    /// through <see cref="RemovePolicy"/> and <see cref="RemoveOutbound"/> never need it.
+    ///
+    /// Idempotent, and deliberately quiet — it repairs, it does not report. What it will not do is
+    /// guess intent: an outbound whose URL is nonsense is left exactly as typed, to fail where the
+    /// user can see it happen.
+    /// </remarks>
+    public AppConfig Normalize()
+    {
+        // An id that appears twice is not something routing can answer questions about: asked for
+        // that policy it would have to pick one. Every table built from these lists is filled by
+        // assignment, so the last one written is the one that survives — the same one here.
+        KeepOneOfEachId(Outbounds, o => o.Id);
+        KeepOneOfEachId(Policies, p => p.Id);
+        KeepOneOfEachId(ProcessRules, r => r.Id);
+
+        RestoreBuiltInOutbounds();
+
+        // Nothing to point at is worse than pointing somewhere dull: the Rules tab with no policy
+        // has no row to add a rule to, and every filter in the file is already dangling.
+        if (Policies.Count == 0)
+        {
+            Policies.Add(new RoutingPolicy
+            {
+                Id = Guid.NewGuid(),
+                Name = "Default",
+                OutboundId = Outbound.DirectId,
+            });
+        }
+
+        var outboundIds = new HashSet<Guid>(Outbounds.Select(o => o.Id));
+        foreach (RoutingPolicy policy in Policies)
+            if (!outboundIds.Contains(policy.OutboundId)) policy.OutboundId = Outbound.BlockId;
+
+        DropMissingPolicyReferences();
+        return this;
+    }
+
+    /// <summary>
+    /// Takes out of every filter the policies that are no longer there, and gives a filter left
+    /// with none the first policy in the list.
+    /// </summary>
+    /// <remarks>
+    /// The resolver skips an id it cannot find, so a dangling reference crashes nothing — it only
+    /// means the filter is doing something the window cannot show. That is the part worth
+    /// repairing: what the user sees and what routing does have to be the same list.
+    /// </remarks>
+    private void DropMissingPolicyReferences()
+    {
+        if (Policies.Count == 0) return;
+
+        var policyIds = new HashSet<Guid>(Policies.Select(p => p.Id));
+        Guid fallback = Policies[0].Id;
+
+        foreach (ProcessRule rule in ProcessRules)
+        {
+            // The arrangement too, ticked or not: it remembers where a policy sat in the editor,
+            // and a policy that no longer exists has no place to remember.
+            rule.PolicyOrder.RemoveAll(id => !policyIds.Contains(id));
+            rule.PolicyIds.RemoveAll(id => !policyIds.Contains(id));
+
+            if (rule.PolicyIds.Count > 0) continue;
+
+            rule.PolicyIds.Add(fallback);
+            if (!rule.PolicyOrder.Contains(fallback)) rule.PolicyOrder.Insert(0, fallback);
+        }
+    }
+
+    /// <summary>
+    /// Puts Direct and Block back the way they are defined, and back in the list if they went
+    /// missing.
+    /// </summary>
+    /// <remarks>
+    /// Everything about the two except their name is fixed — Direct is the machine's own stack and
+    /// Block is the absence of one, so a kind, a URL or a credential on either means nothing.
+    /// Repaired rather than merely prevented, because for a while the interface let it happen: the
+    /// outbound grid was read-only, which stopped the text cells but not the combo columns, so one
+    /// stray click turned Direct into an HTTP proxy with no URL and saving kept it.
+    ///
+    /// The name is left alone. Policies reference these by id, so renaming one is the user's
+    /// business and breaks nothing.
+    /// </remarks>
+    private void RestoreBuiltInOutbounds()
+    {
+        foreach (Outbound outbound in Outbounds)
+        {
+            if (!outbound.IsBuiltIn) continue;
+
+            outbound.Kind = outbound.Id == Outbound.DirectId ? OutboundKind.Direct : OutboundKind.Block;
+            outbound.Url = null;
+            outbound.Username = null;
+            outbound.Password = null;
+            outbound.PreSharedKey = null;
+            outbound.VpnProtocol = VpnProtocol.Auto;
+            outbound.IsEnabled = true;
+        }
+
+        // The engine puts them back for itself when they are missing, so their absence never broke
+        // routing. It did break the window, which offers only what is in this list: a policy whose
+        // outbound is not there reads as an empty cell the user cannot fill back in.
+        if (Outbounds.All(o => o.Id != Outbound.DirectId)) Outbounds.Insert(0, Outbound.CreateDirect());
+        if (Outbounds.All(o => o.Id != Outbound.BlockId))
+            Outbounds.Insert(Math.Min(1, Outbounds.Count), Outbound.CreateBlock());
+    }
+
+    // Keeps the LAST of each id rather than the first, matching every table built from these lists:
+    // they are filled by assignment, so a repeated id ends up holding whichever came last.
+    private static void KeepOneOfEachId<T>(List<T> items, Func<T, Guid> idOf)
+    {
+        if (items.Count < 2) return;
+
+        var seen = new HashSet<Guid>();
+        for (int i = items.Count - 1; i >= 0; i--)
+            if (!seen.Add(idOf(items[i]))) items.RemoveAt(i);
     }
 }

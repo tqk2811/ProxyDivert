@@ -38,7 +38,13 @@ public sealed class RoutingPolicyResolver
         if (outbounds is null) throw new ArgumentNullException(nameof(outbounds));
         _policiesByProcessId = policiesByProcessId ?? ProcessPolicyMap.Empty;
 
-        var byId = outbounds.ToDictionary(o => o.Id);
+        // Assignment rather than ToDictionary: two outbounds sharing an id is something a
+        // hand-edited file can say, and ToDictionary answers it by throwing — out of the engine's
+        // Start, leaving the machine with no redirection at all over a duplicated line. The last
+        // one written wins, which is what AppConfig.Normalize keeps and what the compiled rule set
+        // does with a repeated policy.
+        var byId = new Dictionary<Guid, Outbound>();
+        foreach (Outbound outbound in outbounds) byId[outbound.Id] = outbound;
         // The two built-ins always resolve, whether or not the user's list contains them.
         if (!byId.ContainsKey(Outbound.DirectId)) byId[Outbound.DirectId] = Outbound.CreateDirect();
         if (!byId.ContainsKey(Outbound.BlockId)) byId[Outbound.BlockId] = Outbound.CreateBlock();

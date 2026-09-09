@@ -178,31 +178,14 @@ public sealed partial class RulesViewModel : ObservableObject
         RoutingPolicy? policy = SelectedPolicy;
         if (policy is null) return;
 
-        // A process rule pointing at a deleted policy would leave those processes redirected with
-        // no rules at all. Keep the last policy so that cannot happen.
-        if (Policies.Count <= 1) return;
+        // The configuration takes the policy out of every filter that named it, and refuses when
+        // this is the last one — a filter must always have somewhere to point, because catching
+        // processes and then having no rules at all sends them out direct rather than stopping.
+        // None of that is the grid's business; the grid only follows what happened.
+        if (!_services.Config.RemovePolicy(policy.Id)) return;
 
-        _services.Config.Policies.Remove(policy);
         Policies.Remove(policy);
-
-        // A filter can name several policies. The deleted one is taken out of each list, and a
-        // filter left with an empty list gets the fallback: catching processes and then having no
-        // rules at all would send them out direct, which is the one outcome that must not happen
-        // by accident.
-        RoutingPolicy fallback = Policies[0];
-        foreach (ProcessRule rule in _services.Config.ProcessRules)
-        {
-            // Out of the arrangement too, ticked or not — a filter that never used this policy
-            // still has it in the order it was left in.
-            rule.PolicyOrder.Remove(policy.Id);
-
-            if (!rule.PolicyIds.Remove(policy.Id) || rule.PolicyIds.Count > 0) continue;
-
-            rule.PolicyIds.Add(fallback.Id);
-            if (!rule.PolicyOrder.Contains(fallback.Id)) rule.PolicyOrder.Insert(0, fallback.Id);
-        }
-
-        SelectedPolicy = fallback;
+        SelectedPolicy = Policies.FirstOrDefault();
         SaveAndApply();
     }
 
