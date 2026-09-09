@@ -16,6 +16,7 @@
     <sys:String x:Key="Str.App.Remove">Xoá</sys:String>
     <sys:String x:Key="Str.App.Up">Lên</sys:String>
     <sys:String x:Key="Str.App.Down">Xuống</sys:String>
+    <sys:String x:Key="Str.App.DragHint">Kéo để chuyển dòng này sang chỗ khác</sys:String>
     <sys:String x:Key="Str.App.Refresh">Làm mới</sys:String>
     <sys:String x:Key="Str.App.Clear">Xoá hết</sys:String>
     <sys:String x:Key="Str.App.Test">Thử</sys:String>
@@ -34,6 +35,7 @@
     <sys:String x:Key="Str.Tab.Settings">Cài đặt</sys:String>
 
     <sys:String x:Key="Str.Process.Rules">Luật tiến trình</sys:String>
+    <sys:String x:Key="Str.Process.RuleOrderHint">Xét từ trên xuống: tiến trình khớp bộ lọc nào trước thì theo bộ lọc đó. Kéo tay cầm ở đầu dòng để sắp lại.</sys:String>
     <sys:String x:Key="Str.Process.Applied">Tiến trình đang áp dụng</sys:String>
     <sys:String x:Key="Str.Process.TargetHint">chrome.exe</sys:String>
     <sys:String x:Key="Str.Process.ArgumentHint">để trống là bỏ qua</sys:String>
@@ -71,7 +73,6 @@
     <sys:String x:Key="Str.Cond.AddGroup">+ Nhóm</sys:String>
     <sys:String x:Key="Str.Cond.Ungroup">Gỡ nhóm</sys:String>
     <sys:String x:Key="Str.Cond.UngroupHint">Đổ các dòng trong nhóm này ra nhóm cha (tắt KHÔNG trước đã)</sys:String>
-    <sys:String x:Key="Str.Cond.DragHint">Kéo để chuyển dòng này sang chỗ khác</sys:String>
     <sys:String x:Key="Str.Cond.AndJoin"> VÀ </sys:String>
     <sys:String x:Key="Str.Cond.OrJoin"> HOẶC </sys:String>
     <sys:String x:Key="Str.Cond.NotFormat">KHÔNG {0}</sys:String>

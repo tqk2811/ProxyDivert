@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -8,7 +9,7 @@ using ProxyDivert.Wpf.Bindings.Interfaces;
 
 namespace ProxyDivert.Wpf.Bindings;
 
-/// <summary>Moving rows around by dragging them, for the condition tree and the policy list.</summary>
+/// <summary>Moving rows around by dragging them: the condition tree, and the two lists of rules.</summary>
 /// <remarks>
 /// Written as one surface that hit-tests, rather than as handlers on every row. Rows are drawn by
 /// templates nested inside each other, and drag events tunnel outside-in and bubble inside-out, so
@@ -21,7 +22,7 @@ namespace ProxyDivert.Wpf.Bindings;
 /// </remarks>
 public static class DragReorderBehavior
 {
-    // In-process only, so the payload is the view model itself rather than anything serialized.
+    // In-process only, so the payload is the row's own data rather than anything serialized.
     private const string RowFormat = "ProxyDivert.DragRow";
 
     // How close to the edge of the list the pointer has to get before it starts scrolling, and how
@@ -84,7 +85,7 @@ public static class DragReorderBehavior
             && Math.Abs(moved.Y) < SystemParameters.MinimumVerticalDragDistance) return;
 
         _pressed = false;
-        if (element.DataContext is not IDragRow row) return;
+        if (element.DataContext is not object row) return;
 
         var payload = new DataObject(RowFormat, row);
 
@@ -134,7 +135,8 @@ public static class DragReorderBehavior
         e.Handled = true;
         e.Effects = DragDropEffects.None;
 
-        if (Dragged(e) is not IDragRow source)
+        object? source = Dragged(e);
+        if (source is null)
         {
             ClearMark();
             return;
@@ -142,8 +144,8 @@ public static class DragReorderBehavior
 
         AutoScroll(surface, e);
 
-        (FrameworkElement Zone, IDragRow Row, DropWhere Where)? target = Resolve(surface, e);
-        if (target is null || !target.Value.Row.CanAccept(source, target.Value.Where))
+        (FrameworkElement Zone, Landing Target, DropWhere Where)? target = Resolve(surface, e);
+        if (target is null || !target.Value.Target.CanAccept(source, target.Value.Where))
         {
             ClearMark();
             return;
@@ -161,20 +163,21 @@ public static class DragReorderBehavior
         e.Handled = true;
         e.Effects = DragDropEffects.None;
 
-        if (Dragged(e) is not IDragRow source) return;
+        object? source = Dragged(e);
+        if (source is null) return;
 
-        (FrameworkElement Zone, IDragRow Row, DropWhere Where)? target = Resolve(surface, e);
-        if (target is null || !target.Value.Row.CanAccept(source, target.Value.Where)) return;
+        (FrameworkElement Zone, Landing Target, DropWhere Where)? target = Resolve(surface, e);
+        if (target is null || !target.Value.Target.CanAccept(source, target.Value.Where)) return;
 
-        target.Value.Row.Accept(source, target.Value.Where);
+        target.Value.Target.Accept(source, target.Value.Where);
         e.Effects = DragDropEffects.Move;
     }
 
-    private static IDragRow? Dragged(DragEventArgs e)
-        => e.Data.GetDataPresent(RowFormat) ? e.Data.GetData(RowFormat) as IDragRow : null;
+    private static object? Dragged(DragEventArgs e)
+        => e.Data.GetDataPresent(RowFormat) ? e.Data.GetData(RowFormat) : null;
 
     /// <summary>What is under the pointer, and which side of it the dragged row would go.</summary>
-    private static (FrameworkElement Zone, IDragRow Row, DropWhere Where)? Resolve(
+    private static (FrameworkElement Zone, Landing Target, DropWhere Where)? Resolve(
         FrameworkElement surface, DragEventArgs e)
     {
         HitTestResult? hit = VisualTreeHelper.HitTest(surface, e.GetPosition(surface));
@@ -186,7 +189,7 @@ public static class DragReorderBehavior
 
             DropZoneKind kind = GetDropZone(element);
             if (kind == DropZoneKind.None) continue;
-            if (element.DataContext is not IDragRow row) return null;
+            if (LandingOn(element) is not { } landing) return null;
 
             double y = e.GetPosition(element).Y;
             DropWhere where = kind switch
@@ -197,23 +200,95 @@ public static class DragReorderBehavior
                 _ => DropWhere.None,
             };
 
-            return where == DropWhere.None ? null : (element, row, where);
+            return where == DropWhere.None ? null : (element, landing, where);
         }
 
         return null;
     }
 
-    // A tree deep enough to need dragging is a tree that has to be scrolled, and the pointer is
+    // A row either answers for itself or its list answers for it, and which of the two is a
+    // property of the list rather than of the drag: a condition row knows the tree it is in, while
+    // a saved rule is only ever a row somebody is drawing.
+    private static Landing? LandingOn(FrameworkElement zone)
+    {
+        if (zone.DataContext is IDragRow row) return new Landing(row);
+
+        object? item = zone.DataContext;
+        if (item is null) return null;
+
+        for (DependencyObject? at = zone; at != null; at = VisualTreeHelper.GetParent(at))
+            if (GetDropList(at) is IDragList list) return new Landing(list, item);
+
+        return null;
+    }
+
+    /// <summary>The row a drop would be handed to, whichever of the two ways it answers.</summary>
+    private readonly struct Landing
+    {
+        private readonly IDragRow? _row;
+        private readonly IDragList? _list;
+        private readonly object? _item;
+
+        public Landing(IDragRow row)
+        {
+            _row = row;
+            _list = null;
+            _item = null;
+        }
+
+        public Landing(IDragList list, object item)
+        {
+            _row = null;
+            _list = list;
+            _item = item;
+        }
+
+        public bool CanAccept(object dragged, DropWhere where)
+            => _row?.CanAccept(dragged, where) ?? _list!.CanAccept(dragged, _item!, where);
+
+        public void Accept(object dragged, DropWhere where)
+        {
+            if (_row != null) _row.Accept(dragged, where);
+            else _list!.Accept(dragged, _item!, where);
+        }
+    }
+
+    // A list long enough to need dragging is a list that has to be scrolled, and the pointer is
     // holding a row while it does — so the list has to come to it.
     private static void AutoScroll(FrameworkElement surface, DragEventArgs e)
     {
-        if (surface is not ScrollViewer scroller) return;
+        ScrollViewer? scroller = surface as ScrollViewer ?? ScrollerIn(surface);
+        if (scroller is null) return;
 
         double y = e.GetPosition(scroller).Y;
         if (y < EdgeMargin)
             scroller.ScrollToVerticalOffset(scroller.VerticalOffset - EdgeStep);
         else if (y > scroller.ActualHeight - EdgeMargin)
             scroller.ScrollToVerticalOffset(scroller.VerticalOffset + EdgeStep);
+    }
+
+    // Breadth first, and only as far as the first one: a grid keeps its scroller near the top of
+    // its template and its rows underneath it, so this stops before it walks into the rows.
+    private static ScrollViewer? ScrollerIn(DependencyObject root)
+    {
+        var queue = new Queue<DependencyObject>();
+        queue.Enqueue(root);
+
+        while (queue.Count > 0)
+        {
+            DependencyObject at = queue.Dequeue();
+            int count = VisualTreeHelper.GetChildrenCount(at);
+
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(at, i);
+                if (child is ScrollViewer scroller) return scroller;
+
+                queue.Enqueue(child);
+            }
+        }
+
+        return null;
     }
 
     // ==== where the line is drawn ====
@@ -229,6 +304,18 @@ public static class DragReorderBehavior
 
     public static DropZoneKind GetDropZone(DependencyObject element)
         => (DropZoneKind)element.GetValue(DropZoneProperty);
+
+    /// <summary>The list that answers drops for the rows under this element, if they cannot.</summary>
+    public static readonly DependencyProperty DropListProperty =
+        DependencyProperty.RegisterAttached(
+            "DropList", typeof(IDragList), typeof(DragReorderBehavior),
+            new PropertyMetadata(null));
+
+    public static void SetDropList(DependencyObject element, IDragList? value)
+        => element.SetValue(DropListProperty, value);
+
+    public static IDragList? GetDropList(DependencyObject element)
+        => (IDragList?)element.GetValue(DropListProperty);
 
     /// <summary>Where the insertion line is showing on this zone, if it is. Read by the template.</summary>
     public static readonly DependencyProperty DropMarkProperty =

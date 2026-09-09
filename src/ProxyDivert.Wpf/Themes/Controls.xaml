@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+                    xmlns:b="clr-namespace:ProxyDivert.Wpf.Bindings"
                     xmlns:themes="clr-namespace:ProxyDivert.Wpf.Themes">
 
     <!-- ===================== TEXTBLOCK ===================== -->
@@ -22,6 +23,31 @@
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="11"/>
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}"/>
+    </Style>
+
+    <!-- ===================== DRAG GRIP =====================
+         What a re-orderable row is picked up by, wherever rows are dragged: the condition tree,
+         the policies a filter applies, and the filters themselves. A grip rather than the row,
+         because a row is pickers and text boxes and check boxes, and dragging one of those has to
+         go on meaning what it means. -->
+    <Style x:Key="DragGrip" TargetType="TextBlock">
+        <Setter Property="Text" Value="&#xE76F;"/>
+        <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Padding" Value="4,7"/>
+        <Setter Property="Margin" Value="0,0,4,0"/>
+        <Setter Property="Opacity" Value="0.45"/>
+        <!-- Transparent rather than unset: an unset background is not there to be grabbed. -->
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Cursor" Value="SizeAll"/>
+        <Setter Property="ToolTip" Value="{DynamicResource Str.App.DragHint}"/>
+        <Setter Property="b:DragReorderBehavior.IsDragHandle" Value="True"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Opacity" Value="1"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- ===================== LABEL ===================== -->

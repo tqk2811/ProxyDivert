@@ -12,6 +12,8 @@ using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Routing.Models.Conditions;
+using ProxyDivert.Wpf.Bindings.Enums;
+using ProxyDivert.Wpf.Bindings.Interfaces;
 using ProxyDivert.Wpf.Services;
 using ProxyDivert.Wpf.Views;
 using TqkLibrary.WinDivert.ProcessControl;
@@ -26,7 +28,7 @@ namespace ProxyDivert.Wpf.ViewModels;
 // A filter is a name, a condition tree and an action, and only the name and the action are small
 // enough to edit in a grid cell. The conditions are shown as the sentence they read as, and edited
 // in a window of their own.
-public sealed partial class ProcessesViewModel : ObservableObject
+public sealed partial class ProcessesViewModel : ObservableObject, IDragList
 {
     private readonly AppServices _services;
 
@@ -196,6 +198,54 @@ public sealed partial class ProcessesViewModel : ObservableObject
 
     [RelayCommand]
     private void Save() => _services.SaveAndApply();
+
+    // ==== arranging the filters ====
+    //
+    // The order of the list is not decoration: a process is caught by the FIRST filter that matches
+    // it and by no other, so a narrow filter sitting under a wide one never gets a chance. Until
+    // the rows could be dragged there was no way to say which came first at all — they stood in the
+    // order they happened to be added in.
+    //
+    // Answered here rather than on ProcessRule: a filter is the saved model, straight out of the
+    // configuration, and it has no business knowing which window is drawing it.
+
+    public bool CanAccept(object dragged, object target, DropWhere where)
+        => dragged is ProcessRule moved
+        && target is ProcessRule onto
+        && !ReferenceEquals(moved, onto)
+        && where is DropWhere.Before or DropWhere.After;
+
+    public void Accept(object dragged, object target, DropWhere where)
+    {
+        if (!CanAccept(dragged, target, where)) return;
+
+        MoveRuleTo(
+            (ProcessRule)dragged,
+            Rules.IndexOf((ProcessRule)target) + (where == DropWhere.After ? 1 : 0));
+    }
+
+    private void MoveRuleTo(ProcessRule rule, int index)
+    {
+        int from = Rules.IndexOf(rule);
+        if (from < 0) return;
+
+        // The gap the row is asked to fill is counted with the row still in the list, and taking
+        // it out closes one place ahead of it.
+        if (index > from) index--;
+
+        index = Math.Clamp(index, 0, Rules.Count - 1);
+        if (index == from) return;
+
+        Rules.Move(from, index);
+
+        // The grid is a copy of the saved list, and it is the saved order the engine matches
+        // against: rearranging only the copy would look right and change nothing about what runs.
+        _services.Config.ProcessRules.Clear();
+        foreach (ProcessRule moved in Rules) _services.Config.ProcessRules.Add(moved);
+
+        SelectedRule = rule;
+        _services.SaveAndApply();
+    }
 
     // Opens the filter window on a copy and writes the result back only when the user saves.
     private bool Edit(ProcessRule rule)

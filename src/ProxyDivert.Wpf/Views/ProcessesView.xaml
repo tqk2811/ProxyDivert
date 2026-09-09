@@ -7,6 +7,26 @@
          model through this proxy instead of an ancestor lookup that cannot resolve. -->
     <UserControl.Resources>
         <b:BindingProxy x:Key="Vm" Data="{Binding}"/>
+
+        <!-- A grid row has no room for a line of its own, so the insertion mark is the row's own
+             border: above it for "lands here", below it for "lands under this one". -->
+        <Style x:Key="RuleRow" TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+            <Setter Property="b:DragReorderBehavior.DropZone" Value="Row"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Style.Triggers>
+                <DataTrigger Value="Before"
+                             Binding="{Binding (b:DragReorderBehavior.DropMark),
+                                       RelativeSource={RelativeSource Self}}">
+                    <Setter Property="BorderThickness" Value="0,2,0,0"/>
+                </DataTrigger>
+                <DataTrigger Value="After"
+                             Binding="{Binding (b:DragReorderBehavior.DropMark),
+                                       RelativeSource={RelativeSource Self}}">
+                    <Setter Property="BorderThickness" Value="0,0,0,2"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
     <Grid Margin="4">
         <Grid.RowDefinitions>
@@ -19,7 +39,12 @@
         <Border Style="{StaticResource Card}" Grid.Row="0">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Style="{StaticResource Heading}"
-                           Text="{DynamicResource Str.Process.Rules}" Margin="0,0,0,6"/>
+                           Text="{DynamicResource Str.Process.Rules}" Margin="0,0,0,2"/>
+
+                <!-- Which filter catches a process is decided by this order, and nothing on screen
+                     said so while there was no way to change it either. -->
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Subtle}" Margin="0,0,0,6"
+                           TextWrapping="Wrap" Text="{DynamicResource Str.Process.RuleOrderHint}"/>
 
                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
                     <Button Content="{DynamicResource Str.App.Add}" Command="{Binding AddRuleCommand}" MinWidth="80"/>
@@ -29,9 +54,24 @@
                             Style="{StaticResource AccentButton}" Margin="8,0,0,0" MinWidth="80"/>
                 </StackPanel>
 
+                <!-- Sorting is off on purpose. The row order IS the priority, so a column sort
+                     would show one order while the engine matched another, and dragging a row in
+                     a sorted grid would drop it somewhere else entirely. -->
                 <DataGrid ItemsSource="{Binding Rules}" SelectedItem="{Binding SelectedRule}"
-                          AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
+                          AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
+                          CanUserSortColumns="False"
+                          RowStyle="{StaticResource RuleRow}"
+                          b:DragReorderBehavior.IsDropSurface="True"
+                          b:DragReorderBehavior.DropList="{Binding}">
                     <DataGrid.Columns>
+                        <DataGridTemplateColumn Width="36" CanUserResize="False">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Style="{StaticResource DragGrip}" Margin="0"
+                                               Padding="2,7" HorizontalAlignment="Center"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}"
                                                 Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
                         <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Name}" Width="180"

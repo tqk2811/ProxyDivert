@@ -70,8 +70,10 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
    tự ưu tiên.
    Thứ tự đó giữ nguyên kể cả với những bộ luật đang không tích, nên bỏ tích một cái rồi tích lại
    không làm xáo chỗ. Bộ luật đứng đầu cũng là cái quyết định chế độ UDP và Block QUIC. Đóng cửa sổ
-   khi còn thay đổi chưa lưu thì được hỏi lưu, không lưu, hay quay lại. Hoặc bấm **Chạy ở trạng thái
-   tạm dừng…** để không lọt kết nối nào lúc khởi động.
+   khi còn thay đổi chưa lưu thì được hỏi lưu, không lưu, hay quay lại. Bảng bộ lọc cũng xét từ trên
+   xuống: một tiến trình khớp bộ lọc nào trước thì theo bộ lọc đó và không xét tiếp, nên kéo tay cầm
+   ở đầu dòng để sắp lại thứ tự (bảng này cố tình không cho sắp xếp theo cột — thứ tự dòng chính là
+   thứ tự ưu tiên). Hoặc bấm **Chạy ở trạng thái tạm dừng…** để không lọt kết nối nào lúc khởi động.
 5. Gạt công tắc trên thanh tiêu đề. Nửa dưới tab **Tiến trình** khi đó hiện dạng cây mọi tiến trình
    engine đang thực sự áp dụng, tiến trình con nhận theo **Cả tiến trình con** nằm lồng dưới tiến
    trình đã sinh ra nó. Tab **Kết nối** hiện từng kết nối kèm tên miền, đường ra và số byte.

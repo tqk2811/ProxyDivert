@@ -558,8 +558,12 @@ public class DataGridColumnBindingTests
         // same in both languages, and those are not evidence of anything. Asking the dictionaries
         // which strings translate to themselves keeps that from reading as a failure, without
         // having to hard-code the exceptions here.
+        // A column with no heading at all — the one holding the drag grips — has no text that
+        // could have failed to follow the switch.
         List<string> stuck = english
-            .Where((text, i) => text == vietnamese[i] && !sameInBothLanguages.Contains(text))
+            .Where((text, i) => text == vietnamese[i]
+                                && !string.IsNullOrWhiteSpace(text)
+                                && !sameInBothLanguages.Contains(text))
             .ToList();
 
         Assert.True(stuck.Count == 0,

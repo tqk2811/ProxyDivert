@@ -71,8 +71,11 @@ and `WinDivert64.sys` copied next to it.
    first rule that matches decides — drag them, or use ▲▼, to say which comes first. That arrangement is kept for
    the unticked policies too, so unticking one and ticking it again does not move it. The top policy
    is also the one whose UDP mode and Block QUIC apply. Closing the window with unsaved changes asks
-   whether to save them, drop them, or go back. Or press **Launch suspended…** so not one connection
-   escapes while the process starts.
+   whether to save them, drop them, or go back. The filter list is tried from the top down as well:
+   a process is caught by the first filter that matches it and by no other, so drag a row by its
+   grip to say which comes first — the grid deliberately does not sort by column, because the row
+   order is the priority. Or press **Launch suspended…** so not one connection escapes while the
+   process starts.
 5. Throw the switch in the title bar. The lower half of the **Processes** tab then shows, as a tree,
    every process the engine is actually holding, with anything adopted through **Children** nested
    under the process that spawned it. The **Connections** tab lists every connection with its host

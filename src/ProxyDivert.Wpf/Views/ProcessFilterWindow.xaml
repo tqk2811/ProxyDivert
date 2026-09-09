@@ -43,30 +43,10 @@
             <Setter Property="FontSize" Value="13"/>
         </Style>
 
-        <!-- ==== picking a row up, and seeing where it would land ====
-             The grip is what you drag by, rather than the row itself: a condition row is combo
-             boxes and a text box, and dragging one of those has to keep meaning what it means. -->
-        <Style x:Key="DragGrip" TargetType="TextBlock">
-            <Setter Property="Text" Value="&#xE76F;"/>
-            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Padding" Value="4,7"/>
-            <Setter Property="Margin" Value="0,0,4,0"/>
-            <Setter Property="Opacity" Value="0.45"/>
-            <!-- Transparent rather than unset: an unset background is not there to be grabbed. -->
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Cursor" Value="SizeAll"/>
-            <Setter Property="ToolTip" Value="{DynamicResource Str.Cond.DragHint}"/>
-            <Setter Property="b:DragReorderBehavior.IsDragHandle" Value="True"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Opacity" Value="1"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
+        <!-- The grip a row is picked up by is in the theme, next to everything else that is shared
+             with the rules grid on the Processes tab.
 
-        <!-- The insertion line. It is always there and only ever changes opacity: a line that took
+             The insertion line. It is always there and only ever changes opacity: a line that took
              up room the moment it appeared would shove the row it is pointing at out from under
              the pointer. Each variant watches the zone it sits in for the mark the drag left. -->
         <Style x:Key="DropLine" TargetType="Border">
