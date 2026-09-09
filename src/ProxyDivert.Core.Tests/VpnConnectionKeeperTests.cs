@@ -214,7 +214,9 @@ public class VpnConnectionKeeperTests
 
         using var registry = new OutboundRegistry(OutboundSourceFactory.CreateDefault());
         using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
-        IReadOnlyCollection<Guid> switchedOn = await keeper.ConnectRoutedVpnsAsync(config);
+        IReadOnlyCollection<Guid> switchedOn = keeper.SwitchOnRoutedVpns(config);
+        // The two steps the engine's start puts either side of opening the driver.
+        await keeper.SyncAsync(config.Outbounds, config.WireProxyPath);
 
         Assert.Equal(new[] { routed.Id }, switchedOn);
         Assert.True(routed.KeepConnected);
@@ -235,7 +237,9 @@ public class VpnConnectionKeeperTests
         using var registry = new OutboundRegistry(OutboundSourceFactory.CreateDefault());
         using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
 
-        Assert.Empty(await keeper.ConnectRoutedVpnsAsync(config));
+        Assert.Empty(keeper.SwitchOnRoutedVpns(config));
+        await keeper.SyncAsync(config.Outbounds, config.WireProxyPath);
+
         Assert.False(routed.KeepConnected);
         Assert.Empty(keeper.Statuses);
     }

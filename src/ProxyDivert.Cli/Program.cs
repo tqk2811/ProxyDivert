@@ -203,11 +203,12 @@ engine.Connections.Closed += c =>
     Console.WriteLine($"  [close] pid={c.ProcessId,-6} {c.Host ?? c.Destination.Address.ToString(),-40} " +
                       $"   up={c.BytesUp} down={c.BytesDown}{(c.Error is null ? "" : "  ERROR: " + c.Error)}");
 
-// The tunnels the run is about to route through come up first, and in the background: dialling one
-// on demand would put the subprocess launch and the handshake in front of whichever connection
-// happened to be first. The window keeps them across runs; a command-line run switches on whatever
-// its own configuration routes through a VPN and lets the container drop them when it exits.
-await services.GetRequiredService<VpnConnectionKeeper>().ConnectRoutedVpnsAsync(config);
+// Which tunnels this run routes through is decided here, before the engine is handed the
+// configuration — the router reads "is this outbound kept up" off the outbound itself. The window
+// keeps its tunnels across runs; a command-line run switches on whatever its own configuration
+// routes through a VPN and lets the container drop them when it exits.
+VpnConnectionKeeper vpn = services.GetRequiredService<VpnConnectionKeeper>();
+vpn.SwitchOnRoutedVpns(config);
 
 try
 {
@@ -219,6 +220,12 @@ catch (Exception ex)
     Console.Error.WriteLine("Check that WinDivert.dll and WinDivert64.sys sit next to this exe.");
     return 1;
 }
+
+// Dialled only now that the driver is open, and in the background. A handshake that overlaps the
+// moment WinDivert takes its machine-wide handle stalls until the driver's 90-second dial timeout —
+// see the remarks on AppServices.StartEngineAsync. Connections a rule routes through a tunnel that
+// is still coming up are refused, not sent out direct.
+await vpn.SyncAsync(config.Outbounds, config.WireProxyPath);
 
 // Verbose means "show me what the engine is doing" — the same lines the trace file gets.
 if (options.Verbose)

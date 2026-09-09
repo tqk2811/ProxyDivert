@@ -34,8 +34,8 @@ namespace ProxyDivert.Core.Vpn;
 /// connection to a provider, not part of a redirection: switching WinDivert off leaves it up, so
 /// the browser that was already using it does not fall off the tunnel mid-download. Switching
 /// WinDivert on goes the other way and turns on whatever the rules route through a VPN — see
-/// <see cref="ConnectRoutedVpns"/> — because a rule pointing at a tunnel that is down would send
-/// its traffic into a connection error.
+/// <see cref="SwitchOnRoutedVpns"/> — because a rule pointing at a tunnel nothing keeps up would
+/// send its traffic into a connection error for as long as the run lasted.
 /// </remarks>
 public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
 {
@@ -162,14 +162,22 @@ public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
     }
     /// <summary>
     /// Switches on every VPN the configuration actually routes through — the filters' policies'
-    /// outbounds — and brings the tunnels up. Returns the ones that were off until now, so the
-    /// caller can write the change to the file it came from.
+    /// outbounds. Returns the ones that were off until now, so the caller can write the change to
+    /// the file it came from.
     /// </summary>
     /// <remarks>
     /// Called when the engine starts. Nothing is switched off here, and stopping the engine calls
     /// nothing at all: a tunnel is only ever put down by the user.
+    /// <para>
+    /// Flicking the switches and dialling the tunnels are two steps rather than one because they
+    /// belong at opposite ends of the engine's start. The switches have to be flicked BEFORE the
+    /// snapshot the engine runs on is taken, or the router would be handed outbounds that still
+    /// read "not kept" and would fall back to dialling one itself; the dialling itself has to
+    /// happen AFTER the driver's handles are open — see <see cref="SyncAsync"/> and the remarks on
+    /// AppServices.StartEngineAsync.
+    /// </para>
     /// </remarks>
-    public async Task<IReadOnlyCollection<Guid>> ConnectRoutedVpnsAsync(AppConfig config)
+    public IReadOnlyCollection<Guid> SwitchOnRoutedVpns(AppConfig config)
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
 
@@ -186,7 +194,6 @@ public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
                 "vpn {Outbound} is switched on: a filter routes through it", outbound.Name);
         }
 
-        await SyncAsync(config.Outbounds, config.WireProxyPath).ConfigureAwait(false);
         return switchedOn;
     }
     private void OnTunnelStatusChanged(VpnStatus status) => Raise(status);

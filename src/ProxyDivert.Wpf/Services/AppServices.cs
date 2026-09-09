@@ -210,24 +210,35 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>Starts the engine on a snapshot of the configuration, off the caller's thread.</summary>
     /// <remarks>
-    /// This is the one door through which everything the engine needs comes up, and in order: the
-    /// process table starts collecting, the VPN tunnels are dialled — the ones a filter routes
-    /// through, switched on here, and the ones the user left switched on, which
-    /// <see cref="VpnConnectionKeeper.ConnectRoutedVpnsAsync"/> reaches through its own Sync — and
-    /// only then does the driver open. Nothing above happens while redirection is off, which is why
-    /// opening the window costs a file read and nothing else.
+    /// This is the one door through which everything the engine needs comes up, and in order: which
+    /// VPNs a filter routes through is decided and written down, the process table starts
+    /// collecting, the driver opens, and only THEN are the tunnels dialled. Nothing above happens
+    /// while redirection is off, which is why opening the window costs a file read and nothing else.
     /// <para>
-    /// The tunnels go up before the snapshot is taken so the engine never starts routing at a
-    /// tunnel that is down — every connection the rule caught would fail until someone noticed.
-    /// Dialling itself is supervised in the background; only the switch is flicked here, and it is
-    /// written to the file so it survives the next start.
+    /// The dialling comes last, and the order is the whole of it. Opening the driver takes a
+    /// machine-wide WinDivert handle, and every packet on the machine then goes through this
+    /// process — including the IKE/ESP datagrams of a VPN handshake that happens to be in flight.
+    /// A handshake caught by that does not fail: it stalls, silently, until the driver's 90-second
+    /// dial timeout, and only the retry after it connects. Measured over 12 dials on 8 logs, every
+    /// dial that began within ~1s of the driver opening stalled the full 90 seconds, and every dial
+    /// that did not connected in 4–7. Dialling behind an engine that is already up is the case that
+    /// has always worked — it is what pressing Connect by hand does.
+    /// </para>
+    /// <para>
+    /// What this costs is stated where it is paid: for the first few seconds of a run, a rule
+    /// pointing at a VPN has nowhere to send its traffic, and those connections are refused rather
+    /// than quietly sent out direct — see TcpConnectionRouter. That is the same thing the
+    /// application would see if the site itself were unreachable, and the alternative — leaking the
+    /// real address for a connection the user asked to be tunnelled — is not one.
     /// </para>
     /// </remarks>
     public async Task StartEngineAsync()
     {
-        // Deliberately awaited without ConfigureAwait(false): the snapshot below must be taken on
-        // the thread that owns the grids, the same as everywhere else in this class.
-        IReadOnlyCollection<Guid> switchedOn = await Vpn.ConnectRoutedVpnsAsync(Config);
+        // On the caller's thread, and before the snapshot: this only flicks switches, and the
+        // snapshot the engine runs on has to carry them — the router reads "is this outbound kept
+        // up" off the outbound it is handed. Deliberately not ConfigureAwait(false) anywhere in
+        // this method: the grids belong to this thread, the same as everywhere else in this class.
+        IReadOnlyCollection<Guid> switchedOn = Vpn.SwitchOnRoutedVpns(Config);
         AppConfig snapshot = ConfigStore.Clone(Config);
         await Enqueue(async () =>
         {
@@ -236,6 +247,10 @@ public sealed class AppServices : IAsyncDisposable
             // running the moment the engine starts, and it reads them from this table.
             EnsureProcessesStarted();
             await Engine.StartAsync(snapshot).ConfigureAwait(false);
+            // Last, and inside the same piece of queued work, so nothing can slip between the two:
+            // see the remarks above. Sync only starts the supervision loops, so this returns while
+            // the tunnels are still coming up.
+            await Vpn.SyncAsync(snapshot.Outbounds, snapshot.WireProxyPath).ConfigureAwait(false);
         });
     }
 

@@ -470,3 +470,18 @@ Một đối tượng nhỏ chỉ để **giữ chỗ** cho một giá trị b�
 Tách một bảng quyết định thành **phần đổi chậm** (cấu hình người dùng lưu) và **phần đổi nhanh** (trạng thái chạy), rồi chỉ dựng lại phần đổi chậm khi nó thật sự đổi. Ở ProxyDivert phần đổi chậm là `CompiledRuleSet`: mỗi `Pattern` (chuỗi người dùng gõ) được **parse một lần lúc lưu** thành một `IHostPredicate` — CIDR đã mask sẵn, regex đã compile, dải cổng đã tách — rule tắt bị loại và phần còn lại sắp theo `Order`. Phần đổi nhanh là "pid nào đang thuộc policy nào", đọc sống qua `IProcessPolicySource`.
 
 Trộn hai phần vào một snapshot là cái bẫy: mỗi lần một tiến trình được nhận hay bỏ (một lần mở trình duyệt là sáu chục lần trong vài giây) lại phải dựng lại **cả** bảng, tức parse lại mọi pattern của mọi policy. Cái mua được thứ hai quan trọng không kém: có một **thời điểm biên dịch** thì mới có chỗ nói "pattern này không dùng được" — trước đó nó chỉ lặng lẽ không khớp gì trên mọi kết nối, mà nếu luật đó bật `IsNot` thì lại **khớp tất cả**.
+
+## Đua giữa bắt tay VPN và lúc engine mở handle WinDivert
+
+Lúc bật engine, ProxyDivert **quay số VPN trước rồi mở driver ngay sau đó** (`AppServices.StartEngineAsync`). Nhưng `VpnConnectionKeeper.ConnectRoutedVpnsAsync` chỉ **châm** vòng giám sát (`KeptVpnTunnel.Start` → `Task.Run`) chứ không đợi đường hầm lên, nên handle NETWORK của [WinDivert](#L5) mở ra khi cuộc bắt tay IKE/L2TP **vẫn đang giữa chừng**. Từ giây đó mọi gói TCP/UDP của cả máy — gồm cả gói IKE/ESP của chính tiến trình này — bị kéo qua pump user-mode rồi bơm lại; cuộc bắt tay đang dở chết đứng, không báo lỗi, và chỉ kết thúc khi [hạn quay số](#L485) nổ.
+
+Dấu vân tay trong log (đã đo trên 12 lần quay số, 8 file log ngày 08–09/09/2026): so khoảng cách giữa dòng `dialling …` và dòng `engine started`.
+
+- Cách nhau **≤ 1,2 s** ⇒ 6/6 lần treo trọn 90 s rồi `is down (OperationCanceledException)`, quay lại lần 2 lên trong 4–5 s.
+- Cách nhau **≥ 6 s**, hoặc engine bật sau khi đường hầm đã lên ⇒ 4/4 lần lên thẳng trong 4–7 s.
+
+Nên tổng thời gian người dùng thấy khi tự bật lúc khởi động ≈ 90 s (hạn quay số) + 1 s ([backoff](#L109) bước 1) + 4 s = **~95 s**, còn bấm tay lúc engine đã chạy ổn định thì **~4 s**. Nghịch lý ở chỗ tối ưu khởi động (đưa việc quét tiến trình ra khỏi đường tới hạn) làm hai mốc này **sát nhau hơn**, tức là làm lỗi này nặng thêm chứ không nhẹ đi.
+
+## Hạn quay số VPN (ConnectTimeout)
+
+`VpnTunnelOptions.ConnectTimeout`, mặc định **90 giây**, là hạn cho **toàn bộ** cuộc quay số của driver VpnClient. Nó đo tổng thời gian chứ không đo **tiến triển**: một cuộc bắt tay chết đứng ở bước 3/6 vẫn ngồi đủ 90 giây rồi mới trả `OperationCanceledException`, dù ngay từ giây thứ 2 đã biết là hỏng (đường bắt tay lành lặn chỉ mất 4–7 s). Hạn theo tiến triển (bao lâu không nhận được gói nào từ máy chủ) biến 90 s thành vài giây, và đó là khác biệt giữa "chờ một phút rưỡi" với "thấy nó thử lại ngay".
