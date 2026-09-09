@@ -12,6 +12,12 @@ namespace ProxyDivert.Core.Outbounds.Extensions;
 // the same "pump both directions until one side disconnects" boilerplate. This is that step.
 public static class ConnectSourceExtensions
 {
+    /// <param name="shutdownClientSend">
+    /// How to tell the process that nothing more is coming from the far side. The client stream is
+    /// a decorator over the relay's socket — it counts bytes and replays the peeked header — so the
+    /// transfer helper cannot find the socket to half-close on its own, and without this a server
+    /// that finished speaking left the process waiting on a response that had already ended.
+    /// </param>
     public static async Task ForwardAsync(
         this IConnectSource source,
         Stream clientStream,
@@ -19,6 +25,7 @@ public static class ConnectSourceExtensions
         ILoggerFactory? loggerFactory = null,
         string clientName = "process",
         string proxyName = "proxy",
+        Action? shutdownClientSend = null,
         CancellationToken cancellationToken = default)
     {
         if (source is null) throw new ArgumentNullException(nameof(source));
@@ -27,6 +34,7 @@ public static class ConnectSourceExtensions
         Stream proxyStream = await source.GetStreamAsync(cancellationToken).ConfigureAwait(false);
         await new StreamTransferHelper(clientStream, proxyStream, tunnelId, loggerFactory)
             .DebugName(clientName, proxyName)
+            .ShutdownSendWith(shutdownClientSend, null)
             .WaitUntilDisconnect(cancellationToken)
             .ConfigureAwait(false);
     }

@@ -206,6 +206,9 @@ internal sealed class TcpConnectionRouter
             await tunnel.ForwardAsync(
                 connection.ClientStream, tunnelId, _loggerFactory,
                 clientName: $"pid{connection.ProcessId}", proxyName: outbound.Name,
+                // The far side finishing has to reach the process as a FIN on its own socket. The
+                // stream handed over is a decorator, so the socket has to come from here.
+                shutdownClientSend: () => connection.ClientTcp.Client.Shutdown(SocketShutdown.Send),
                 cancellationToken: ct).ConfigureAwait(false);
         }
         finally
