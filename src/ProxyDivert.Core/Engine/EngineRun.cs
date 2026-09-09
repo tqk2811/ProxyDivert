@@ -37,6 +37,7 @@ internal sealed class EngineRun : IAsyncDisposable
         TcpConnectionRouter tcp,
         UdpFlowRouter udp,
         ResolverSlot resolvers,
+        TrackedPidQueue pids,
         CancellationTokenSource cts)
     {
         Redirector = redirector ?? throw new ArgumentNullException(nameof(redirector));
@@ -46,6 +47,7 @@ internal sealed class EngineRun : IAsyncDisposable
         Tcp = tcp ?? throw new ArgumentNullException(nameof(tcp));
         Udp = udp ?? throw new ArgumentNullException(nameof(udp));
         _resolvers = resolvers ?? throw new ArgumentNullException(nameof(resolvers));
+        Pids = pids ?? throw new ArgumentNullException(nameof(pids));
         _cts = cts ?? throw new ArgumentNullException(nameof(cts));
     }
 
@@ -54,6 +56,9 @@ internal sealed class EngineRun : IAsyncDisposable
 
     /// <summary>Which processes are in scope, matched against this run's rules.</summary>
     public ProcessRuleTracker Tracker { get; }
+
+    /// <summary>Where the tracker's verdicts are carried to the driver, off the thread that made them.</summary>
+    public TrackedPidQueue Pids { get; }
 
     /// <summary>SNI / Host header, falling back to what DNS taught this run about an address.</summary>
     public IConnectionHostNameResolver HostNames { get; }
@@ -85,13 +90,17 @@ internal sealed class EngineRun : IAsyncDisposable
 
     /// <remarks>
     /// The order is the one Stop always used and it matters end to end: the tracker first so no
-    /// further pid arrives, then the UDP tunnels (up to two seconds each), then the redirector,
-    /// which unloads the driver. The token source goes last of all — the forwarder was handed a
-    /// token linked to it and is only finished with it once its own teardown has been awaited.
+    /// further pid arrives, then the queue carrying the pids it already reported, then the UDP
+    /// tunnels (up to two seconds each), then the redirector, which unloads the driver. The token
+    /// source goes last of all — the forwarder was handed a token linked to it and is only finished
+    /// with it once its own teardown has been awaited.
     /// </remarks>
     public async ValueTask DisposeAsync()
     {
         Tracker.Dispose();
+        // Between the two, and it has to be: the queue still holds pids on their way to driver
+        // handles that Redirector.Dispose is about to close.
+        await Pids.DisposeAsync().ConfigureAwait(false);
         await UdpForwarder.DisposeAsync().ConfigureAwait(false);
         Redirector.Dispose();
         _cts.Dispose();

@@ -288,7 +288,7 @@ public sealed partial class ProcessesViewModel : ObservableObject
 
             // The watcher sees the suspended process on its next scan; resuming only after that
             // is what closes the SYN race.
-            _services.Engine.ForceProcessScan();
+            await _services.Engine.ForceProcessScanAsync().ConfigureAwait(true);
             suspended.Resume();
             RefreshApplied();
         }

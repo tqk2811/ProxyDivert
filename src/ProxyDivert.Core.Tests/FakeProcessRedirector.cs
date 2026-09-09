@@ -47,11 +47,38 @@ internal sealed class FakeProcessRedirector : IProcessRedirector
     public event Action<RedirectedTcpConnection>? TcpConnectionOpened;
     public event Action<RedirectedTcpConnection>? TcpConnectionClosed;
 
+    /// <summary>
+    /// Every attach and detach in the order the driver saw them, as "add:123" / "remove:123". The
+    /// set above says what is tracked now; this says how it got there, which is what matters for
+    /// anything that carries pids across a thread.
+    /// </summary>
+    public List<string> PidCalls { get; } = new List<string>();
+
+    /// <summary>
+    /// Run at the start of every attach and detach, on the thread making it. A test uses it to hold
+    /// the driver up, or to make one pid fail.
+    /// </summary>
+    public Action<uint>? BeforePidCall { get; set; }
+
     public void Start() { }
 
-    public void AddTrackedProcessId(uint pid) => _tracked.Add(pid);
+    public void AddTrackedProcessId(uint pid)
+    {
+        Record("add", pid);
+        _tracked.Add(pid);
+    }
 
-    public bool RemoveTrackedProcessId(uint pid) => _tracked.Remove(pid);
+    public bool RemoveTrackedProcessId(uint pid)
+    {
+        Record("remove", pid);
+        return _tracked.Remove(pid);
+    }
+
+    private void Record(string verb, uint pid)
+    {
+        BeforePidCall?.Invoke(pid);
+        lock (PidCalls) PidCalls.Add(verb + ":" + pid);
+    }
 
     public bool IsTrackedProcessId(uint pid) => _tracked.Contains(pid);
 

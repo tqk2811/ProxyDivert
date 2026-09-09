@@ -238,7 +238,7 @@ try
             Console.Error.WriteLine($"No process with id {pid}.");
             continue;
         }
-        engine.AttachProcessId(pid, policy.Id, includeChildren: true);
+        await engine.AttachProcessIdAsync(pid, policy.Id, includeChildren: true);
     }
 
     if (options.LaunchExe != null)
@@ -246,7 +246,7 @@ try
         launched = launcher.Launch(options.LaunchExe, options.LaunchArgs);
         Console.WriteLine($"Launched suspended: pid={launched.Pid} \"{options.LaunchExe}\" {options.LaunchArgs}");
         // Attach while it is still frozen — that is the whole point of launching suspended.
-        engine.AttachProcessId(launched.Pid, policy.Id, includeChildren: true);
+        await engine.AttachProcessIdAsync(launched.Pid, policy.Id, includeChildren: true);
         launched.Resume();
         Console.WriteLine($"Resumed pid={launched.Pid}");
     }

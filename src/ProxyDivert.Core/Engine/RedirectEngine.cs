@@ -153,6 +153,12 @@ public sealed class RedirectEngine : IDisposable
                 run.Tracker.Start(
                     config.ProcessRules,
                     attachFromProcessEvents: config.ProcessDetection == ProcessDetectionMode.ProcessEvents);
+
+                // The processes already running went onto the queue rather than into the driver.
+                // Waiting for them here is what keeps "redirection is on" true the moment Start
+                // returns: a browser that was open before the switch was flipped would otherwise
+                // keep sending traffic past us for as long as sixty driver handles take to open.
+                await run.Pids.DrainAsync().ConfigureAwait(false);
             }
             catch
             {
@@ -216,6 +222,7 @@ public sealed class RedirectEngine : IDisposable
         };
 
         IProcessRedirector redirector = _redirectorFactory.Create(options);
+        var pids = new TrackedPidQueue(redirector, _loggerFactory.CreateLogger<TrackedPidQueue>());
         var hostNames = new ConnectionHostNameResolver(_hostNameInspector, redirector.ReverseDns);
         var udpForwarder = new UdpProxyForwarder(
             redirector, _loggerFactory.CreateLogger<UdpProxyForwarder>(), cts.Token);
@@ -228,7 +235,7 @@ public sealed class RedirectEngine : IDisposable
             resolvers, redirector.ReverseDns, udpForwarder, _outbounds, _ipv6Capability,
             _loggerFactory.CreateLogger<UdpFlowRouter>());
 
-        return new EngineRun(redirector, tracker, hostNames, udpForwarder, tcp, udp, resolvers, cts);
+        return new EngineRun(redirector, tracker, hostNames, udpForwarder, tcp, udp, resolvers, pids, cts);
     }
 
     // Applies an edited configuration without dropping the redirector: rules, outbounds and DNS
@@ -266,6 +273,11 @@ public sealed class RedirectEngine : IDisposable
             run.UseResolver(BuildResolver(config, run.Tracker));
             run.Tracker.ApplyRules(config.ProcessRules);
 
+            // What the filter edit attached and detached has to be in the driver before the two
+            // steps below: the escaped-flow reset reads the driver's own flow table, and a process
+            // this save has only just claimed has no flows in it until its handle is open.
+            await run.Pids.DrainAsync().ConfigureAwait(false);
+
             // The connections already running are read against the new rules as well. One the new
             // configuration would route somewhere else is closed — the application reconnects, and
             // the reconnect is captured and routed afresh. One still routed the same way is left
@@ -302,11 +314,19 @@ public sealed class RedirectEngine : IDisposable
     /// describing it. This is how you redirect "this browser I just launched" instead of every
     /// process that happens to share its file name — the user's own copy included.
     /// </summary>
-    public TrackedProcess? AttachProcessId(uint processId, Guid policyId, bool includeChildren = true)
+    /// <remarks>
+    /// Awaited to the point where the driver knows the pid, not merely to where the tracker does.
+    /// Every caller of this resumes a suspended process the moment it returns, and a process that
+    /// is running before its handle is open sends its first SYN past us.
+    /// </remarks>
+    public async Task<TrackedProcess?> AttachProcessIdAsync(
+        uint processId, Guid policyId, bool includeChildren = true)
     {
         EngineRun run = _run ?? throw new InvalidOperationException("Engine is not running");
 
-        return run.Tracker.AttachProcessId(processId, policyId, includeChildren);
+        TrackedProcess? tracked = run.Tracker.AttachProcessId(processId, policyId, includeChildren);
+        await run.Pids.DrainAsync().ConfigureAwait(false);
+        return tracked;
     }
 
     /// <summary>
@@ -314,12 +334,19 @@ public sealed class RedirectEngine : IDisposable
     /// The "launch suspended" flow needs this: the process must be adopted while it is still
     /// frozen, otherwise its first connection is out before the redirect attaches.
     /// </summary>
-    public void ForceProcessScan()
+    public async Task ForceProcessScanAsync()
     {
         // The table first, then the filters against it: a process frozen a moment ago is not in the
         // table yet, and matching a table that does not contain it would attach nothing.
         _inventory.Refresh();
-        _run?.Tracker.MatchEverything();
+
+        EngineRun? run = _run;
+        if (run is null) return;
+
+        run.Tracker.MatchEverything();
+        // And then all the way into the driver, for the same reason as above: the caller's next
+        // line is Resume().
+        await run.Pids.DrainAsync().ConfigureAwait(false);
     }
 
     /// <remarks>
@@ -400,36 +427,26 @@ public sealed class RedirectEngine : IDisposable
 
     // ---- process scope ----------------------------------------------------------------------
 
-    // A process joining or leaving the redirected set no longer touches the routing table: the
-    // table reads which policies a pid has from the tracker, and the tracker has already recorded
-    // it by the time this runs. All that is left is the driver's list of pids.
+    // Both of these run on whichever thread noticed the process, which is the ETW session's own
+    // callback thread. Neither does any work there any more:
     //
-    // This is what a browser start used to cost: sixty processes attaching in a few seconds, each
-    // one rebuilding the whole routing table — re-parsing every pattern of every policy and copying
-    // the pid map — on the process-event thread, under the engine's lock.
+    //   * the routing table is not rebuilt — it reads which policies a pid has from the tracker,
+    //     which has already recorded it by the time this runs;
+    //   * the driver is not touched — the pid goes on a queue with one consumer of its own, because
+    //     attaching one opens a WinDivert handle and starts a pump. See TrackedPidQueue.
+    //
+    // Together that is what a browser start used to cost on a thread that is asked to return
+    // quickly: sixty processes in a few seconds, each re-parsing every pattern of every policy and
+    // opening a driver handle, under the engine's lock.
     private void OnProcessAttached(TrackedProcess process)
     {
-        try
-        {
-            _run?.Redirector.AddTrackedProcessId(process.ProcessId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "attaching pid={Pid} failed", process.ProcessId);
-        }
+        _run?.Pids.Attach(process.ProcessId);
         ProcessAttached?.Invoke(process);
     }
 
     private void OnProcessDetached(TrackedProcess process)
     {
-        try
-        {
-            _run?.Redirector.RemoveTrackedProcessId(process.ProcessId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "detaching pid={Pid} failed", process.ProcessId);
-        }
+        _run?.Pids.Detach(process.ProcessId);
         ProcessDetached?.Invoke(process);
     }
 
