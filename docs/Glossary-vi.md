@@ -508,3 +508,29 @@ Thuộc tính do một lớp khác định nghĩa nhưng gắn lên phần tử 
 `b:DragReorderBehavior.DropZone="Row"`). Dùng để dán hành vi hoặc dữ liệu phụ lên phần tử mà không
 phải kế thừa hay viết code-behind cho từng view; vì nó là dependency property nên style/trigger bind
 được vào nó và tự cập nhật khi giá trị đổi.
+
+## IP dùng chung của CDN (shared IP)
+
+Cloudflare và các CDN khác cho **hàng nghìn domain trỏ về cùng một dải IP**: tra DNS `a.com` và
+`b.com` có thể ra y hệt một địa chỉ. Hệ quả cho việc định tuyến: khoá theo IP thì không tách được
+hai domain đó, phải lấy tên từ chính lời client nói ra ([[SNI]] hoặc header `Host`).
+
+## ECH (Encrypted Client Hello)
+
+Bản nâng cấp của TLS mã hoá luôn phần ClientHello chứa SNI, nên bên trung gian chỉ còn thấy một tên
+bọc ngoài (với Cloudflare là `cloudflare-ech.com`) chứ không thấy domain thật. Khi client bật ECH thì
+mọi cách đọc trộm SNI đều vô hiệu; lúc đó chỉ còn suy đoán theo bảng DNS ngược, hoặc tắt ECH ở phía
+trình duyệt.
+
+## PPP, LCP/IPCP và restart counter
+
+Sau khi L2TP dựng xong đường ống, hai đầu còn phải nói chuyện bằng **PPP** — giao thức điểm‑điểm cũ
+của thời quay số — để thoả thuận tham số đường truyền (**LCP**), xác thực (MS‑CHAPv2), rồi xin địa
+chỉ IP và DNS (**IPCP**). Chỉ khi IPCP xong thì tunnel mới thật sự dùng được.
+
+Mỗi bước gửi một gói `Configure-Request` và chờ `Configure-Ack`. Vì chạy trên UDP/ESP nên gói có thể
+mất, và RFC 1661 §4.6 quy định một **restart counter**: cứ mỗi `restart interval` (mặc định 3 giây)
+thì gửi lại y nguyên gói cũ, tối đa `max requests` lần (mặc định 10) rồi thôi. Điểm cần nhớ: hết
+lượt gửi lại thì bên gửi chỉ **ngừng gửi**, RFC không bắt nó phải báo lỗi cho tầng trên — nên nếu
+tầng trên chỉ ngồi `await` chờ "link up" mà không tự đặt hạn, nó sẽ treo im lặng cho tới khi hạn
+tổng của cả lần quay số hết giờ.

@@ -108,6 +108,27 @@ Mọi chữ đều được dịch, kể cả giá trị bên trong các ô ch�
 phải định danh `DomainSuffix`. Riêng tên giao thức (SOCKS5, IKEv2, WireGuard) giữ nguyên, vì đó là
 tên riêng chứ không phải từ để dịch.
 
+## Tên miền của một kết nối lấy từ đâu
+
+Luật định tuyến so khớp theo domain, nhưng gói tin không mang sẵn tên miền — tool phải tự tìm, theo
+đúng thứ tự đáng tin này:
+
+1. **[SNI](docs/Glossary-vi.md#L13) hoặc header `Host`** — đọc trộm (peek) vài byte đầu của kết nối,
+   bytes vẫn giữ nguyên cho chặng sau. Đây là cái tên chính ứng dụng gõ ra, nên vẫn đúng khi nhiều
+   domain **dùng chung một IP** như Cloudflare và các CDN khác
+   ([IP dùng chung](docs/Glossary-vi.md#L512)).
+2. **[Bảng DNS ngược](docs/Glossary-vi.md#L17)** — tool nghe gói trả lời DNS/53 (hoặc
+   [DoH](docs/Glossary-vi.md#L25)) để tự học IP → domain; nó KHÔNG đọc DNS cache của Windows. Bảng
+   khoá theo IP nên với IP dùng chung chỉ giữ được cái tên học **sau cùng**: đây là phỏng đoán chứ
+   không phải sự thật.
+3. Không ra tên → luật theo domain không khớp, chỉ còn luật theo IP, cổng và giao thức.
+
+Bước 1 không dùng được trong mấy trường hợp, lúc đó phải chịu phỏng đoán của bước 2:
+
+- **UDP và QUIC** — không có ClientHello để đọc.
+- **Giao thức server nói trước** (SMTP, FTP, SSH) — chờ 3 giây không thấy gì thì bỏ qua.
+- **[ECH](docs/Glossary-vi.md#L518)** — trình duyệt mã hoá luôn ClientHello, SNI biến mất.
+
 ## Giới hạn hiện tại
 
 - IPv6 được chuyển hướng như IPv4 (mặc định `Redirect`, xem [Ipv6Mode](docs/Glossary-vi.md#L89) trong Cài đặt).

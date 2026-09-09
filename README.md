@@ -113,6 +113,27 @@ Every piece of text is translated, the values inside the drop-downs included: a 
 "Domain suffix" or "Hậu tố tên miền" rather than the identifier `DomainSuffix`. Protocol names
 (SOCKS5, IKEv2, WireGuard) stay as they are, because they are names rather than words.
 
+## Where a connection's host name comes from
+
+Routing rules match on domains, but a packet does not carry one — the tool has to find it, in this
+order of trust:
+
+1. **[SNI](docs/Glossary-vi.md#L13) or the `Host` header** — peeked from the first bytes of the
+   connection, which are left in place for the forwarding leg. This is the name the application
+   itself asked for, so it stays correct when many domains **share one IP**, as they do behind
+   Cloudflare and other CDNs ([shared IP](docs/Glossary-vi.md#L512)).
+2. **The [reverse-DNS table](docs/Glossary-vi.md#L17)** — built by listening to the DNS/53 (or
+   [DoH](docs/Glossary-vi.md#L25)) answers the target receives; it does NOT read the Windows DNS
+   cache. The table is keyed by IP, so for a shared IP it holds only the name learned **last**: a
+   guess, not a fact.
+3. No name at all — domain rules cannot match, leaving the IP, port and protocol rules.
+
+Step 1 is unavailable in a few cases, and step 2's guess is what remains:
+
+- **UDP and QUIC** — there is no ClientHello to read.
+- **Server-speaks-first protocols** (SMTP, FTP, SSH) — the peek gives up after 3 seconds.
+- **[ECH](docs/Glossary-vi.md#L518)** — the browser encrypts the ClientHello and the SNI is gone.
+
 ## Current limits
 
 - IPv6 is redirected like IPv4 (default `Redirect`, see [Ipv6Mode](docs/Glossary-vi.md#L89) in
