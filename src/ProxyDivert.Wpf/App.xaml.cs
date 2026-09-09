@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
 using ProxyDivert.Wpf.Localization;
@@ -38,17 +39,10 @@ public partial class App : Application
         // of "quit when the last window closes" would end a redirect that is still wanted.
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+        // Reads the configuration file and builds the container, and nothing else: no sweep of the
+        // machine's processes, no driver, no VPN dialled. All of that belongs to redirection being
+        // switched on, and is started below — in the background, and only if it is.
         _services = new AppServices();
-
-        // Not awaited: the tunnels the user left switched on come back in the background, and the
-        // window must not wait on a dial that takes seconds. Failures land in the log like any
-        // other supervision failure.
-        _ = _services.ConnectKeptVpnsAsync();
-
-        // The Run-key entry an earlier version wrote never started anything — Windows skips a Run
-        // entry that needs elevation — so it is cleared here rather than left listed under the
-        // machine's startup apps as something that plainly does not work.
-        StartupRegistration.RemoveLegacyRunKey();
 
         // Appearance comes from the same config file as everything else, so the window opens the
         // way the user left it rather than flashing the default palette first.
@@ -66,9 +60,20 @@ public partial class App : Application
         AppArguments arguments = AppArguments.Parse(e.Args);
         if (!arguments.Minimized) window.Show();
 
-        // Not awaited: starting the engine opens the driver and enumerates every process, and the
-        // window must be up and painting while that happens rather than after it.
+        // Everything from here on is behind the window rather than in front of it. Nothing above
+        // touches the registry, the driver, the network or the process table, so what the user sees
+        // is the configuration they left, on screen, before any of this is asked for.
+        //
+        // Not awaited: starting the engine opens the driver, enumerates every process and dials the
+        // tunnels the filters route through, and the window must be up and painting while that
+        // happens rather than after it. Failures land on the notice strip and in the log.
         _ = _mainViewModel.RestoreEngineAsync();
+
+        // The Run-key entry an earlier version wrote never started anything — Windows skips a Run
+        // entry that needs elevation — so it is cleared rather than left listed under the machine's
+        // startup apps as something that plainly does not work. A registry write nobody is waiting
+        // for, so it goes off the thread that paints.
+        _ = Task.Run(StartupRegistration.RemoveLegacyRunKey);
     }
 
     // Loaded here rather than merged into Application.Resources: TaskbarIcon subscribes to the

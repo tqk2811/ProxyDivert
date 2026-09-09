@@ -59,10 +59,16 @@ public sealed class AppServices : IAsyncDisposable
     public OutboundTester OutboundTester { get; }
 
     /// <summary>
-    /// Every process running on this machine, with its path, its arguments and its parent. Started
-    /// when the window opens and kept current for as long as the application lives, so the engine
-    /// has the answer ready the moment it is switched on rather than going and finding it then.
+    /// Every process running on this machine, with its path, its arguments and its parent.
     /// </summary>
+    /// <remarks>
+    /// Deliberately NOT collecting until redirection is switched on. Nothing the window shows reads
+    /// this table — only the engine and the rule tracker do — so sweeping the machine, enabling
+    /// SeDebugPrivilege and subscribing to process events while the user is merely editing a rule
+    /// is work nobody asked for, done before the window has painted. It starts on the way into
+    /// <see cref="StartEngineAsync"/> instead, where the sweep it costs is a fraction of opening
+    /// the driver.
+    /// </remarks>
     public ProcessInventory Processes { get; }
 
     /// <summary>
@@ -91,6 +97,11 @@ public sealed class AppServices : IAsyncDisposable
     // Rolls the file over when the hour turns. Nothing else notices the clock, so without this a
     // long-running session would keep writing to the hour it happened to start in.
     private readonly Timer _logRollTimer;
+
+    // ProcessInventory.Start throws on a second call, and the engine may be started and stopped any
+    // number of times in one session, so the first start is remembered here. Only ever read on the
+    // work queue, which is single-threaded, so no lock is needed.
+    private bool _processesStarted;
 
     /// <summary>
     /// Where the trace actually goes: this hour's file when auto-save is on, otherwise the path the
@@ -130,12 +141,12 @@ public sealed class AppServices : IAsyncDisposable
         Vpn = _provider.GetRequiredService<VpnConnectionKeeper>();
         OutboundTester = _provider.GetRequiredService<OutboundTester>();
 
-        // Before anything else asks: collecting is what makes starting the engine cheap, and the
-        // first sweep is about thirty milliseconds, so it is done here rather than deferred.
+        // Resolved but not started — see the remarks on the property. Choosing the event source is
+        // free while it is stopped (it only records the choice), and doing it here means the table
+        // is already configured whenever the engine does start it.
         Processes = _provider.GetRequiredService<ProcessInventory>();
         Processes.UseEventSource(
             Config.ProcessDetection == ProcessDetectionMode.ProcessEvents ? Config.ProcessEventSource : null);
-        Processes.Start();
 
         // Checked every minute rather than scheduled for the exact turn of the hour: SetFilePath
         // is a no-op when the path has not changed, so the cost of asking is nothing and there is
@@ -197,25 +208,20 @@ public sealed class AppServices : IAsyncDisposable
         });
     }
 
-    /// <summary>
-    /// Brings back the tunnels that were up when the window last closed, and returns without
-    /// waiting for them to dial.
-    /// </summary>
-    /// <remarks>
-    /// They were switched on by the user and never switched off, and dialling one takes seconds
-    /// that would otherwise be paid by whichever request needed it first. Called from startup
-    /// rather than from the constructor because it goes through the work queue, which is what keeps
-    /// it in order with the first save the user makes.
-    /// </remarks>
-    public Task ConnectKeptVpnsAsync()
-        => Enqueue(() => Vpn.SyncAsync(Config.Outbounds, Config.WireProxyPath));
-
     /// <summary>Starts the engine on a snapshot of the configuration, off the caller's thread.</summary>
     /// <remarks>
-    /// The VPN tunnels the filters route through are switched on first, before the snapshot is
-    /// taken, so the engine never starts routing at a tunnel that is down — every connection the
-    /// rule caught would fail until someone noticed. Dialling itself is in the background; only the
-    /// switch is flicked here, and it is written to the file so it survives the next start.
+    /// This is the one door through which everything the engine needs comes up, and in order: the
+    /// process table starts collecting, the VPN tunnels are dialled — the ones a filter routes
+    /// through, switched on here, and the ones the user left switched on, which
+    /// <see cref="VpnConnectionKeeper.ConnectRoutedVpnsAsync"/> reaches through its own Sync — and
+    /// only then does the driver open. Nothing above happens while redirection is off, which is why
+    /// opening the window costs a file read and nothing else.
+    /// <para>
+    /// The tunnels go up before the snapshot is taken so the engine never starts routing at a
+    /// tunnel that is down — every connection the rule caught would fail until someone noticed.
+    /// Dialling itself is supervised in the background; only the switch is flicked here, and it is
+    /// written to the file so it survives the next start.
+    /// </para>
     /// </remarks>
     public async Task StartEngineAsync()
     {
@@ -226,8 +232,20 @@ public sealed class AppServices : IAsyncDisposable
         await Enqueue(async () =>
         {
             if (switchedOn.Count > 0) ConfigStore.Save(snapshot);
+            // Before the driver, not after: the tracker attaches the processes that are already
+            // running the moment the engine starts, and it reads them from this table.
+            EnsureProcessesStarted();
             await Engine.StartAsync(snapshot).ConfigureAwait(false);
         });
+    }
+
+    // Kept running once started rather than stopped again with the engine: the sweep is the
+    // expensive part and a user who switches redirection off and on again should not pay it twice.
+    private void EnsureProcessesStarted()
+    {
+        if (_processesStarted) return;
+        _processesStarted = true;
+        Processes.Start();
     }
 
     /// <summary>
