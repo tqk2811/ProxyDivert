@@ -59,11 +59,15 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
    cũng được, nên `có chứa chrome` vẫn bắt được tiến trình mà Windows không cho đọc đường dẫn), và
    giá trị. Các dòng nối với nhau bằng đúng một combo ở đầu nhóm — **Khớp TẤT CẢ** hoặc **Khớp BẤT
    KỲ** — nên không phải đặt toán tử giữa hai dòng, cũng không có độ ưu tiên nào để nhầm. Nút
-   **KHÔNG** trên mỗi dòng hoặc mỗi nhóm để đảo ngược, **+ Nhóm** để lồng thêm một lớp ngoặc, còn
-   tích hai dòng rồi bấm **Gộp nhóm** thì đóng ngoặc cho chúng sau khi đã viết xong. Câu ở trên cùng
+   **KHÔNG** trên mỗi dòng hoặc mỗi nhóm để đảo ngược, **+ Nhóm** để lồng thêm một lớp ngoặc. Muốn
+   sắp lại hay đưa một dòng đã viết vào ngoặc thì kéo nó bằng tay cầm ở đầu dòng: thả vào mép trên
+   hay mép dưới của một dòng là chèn ngay trên hoặc ngay dưới dòng đó, thả vào nửa dưới của dòng
+   nhóm là vào bên trong ngoặc, còn dải trống dưới dòng cuối của một nhóm là ra sau cả nhóm. Kéo nốt
+   dòng cuối ra khỏi một ngoặc thì ngoặc rỗng đó biến mất theo. Câu ở trên cùng
    nói bộ lọc hiện đang có nghĩa gì. `java.exe VÀ (minecraft HOẶC forge)` viết ra như vậy. Cột bên
    phải phần điều kiện là **Hành động**: tích các bộ luật mà bộ lọc áp dụng, luật được xét từ bộ
-   luật trên xuống, khớp cái nào trước thì cái đó quyết định, nên dùng ▲▼ để sắp thứ tự ưu tiên.
+   luật trên xuống, khớp cái nào trước thì cái đó quyết định, nên kéo thả hoặc dùng ▲▼ để sắp thứ
+   tự ưu tiên.
    Thứ tự đó giữ nguyên kể cả với những bộ luật đang không tích, nên bỏ tích một cái rồi tích lại
    không làm xáo chỗ. Bộ luật đứng đầu cũng là cái quyết định chế độ UDP và Block QUIC. Đóng cửa sổ
    khi còn thay đổi chưa lưu thì được hỏi lưu, không lưu, hay quay lại. Hoặc bấm **Chạy ở trạng thái

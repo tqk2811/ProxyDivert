@@ -60,12 +60,15 @@ and `WinDivert64.sys` copied next to it.
    both and match if either does, so `contains chrome` still finds a process whose path Windows
    will not hand over), and the value. Rows join by the one picker at the top of their group —
    **match ALL of** or **match ANY of** — so there is no operator to place between two rows and no
-   precedence to get wrong. **NOT** on any row or group inverts it, **+ Group** nests a bracket,
-   and ticking two rows and pressing **Group ticked** wraps them in one after the fact. The
-   sentence above the rows says what the filter currently means. That is how
+   precedence to get wrong. **NOT** on any row or group inverts it and **+ Group** nests a bracket.
+   Rows are rearranged, and rows already written are put into a bracket, by dragging them by the
+   grip at their left edge: the top or bottom edge of a row means just above or just below it, the
+   lower half of a group row means inside that bracket, and the strip under a bracket's last row
+   means after the whole thing. Dragging the last row out of a bracket takes the empty bracket with
+   it. The sentence above the rows says what the filter currently means. That is how
    `java.exe AND (minecraft OR forge)` gets written. The column beside the conditions is **Then**:
    tick the policies the filter applies, whose rules are tried from the top policy down so that the
-   first rule that matches decides — use ▲▼ to say which comes first. That arrangement is kept for
+   first rule that matches decides — drag them, or use ▲▼, to say which comes first. That arrangement is kept for
    the unticked policies too, so unticking one and ticking it again does not move it. The top policy
    is also the one whose UDP mode and Block QUIC apply. Closing the window with unsaved changes asks
    whether to save them, drop them, or go back. Or press **Launch suspended…** so not one connection
