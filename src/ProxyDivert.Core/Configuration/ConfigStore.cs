@@ -18,6 +18,11 @@ namespace ProxyDivert.Core.Configuration;
 // Two things it deliberately does NOT do: throw when the file is missing (a first run is normal),
 // and leave a half-written file behind (a crash mid-save must not cost the user their whole
 // setup — the write goes to a temp file and is then swapped in).
+//
+// Passwords and pre-shared keys are written exactly as they were typed. They used to go through
+// DPAPI on the way out, which tied the file to one Windows account and made a config copied to
+// another machine come back with the passwords silently blank; the file is now plainly readable
+// and plainly editable, and protecting it is left to the folder it sits in.
 public sealed class ConfigStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
@@ -56,7 +61,6 @@ public sealed class ConfigStore
             string json = File.ReadAllText(FilePath);
             AppConfig? config = JsonSerializer.Deserialize<AppConfig>(json, SerializerOptions);
             if (config == null) return AppConfig.CreateDefault();
-            DecryptSecrets(config);
             RestoreBuiltInOutbounds(config);
             return config;
         }
@@ -71,10 +75,10 @@ public sealed class ConfigStore
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
 
-        // Encrypt on a copy: the live objects keep their clear-text passwords, because the
-        // outbound factory needs them to build a proxy source.
-        AppConfig forDisk = CloneWithEncryptedSecrets(config);
-        string json = JsonSerializer.Serialize(forDisk, SerializerOptions);
+        // Serialised straight from the caller's instance: nothing is rewritten on the way out, so
+        // there is no copy to make. The objects handed in are left untouched, which is what the
+        // outbound factory relies on — it keeps using them to build proxy sources.
+        string json = JsonSerializer.Serialize(config, SerializerOptions);
 
         string? dir = Path.GetDirectoryName(FilePath);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir!);
@@ -130,15 +134,6 @@ public sealed class ConfigStore
         }
     }
 
-    private static void DecryptSecrets(AppConfig config)
-    {
-        foreach (Outbound outbound in config.Outbounds)
-        {
-            outbound.Password = SecretProtector.Unprotect(outbound.Password);
-            outbound.PreSharedKey = SecretProtector.Unprotect(outbound.PreSharedKey);
-        }
-    }
-
     /// <summary>
     /// A deep copy that shares nothing with <paramref name="config"/> — not a list, not a rule.
     /// </summary>
@@ -150,26 +145,13 @@ public sealed class ConfigStore
     /// thread. A snapshot taken at Save is the whole edit or none of it.
     ///
     /// Round-tripping through JSON is the cheapest correct deep copy here: the model is plain
-    /// data, and this runs once per save, not per connection. Secrets stay in the clear.
+    /// data, and this runs once per save, not per connection.
     /// </remarks>
     public static AppConfig Clone(AppConfig config)
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
         string json = JsonSerializer.Serialize(config, SerializerOptions);
         return JsonSerializer.Deserialize<AppConfig>(json, SerializerOptions)!;
-    }
-
-    private static AppConfig CloneWithEncryptedSecrets(AppConfig config)
-    {
-        AppConfig clone = Clone(config);
-        foreach (Outbound outbound in clone.Outbounds)
-        {
-            outbound.Password = SecretProtector.Protect(outbound.Password);
-            // The IPsec group key opens the tunnel just as a password does, so it gets the same
-            // treatment rather than sitting in the JSON in the clear.
-            outbound.PreSharedKey = SecretProtector.Protect(outbound.PreSharedKey);
-        }
-        return clone;
     }
 
     private void TryBackupCorruptFile()

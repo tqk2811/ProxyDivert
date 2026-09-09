@@ -114,7 +114,7 @@ public class ConfigStoreTests : IDisposable
     }
 
     [Fact]
-    public void Password_is_not_stored_in_clear_text_but_comes_back_readable()
+    public void Password_is_stored_in_clear_text_and_comes_back_as_written()
     {
         var store = new ConfigStore(ConfigPath);
         AppConfig config = AppConfig.CreateDefault();
@@ -130,8 +130,10 @@ public class ConfigStoreTests : IDisposable
 
         store.Save(config);
 
+        // Readable and editable by hand on purpose: the file is the only place a password lives,
+        // and a user moving their setup to another machine must be able to take it with them.
         string json = File.ReadAllText(ConfigPath);
-        Assert.DoesNotContain("s3cret-passw0rd", json, StringComparison.Ordinal);
+        Assert.Contains("s3cret-passw0rd", json, StringComparison.Ordinal);
 
         AppConfig loaded = new ConfigStore(ConfigPath).Load();
         Outbound outbound = loaded.Outbounds.Find(o => o.Name == "proxy")!;
@@ -139,7 +141,7 @@ public class ConfigStoreTests : IDisposable
     }
 
     [Fact]
-    public void Saving_does_not_encrypt_the_live_objects()
+    public void Saving_does_not_touch_the_live_objects()
     {
         var store = new ConfigStore(ConfigPath);
         AppConfig config = AppConfig.CreateDefault();
@@ -156,8 +158,9 @@ public class ConfigStoreTests : IDisposable
 
         store.Save(config);
 
-        // The engine keeps using these objects to build proxy sources — encrypting them in place
-        // would break authentication until the next restart.
+        // The engine keeps using these objects to build proxy sources, so Save must serialise them
+        // rather than rewrite them: anything altered in place would break authentication until the
+        // next restart.
         Assert.Equal("plain", outbound.Password);
     }
 

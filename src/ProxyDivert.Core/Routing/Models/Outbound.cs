@@ -30,9 +30,9 @@ public sealed class Outbound
 
     public string? Password { get; set; }
 
-    // The IPsec group pre-shared key, for the L2TP/IPsec and IKEv2 outbounds. It is a secret, so it
-    // gets a box of its own rather than being tucked into the URL where it would be stored in the
-    // clear and shown on screen.
+    // The IPsec group pre-shared key, for the L2TP/IPsec and IKEv2 outbounds. It gets a box of its
+    // own rather than being tucked into the URL, so it can be edited on its own and hidden on
+    // screen — the same treatment as the password beside it.
     public string? PreSharedKey { get; set; }
 
     // Which VPN this outbound speaks. Auto reads it off the URL, which is right nearly always; the
