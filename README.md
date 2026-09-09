@@ -78,8 +78,11 @@ and `WinDivert64.sys` copied next to it.
    process starts.
 5. Throw the switch in the title bar. The lower half of the **Processes** tab then shows, as a tree,
    every process the engine is actually holding, with anything adopted through **Children** nested
-   under the process that spawned it. The **Connections** tab lists every connection with its host
-   name, outbound and byte counts.
+   under the process that spawned it. Each row names the filter that caught it — an adopted child
+   shows its parent's, marked *inherited*, because that is the filter to go and edit, while a
+   process started by **Launch suspended…** is described by no filter and says `—`. Drag the right
+   edge of a heading to widen its column. The **Connections** tab lists every connection with its
+   host name, outbound and byte counts.
 
 Configuration lives in `proxydivert.config.json` beside the executable. It is plain JSON, passwords
 included: the file can be edited by hand and carried to another machine as it is, so keep it

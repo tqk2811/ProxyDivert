@@ -76,7 +76,10 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
    thứ tự ưu tiên). Hoặc bấm **Chạy ở trạng thái tạm dừng…** để không lọt kết nối nào lúc khởi động.
 5. Gạt công tắc trên thanh tiêu đề. Nửa dưới tab **Tiến trình** khi đó hiện dạng cây mọi tiến trình
    engine đang thực sự áp dụng, tiến trình con nhận theo **Cả tiến trình con** nằm lồng dưới tiến
-   trình đã sinh ra nó. Tab **Kết nối** hiện từng kết nối kèm tên miền, đường ra và số byte.
+   trình đã sinh ra nó. Mỗi dòng nói bộ lọc nào đã bắt được tiến trình đó — tiến trình con hiện bộ
+   lọc của cha nó kèm nhãn *kế thừa*, vì đó mới là bộ lọc cần sửa; tiến trình do **Chạy ở trạng thái
+   tạm dừng…** khởi động thì không bộ lọc nào tả nó nên để dấu `—`. Kéo mép phải của tiêu đề cột để
+   nới rộng cột. Tab **Kết nối** hiện từng kết nối kèm tên miền, đường ra và số byte.
 
 Cấu hình lưu ở `proxydivert.config.json` cạnh exe. File là JSON thuần, kể cả mật khẩu: sửa tay được
 và chép sang máy khác dùng luôn được, nên hãy để nó ở chỗ chỉ mình bạn đọc được.
