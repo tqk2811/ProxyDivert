@@ -456,3 +456,11 @@ Thay vì bắt mọi lớp trả lời "có làm được X không" bằng một
 ## Hai nguồn sự thật cho một câu hỏi
 
 Cùng một câu hỏi ("outbound này có tải được UDP không") được trả lời ở hai chỗ bằng hai cách: từ **cấu hình** (`Outbound.SupportsUdp`, suy từ `Kind` + URL) và từ **thứ đã dựng** (`IOutboundInstance.SupportsUdp`, hỏi source thật). Đây không phải lúc nào cũng là lỗi cần gộp: đường routing trả lời mỗi datagram một lần và **trước khi** có instance — dựng instance của VPN chính là dial nó — nên nó buộc phải suy từ cấu hình. Cách xử lý đúng là **giữ cả hai nhưng chốt bằng test** duyệt mọi `Kind` và khẳng định hai bên bằng nhau: lệch thì hỏng ở lúc build chứ không phải lúc chạy. Cách sai là để đường routing hỏi `registry.Find(id)?.Caps ?? model` — câu trả lời khi đó đổi theo việc instance tình cờ đã dựng hay chưa, nên cùng một datagram định tuyến khác nhau trước và sau kết nối TCP đầu tiên.
+
+## Đối tượng theo lượt chạy (per-run object)
+
+Thay vì để N field nullable trên một lớp dài, cùng được gán lúc `Start` và cùng bị xoá lúc `Stop`, gom chúng vào MỘT đối tượng bất biến và giữ đúng một tham chiếu tới nó. Cái mua được không phải là bớt `?.` mà là bớt một lớp lỗi: mỗi handler lấy tham chiếu đó **một lần ở đầu hàm** rồi làm việc với một lượt chạy nguyên vẹn, nên không còn cảnh đọc được tracker của lượt đang tắt và forwarder của con số không. `IsRunning` cũng thôi là cờ riêng — "đang chạy" chính là "run khác null", nên không có hai nguồn sự thật để lệch. Ở ProxyDivert là `EngineRun` (redirector, tracker, host-name resolver, UDP forwarder, `CancellationTokenSource`, hai router).
+
+## Slot (ô giữ giá trị hoán được)
+
+Một đối tượng nhỏ chỉ để **giữ chỗ** cho một giá trị bị thay nguyên khối, và được truyền đi thay cho chính giá trị đó. Dùng khi bên đọc cần thấy giá trị MỚI NHẤT nhưng không được sở hữu hay sửa nó: bên đọc nhận `IResolverSource` (chỉ có getter), bên ghi giữ `ResolverSlot` và gọi `Use(...)`. Nó cũng cắt được vòng phụ thuộc lúc dựng — router cần đọc bảng định tuyến mà [đối tượng theo lượt chạy](#L460) lại giữ router — mà không phải cho ai một tham chiếu ngược sửa được. Khác với việc truyền `Func<T>`: slot có một chủ ghi rõ ràng và đọc được tên trong stack trace.
