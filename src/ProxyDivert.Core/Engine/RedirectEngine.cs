@@ -66,27 +66,22 @@ public sealed class RedirectEngine : IDisposable
 
     private AppConfig _config = AppConfig.CreateDefault();
 
-    // Volatile because it is replaced under _stateLock but read without it, from the packet path.
-    // Each read takes the whole resolver and routes one connection with it, so a read that lands a
-    // moment before a rebuild routes by the previous configuration — which is what "takes effect on
-    // the next connection" means — rather than seeing a half-published object.
-    private volatile RoutingPolicyResolver _resolver;
-    private ProcessRuleTracker? _tracker;
-    private IProcessRedirector? _redirector;
-    private IConnectionHostNameResolver? _hostNames;
-    private UdpProxyForwarder? _udpForwarder;
-    private CancellationTokenSource? _cts;
+    // What the engine is running, or null while it is stopped. Volatile because it is published and
+    // taken away under _stateLock but read without it, from the relay threads: a handler takes the
+    // whole run once, at the top, and never works with half of one. See EngineRun.
+    private volatile EngineRun? _run;
 
     public ConnectionTracker Connections { get; } = new ConnectionTracker();
 
     // The TCP connections being tunnelled right now, so a configuration change reaches them too.
     private readonly LiveTcpConnectionRegistry _liveConnections = new LiveTcpConnectionRegistry();
 
-    public bool IsRunning { get; private set; }
+    // There is nothing else "running" means: the run exists, or it does not.
+    public bool IsRunning => _run is not null;
 
     /// <summary>Processes currently under redirection.</summary>
     public IReadOnlyCollection<TrackedProcess> TrackedProcesses
-        => _tracker?.Tracked ?? Array.Empty<TrackedProcess>();
+        => _run?.Tracker.Tracked ?? Array.Empty<TrackedProcess>();
 
     public event Action<TrackedProcess>? ProcessAttached;
     public event Action<TrackedProcess>? ProcessDetached;
@@ -122,7 +117,6 @@ public sealed class RedirectEngine : IDisposable
         _outbounds = outbounds ?? throw new ArgumentNullException(nameof(outbounds));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<RedirectEngine>();
-        _resolver = BuildResolver(_config, new Dictionary<uint, IReadOnlyList<Guid>>());
         // Every instance this engine routes through is dropped by its owner, and this is how the
         // things keyed by outbound hear about it. Subscribed for the life of the engine rather than
         // of a run: a VPN tunnel can die while redirection is switched off, and the UDP tunnels
@@ -148,57 +142,91 @@ public sealed class RedirectEngine : IDisposable
             // reads through.
             await ReconcileOutboundsAsync(config).ConfigureAwait(false);
 
-            lock (_stateLock)
+            EngineRun run = BuildRun(config);
+            try
             {
-                _cts = new CancellationTokenSource();
-                _resolver = BuildResolver(config, new Dictionary<uint, IReadOnlyList<Guid>>());
-
-                var options = new RedirectOptions
+                lock (_stateLock)
                 {
-                    // Start with an empty scope: pids arrive from the process watcher.
-                    ProcessId = 0,
-                    Protocols = RedirectProtocol.All,
+                    // Published BEFORE the driver handles open. The handlers the options name all
+                    // go through _run, so a connection accepted by the relay the instant it starts
+                    // finds a run that is already whole — where the old code assigned the host-name
+                    // resolver and the UDP forwarder AFTER Start and left a window in which a
+                    // connection would have been routed with neither.
+                    _run = run;
+                }
 
-                    Ipv6Mode = config.Ipv6,
-                    EnableDnsSniff = true,
-                    EnableSecureDns = config.Dns.Mode == DnsMode.DnsOverHttps,
-                    DohEndpoint = ParseDohEndpoint(config.Dns.DohEndpoint),
-                    TcpConnectionHandler = HandleTcpAsync,
-                    UdpDatagramHandler = HandleUdpDatagram,
-                    ShouldRedirectUdp = ShouldRedirectUdpFlow,
-                    // Socket-sniffing mode: the redirector listens to every process on the machine and
-                    // asks this about each pid it has not seen. Left null in process-event mode, where
-                    // the tracker names the pids instead.
-                    ShouldTrackProcess = config.ProcessDetection == ProcessDetectionMode.NetworkSniff
-                        ? ShouldRedirectProcess
-                        : null,
-                };
+                run.Redirector.Start();
 
-                _redirector = _redirectorFactory.Create(options);
-                _redirector.Start();
-                _hostNames = new ConnectionHostNameResolver(_hostNameInspector, _redirector.ReverseDns);
-                _udpForwarder = new UdpProxyForwarder(_redirector, _loggerFactory.CreateLogger<UdpProxyForwarder>(), _cts.Token);
-
-                // The process table is already running and already knows every process on the machine,
-                // so starting is a matter of reading it rather than of discovering anything.
-                _tracker = new ProcessRuleTracker(_loggerFactory.CreateLogger<ProcessRuleTracker>(), _inventory);
-                _tracker.ProcessAttached += OnProcessAttached;
-                _tracker.ProcessDetached += OnProcessDetached;
-                _tracker.Start(
+                // Only now: attaching a pid calls into the redirector, which refuses before Start.
+                run.Tracker.Start(
                     config.ProcessRules,
                     attachFromProcessEvents: config.ProcessDetection == ProcessDetectionMode.ProcessEvents);
-
-                IsRunning = true;
-                _logger.LogInformation(
-                    "engine started; relay tcp={Tcp} udp={Udp} tcpV6={TcpV6} udpV6={UdpV6}, ipv6={Ipv6Mode}",
-                    _redirector.TcpRelayPort, _redirector.UdpRelayPort,
-                    _redirector.TcpRelayPortV6, _redirector.UdpRelayPortV6, config.Ipv6);
             }
+            catch
+            {
+                // Most often the driver refusing because the process is not elevated. Without this
+                // the half-started run stayed in the field: its handles stayed open, its subprocess
+                // kept running, and the next press of Start built a second one beside it.
+                lock (_stateLock) { _run = null; }
+                run.Cancel();
+                run.Tracker.ProcessAttached -= OnProcessAttached;
+                run.Tracker.ProcessDetached -= OnProcessDetached;
+                await run.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
+
+            _logger.LogInformation(
+                "engine started; relay tcp={Tcp} udp={Udp} tcpV6={TcpV6} udpV6={UdpV6}, ipv6={Ipv6Mode}",
+                run.Redirector.TcpRelayPort, run.Redirector.UdpRelayPort,
+                run.Redirector.TcpRelayPortV6, run.Redirector.UdpRelayPortV6, config.Ipv6);
         }
         finally
         {
             _lifecycle.Release();
         }
+    }
+
+    // Builds the run's parts in the one order they can be built in: the redirector needs the
+    // options, which name the handlers; everything else needs the redirector. Nothing here starts
+    // pumping, so a failure leaves only ordinary objects to drop.
+    private EngineRun BuildRun(AppConfig config)
+    {
+        var cts = new CancellationTokenSource();
+        var resolvers = new ResolverSlot(BuildResolver(config, new Dictionary<uint, IReadOnlyList<Guid>>()));
+
+        var options = new RedirectOptions
+        {
+            // Start with an empty scope: pids arrive from the process watcher.
+            ProcessId = 0,
+            Protocols = RedirectProtocol.All,
+
+            Ipv6Mode = config.Ipv6,
+            EnableDnsSniff = true,
+            EnableSecureDns = config.Dns.Mode == DnsMode.DnsOverHttps,
+            DohEndpoint = ParseDohEndpoint(config.Dns.DohEndpoint),
+            TcpConnectionHandler = HandleTcpAsync,
+            UdpDatagramHandler = HandleUdpDatagram,
+            ShouldRedirectUdp = ShouldRedirectUdpFlow,
+            // Socket-sniffing mode: the redirector listens to every process on the machine and
+            // asks this about each pid it has not seen. Left null in process-event mode, where
+            // the tracker names the pids instead.
+            ShouldTrackProcess = config.ProcessDetection == ProcessDetectionMode.NetworkSniff
+                ? ShouldRedirectProcess
+                : null,
+        };
+
+        IProcessRedirector redirector = _redirectorFactory.Create(options);
+        var hostNames = new ConnectionHostNameResolver(_hostNameInspector, redirector.ReverseDns);
+        var udpForwarder = new UdpProxyForwarder(
+            redirector, _loggerFactory.CreateLogger<UdpProxyForwarder>(), cts.Token);
+
+        // The process table is already running and already knows every process on the machine, so
+        // starting is a matter of reading it rather than of discovering anything.
+        var tracker = new ProcessRuleTracker(_loggerFactory.CreateLogger<ProcessRuleTracker>(), _inventory);
+        tracker.ProcessAttached += OnProcessAttached;
+        tracker.ProcessDetached += OnProcessDetached;
+
+        return new EngineRun(redirector, tracker, hostNames, udpForwarder, resolvers, cts);
     }
 
     // Applies an edited configuration without dropping the redirector: rules, outbounds and DNS
@@ -212,7 +240,9 @@ public sealed class RedirectEngine : IDisposable
         try
         {
             lock (_stateLock) { _config = config; }
-            if (!IsRunning) return;
+
+            EngineRun? run = _run;
+            if (run is null) return;
 
             // Outside the state lock, and this is the point of the whole exercise: only the
             // outbounds that actually changed are rebuilt, but rebuilding one can mean putting a
@@ -227,7 +257,7 @@ public sealed class RedirectEngine : IDisposable
 
             lock (_stateLock)
             {
-                _tracker?.ApplyRules(config.ProcessRules);
+                run.Tracker.ApplyRules(config.ProcessRules);
                 RebuildResolver();
             }
 
@@ -238,7 +268,7 @@ public sealed class RedirectEngine : IDisposable
             //
             // Also outside the lock: closing one cancels its token, and a cancellation callback
             // runs on the thread that cancels.
-            int closed = _liveConnections.CloseWhereRouteChanged(_resolver, (live, now) =>
+            int closed = _liveConnections.CloseWhereRouteChanged(run.Resolver, (live, now) =>
                 _logger.LogInformation(
                     "tcp pid={Pid} {Target} is being closed: the configuration now routes it via {New} instead of {Old}",
                     live.Target.ProcessId, live.Target, now.Outbound.Name, live.OutboundName));
@@ -247,7 +277,7 @@ public sealed class RedirectEngine : IDisposable
             // through untouched, with the real address on them. Saving is the moment the user
             // asks for the configuration to hold for everything, so they are reset now; the
             // reconnects are captured from their SYN like any new connection.
-            int reset = _redirector?.ResetEscapedFlows() ?? 0;
+            int reset = run.Redirector.ResetEscapedFlows();
 
             _logger.LogInformation(
                 "configuration applied: {Closed} connection(s) closed for a changed route, {Reset} pre-existing flow(s) reset",
@@ -269,9 +299,9 @@ public sealed class RedirectEngine : IDisposable
     /// </summary>
     public TrackedProcess? AttachProcessId(uint processId, Guid policyId, bool includeChildren = true)
     {
-        if (!IsRunning) throw new InvalidOperationException("Engine is not running");
+        EngineRun run = _run ?? throw new InvalidOperationException("Engine is not running");
 
-        return _tracker?.AttachProcessId(processId, policyId, includeChildren);
+        return run.Tracker.AttachProcessId(processId, policyId, includeChildren);
     }
 
     /// <summary>
@@ -284,7 +314,7 @@ public sealed class RedirectEngine : IDisposable
         // The table first, then the filters against it: a process frozen a moment ago is not in the
         // table yet, and matching a table that does not contain it would attach nothing.
         _inventory.Refresh();
-        _tracker?.MatchEverything();
+        _run?.Tracker.MatchEverything();
     }
 
     /// <remarks>
@@ -296,45 +326,29 @@ public sealed class RedirectEngine : IDisposable
     /// </remarks>
     public async Task StopAsync()
     {
-        ProcessRuleTracker? tracker;
-        UdpProxyForwarder? udpForwarder;
-        IProcessRedirector? redirector;
-        CancellationTokenSource? cts;
+        EngineRun? run;
 
         await _lifecycle.WaitAsync().ConfigureAwait(false);
         try
         {
             lock (_stateLock)
             {
-                if (!IsRunning) return;
-                IsRunning = false;
+                run = _run;
+                if (run is null) return;
+                _run = null;
 
-                try { _cts?.Cancel(); } catch { }
+                run.Cancel();
 
-                // The table it read stays running: it belongs to the application, not to this run.
-                tracker = _tracker;
-                if (tracker != null)
-                {
-                    // Unsubscribed here rather than with the disposal below: an event arriving
-                    // after the fields are cleared would find a run that no longer exists.
-                    tracker.ProcessAttached -= OnProcessAttached;
-                    tracker.ProcessDetached -= OnProcessDetached;
-                }
-                _tracker = null;
-
-                udpForwarder = _udpForwarder;
-                _udpForwarder = null;
-
-                redirector = _redirector;
-                _redirector = null;
-
-                cts = _cts;
-                _cts = null;
+                // Unsubscribed here rather than with the disposal below: an event arriving after
+                // the run has been taken away would find one that no longer exists. The process
+                // table the tracker read stays running — it belongs to the application, not here.
+                run.Tracker.ProcessAttached -= OnProcessAttached;
+                run.Tracker.ProcessDetached -= OnProcessDetached;
             }
 
-            tracker?.Dispose();
-            if (udpForwarder != null) await udpForwarder.DisposeAsync().ConfigureAwait(false);
-            redirector?.Dispose();
+            // Outside the lock: this waits on UDP tunnels and unloads a driver. EngineRun owns the
+            // order the parts go down in.
+            await run.DisposeAsync().ConfigureAwait(false);
 
             // The outbound instances are deliberately left alone. A VPN outbound's instance IS the
             // tunnel: the user's session with their provider, which they switched on themselves and
@@ -342,10 +356,6 @@ public sealed class RedirectEngine : IDisposable
             // and the proxies are only settings until a connection asks for one.
 
             _logger.LogInformation("engine stopped");
-
-            // Last, and only now: the forwarder was handed this token and is only finished with it
-            // once its own teardown has been awaited.
-            cts?.Dispose();
         }
         finally
         {
@@ -355,7 +365,7 @@ public sealed class RedirectEngine : IDisposable
 
     // Asked by the redirector's socket pump, once per process. The tracker does the deciding; this
     // only exists because the options are built before the tracker is.
-    private bool? ShouldRedirectProcess(uint processId) => _tracker?.ShouldRedirect(processId);
+    private bool? ShouldRedirectProcess(uint processId) => _run?.Tracker.ShouldRedirect(processId);
 
     // Rebuilds only the outbound instances the configuration has actually changed. Shared by Start
     // and ApplyConfig: an edit made while the engine was off has to reach the registry exactly as
@@ -380,7 +390,7 @@ public sealed class RedirectEngine : IDisposable
         // Its UDP tunnels are pointed at an instance that no longer exists. Missing this is how a
         // VPN that dropped and came back carried TCP again while its UDP stayed dead: the
         // supervisor threw the instance away, and nothing told the forwarder.
-        _udpForwarder?.InvalidateOutbound(outboundId);
+        _run?.UdpForwarder.InvalidateOutbound(outboundId);
     }
 
     // ---- process scope ----------------------------------------------------------------------
@@ -389,7 +399,7 @@ public sealed class RedirectEngine : IDisposable
     {
         try
         {
-            _redirector?.AddTrackedProcessId(process.ProcessId);
+            _run?.Redirector.AddTrackedProcessId(process.ProcessId);
             RebuildResolver();
         }
         catch (Exception ex)
@@ -403,7 +413,7 @@ public sealed class RedirectEngine : IDisposable
     {
         try
         {
-            _redirector?.RemoveTrackedProcessId(process.ProcessId);
+            _run?.Redirector.RemoveTrackedProcessId(process.ProcessId);
             RebuildResolver();
         }
         catch (Exception ex)
@@ -426,9 +436,13 @@ public sealed class RedirectEngine : IDisposable
     {
         lock (_stateLock)
         {
-            IReadOnlyDictionary<uint, IReadOnlyList<Guid>> policyMap
-                = _tracker?.BuildPolicyMap() ?? new Dictionary<uint, IReadOnlyList<Guid>>();
-            _resolver = BuildResolver(_config, policyMap);
+            // A run that has just been taken away has nothing left to route, so there is no table
+            // to rebuild for it. This used to publish one built from an empty policy map, which
+            // nothing would ever read.
+            EngineRun? run = _run;
+            if (run is null) return;
+
+            run.UseResolver(BuildResolver(_config, run.Tracker.BuildPolicyMap()));
         }
     }
 
@@ -443,7 +457,12 @@ public sealed class RedirectEngine : IDisposable
 
     private async Task HandleTcpAsync(RedirectedTcpConnection connection, CancellationToken ct)
     {
-        string processName = _tracker != null && _tracker.TryGetTracked(connection.ProcessId, out TrackedProcess? tracked)
+        // Taken once, at the top, and used for the whole connection. Stop may publish null a
+        // microsecond later; this connection is then ended by its token, not by finding half a run.
+        EngineRun? run = _run;
+        if (run is null) return;
+
+        string processName = run.Tracker.TryGetTracked(connection.ProcessId, out TrackedProcess? tracked)
             ? tracked!.Name
             : $"pid {connection.ProcessId}";
 
@@ -456,9 +475,8 @@ public sealed class RedirectEngine : IDisposable
         {
             // Name first: SNI / Host header, then whatever DNS taught us about this IP.
             long nameStarted = Stopwatch.GetTimestamp();
-            string? host = _hostNames is null
-                ? null
-                : await _hostNames.TryResolveAsync(connection, HostPeekTimeout, ct).ConfigureAwait(false);
+            string? host = await run.HostNames
+                .TryResolveAsync(connection, HostPeekTimeout, ct).ConfigureAwait(false);
             TimeSpan nameTime = Stopwatch.GetElapsedTime(nameStarted);
             info.Host = host;
 
@@ -468,7 +486,7 @@ public sealed class RedirectEngine : IDisposable
                 connection.OriginalDestination.Port,
                 host);
 
-            RouteDecision decision = _resolver.Resolve(target);
+            RouteDecision decision = run.Resolver.Resolve(target);
             info.OutboundName = decision.Outbound.Name;
             info.RouteReason = decision.Reason;
             Connections.Update(info);
@@ -620,10 +638,15 @@ public sealed class RedirectEngine : IDisposable
     // it reaches the wire. Passing a blocked datagram would leak the very thing it must not.
     private bool ShouldRedirectUdpFlow(uint processId, IPAddress destination, ushort destinationPort, bool isIpv6)
     {
-        string? host = _redirector?.ReverseDns.Resolve(destination);
+        EngineRun? run = _run;
+        // Nothing left to redirect it to. Leaving the flow alone is also the safe answer: the
+        // datagram goes out of the process's own socket, exactly as it would with the engine off.
+        if (run is null) return false;
+
+        string? host = run.Redirector.ReverseDns.Resolve(destination);
         var target = new RouteTarget(processId, destination, destinationPort, host, isUdp: true);
 
-        RouteDecision decision = _resolver.ResolveUdp(target);
+        RouteDecision decision = run.Resolver.ResolveUdp(target);
         if (!decision.IsDirect) return true;
 
         _logger.LogDebug("udp pid={Pid} -> {Target} left direct, unredirected ({Reason})",
@@ -635,9 +658,14 @@ public sealed class RedirectEngine : IDisposable
     // dropped — do not send". Anything that cannot be tunnelled is dropped rather than leaked.
     private byte[]? HandleUdpDatagram(RedirectedUdpDatagram datagram, CancellationToken ct)
     {
+        EngineRun? run = _run;
+        // Dropped rather than passed on: the run that would have tunnelled it is gone, and sending
+        // it out from here would carry the machine's real address.
+        if (run is null) return null;
+
         try
         {
-            string? host = _redirector?.ReverseDns.Resolve(datagram.OriginalDestination.Address);
+            string? host = run.Redirector.ReverseDns.Resolve(datagram.OriginalDestination.Address);
             var target = new RouteTarget(
                 datagram.ProcessId,
                 datagram.OriginalDestination.Address,
@@ -645,7 +673,7 @@ public sealed class RedirectEngine : IDisposable
                 host,
                 isUdp: true);
 
-            RouteDecision decision = _resolver.ResolveUdp(target);
+            RouteDecision decision = run.Resolver.ResolveUdp(target);
 
             if (decision.IsBlocked) return null;
 
@@ -677,7 +705,7 @@ public sealed class RedirectEngine : IDisposable
             }
 
             IProxySource source = _outbounds.GetOrCreate(decision.Outbound).Source;
-            bool queued = _udpForwarder!.Send(
+            bool queued = run.UdpForwarder.Send(
                 decision.Outbound.Id, source,
                 (ushort)datagram.OriginalSource.Port,
                 datagram.OriginalDestination,
