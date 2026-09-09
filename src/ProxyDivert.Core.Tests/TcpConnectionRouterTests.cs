@@ -74,9 +74,11 @@ public class TcpConnectionRouterTests
 
     private sealed class Fixture : IDisposable
     {
-        public Fixture(RoutingPolicy policy, Outbound outbound, string? host = null)
+        public Fixture(
+            RoutingPolicy policy, Outbound outbound, string? host = null,
+            FakeOutboundSourceBuilder? builder = null)
         {
-            Builder = new FakeOutboundSourceBuilder(OutboundKind.Socks5);
+            Builder = builder ?? new FakeOutboundSourceBuilder(OutboundKind.Socks5);
             Registry = new OutboundRegistry(new OutboundSourceFactory(new[] { Builder }));
             Connections = new ConnectionTracker();
             Live = new LiveTcpConnectionRegistry();
@@ -218,5 +220,85 @@ public class TcpConnectionRouterTests
         Assert.Equal(new[] { "open:", "update:socks5", "close:socks5" }, seen);
         ConnectionInfo row = Assert.Single(f.Connections.History);
         Assert.Equal("browser.exe", row.ProcessName);
+    }
+
+    // The first seconds of a run: the driver is open, the tunnel a rule routes through is still
+    // dialling. The connection waits there rather than being sent out direct (which would carry the
+    // real address) or refused (which would be an error page a second after the switch was flipped).
+    [Fact]
+    public async Task AConnectionRoutedThroughATunnelThatIsStillDialling_IsHeldRatherThanSentDirect()
+    {
+        var tunnel = new FakeManagedProxySource();
+        using var f = KeptVpnFixture(tunnel);
+        using var accepted = new AcceptedConnection(Destination("93.184.216.34"));
+
+        using var cts = new CancellationTokenSource();
+        Task routing = f.Router.HandleAsync(accepted.Connection, cts.Token);
+
+        // Long enough for several passes of the wait. Nothing has been asked of the way out: the
+        // fake throws on GetConnectSourceAsync, so a connection that went through would have
+        // finished with an error by now.
+        await Task.Delay(600);
+        Assert.False(routing.IsCompleted);
+        Assert.Equal(0, tunnel.Starts);
+        Assert.Empty(f.Connections.History);
+
+        // The engine stopping (or a re-route) ends the wait, and nothing is left registered.
+        cts.Cancel();
+        await routing;
+        Assert.Equal(0, f.Live.Count);
+    }
+
+    // ...and the moment the tunnel is up, the connection it was waiting for goes through it. The
+    // fake refuses to open a tunnel, so reaching that refusal IS the proof it stopped waiting.
+    [Fact]
+    public async Task AHeldConnection_GoesThroughAsSoonAsTheTunnelIsUp()
+    {
+        var tunnel = new FakeManagedProxySource();
+        using var f = KeptVpnFixture(tunnel);
+        using var accepted = new AcceptedConnection(Destination("93.184.216.34"));
+
+        Task routing = f.Router.HandleAsync(accepted.Connection, CancellationToken.None);
+        await Task.Delay(300);
+        Assert.False(routing.IsCompleted);
+
+        await tunnel.StartAsync();
+        await routing;
+
+        ConnectionInfo row = Assert.Single(f.Connections.History);
+        Assert.Equal("vpn", row.OutboundName);
+        Assert.Contains("NotSupportedException", row.Error);
+    }
+
+    // A way out nobody keeps up is a different case: there is no supervisor to wait for, so it is
+    // handed over at once and dials itself on the way through, exactly as it always has.
+    [Fact]
+    public async Task AnOutboundNothingKeepsUp_IsHandedOverWithoutWaiting()
+    {
+        var tunnel = new FakeManagedProxySource();
+        using var f = KeptVpnFixture(tunnel, keepConnected: false);
+        using var accepted = new AcceptedConnection(Destination("93.184.216.34"));
+
+        await f.Router.HandleAsync(accepted.Connection, CancellationToken.None);
+
+        ConnectionInfo row = Assert.Single(f.Connections.History);
+        Assert.Contains("NotSupportedException", row.Error);
+    }
+
+    // One VPN outbound, kept up by a supervisor that is not part of this test, with a filter routing
+    // at it.
+    private static Fixture KeptVpnFixture(FakeManagedProxySource tunnel, bool keepConnected = true)
+    {
+        var outbound = new Outbound
+        {
+            Id = ProxyId,
+            Name = "vpn",
+            Kind = OutboundKind.Vpn,
+            Url = "wg://tunnel.conf",
+            KeepConnected = keepConnected,
+        };
+        return new Fixture(
+            PolicyTo(ProxyId, "93.184.216.34"), outbound, host: null,
+            builder: new FakeOutboundSourceBuilder(OutboundKind.Vpn, _ => tunnel));
     }
 }

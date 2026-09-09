@@ -166,7 +166,7 @@ internal sealed class TcpConnectionRouter
             return;
         }
 
-        IProxySource source = _outbounds.GetOrCreate(outbound).Source;
+        IProxySource source = (await ReadyOutboundAsync(outbound, connection, ct).ConfigureAwait(false)).Source;
         IConnectSource? tunnel = null;
         Guid tunnelId = Guid.NewGuid();
         try
@@ -212,6 +212,70 @@ internal sealed class TcpConnectionRouter
         {
             try { tunnel?.Dispose(); } catch { }
         }
+    }
+
+    // How often the wait below looks again. Short enough that a connection made while the tunnel
+    // was still coming up starts within a blink of it being up, long enough to cost nothing.
+    private static readonly TimeSpan TunnelPollInterval = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>
+    /// The outbound's instance, once it is in a state to carry this connection.
+    /// </summary>
+    /// <remarks>
+    /// A way out that someone else keeps up — a VPN with KeepConnected on, supervised by
+    /// <c>VpnConnectionKeeper</c> — may be down for the first seconds of a run, because the tunnel
+    /// is dialled only after the driver's handles are open (see the remarks on
+    /// AppServices.StartEngineAsync). A connection that arrives in that window is HELD, and this is
+    /// the deliberate choice among three:
+    /// <list type="bullet">
+    /// <item>send it out direct — never: the user asked for this traffic to be tunnelled, and the
+    /// one thing worse than a slow connection is one that quietly carries the real address.</item>
+    /// <item>refuse it now — the application sees the connection fail immediately, and a browser
+    /// turns that into an error page a second after the switch was flipped.</item>
+    /// <item>hold it until the tunnel is up (this) — which looks exactly like a destination server
+    /// that is slow to answer. If the tunnel comes up first the connection proceeds and is
+    /// tunnelled, which is what the user asked for; if the application gives up first, that is its
+    /// call and nothing here has to guess how long is too long.</item>
+    /// </list>
+    /// Which timeout that is, precisely: the relay has ALREADY accepted this connection by the time
+    /// the router sees it — that is how the redirect works — so the operating system's connect
+    /// timeout is spent and cannot fire again. The application holds what it thinks is an
+    /// established socket and is waiting for an answer, so what ends the wait on its side is its own
+    /// request or read timeout, which is usually the longer of the two.
+    /// The wait ends with the connection's token — the engine stopping, or a configuration change
+    /// that re-routes it — so nothing is held past the run it belongs to.
+    /// <para>
+    /// The instance is asked for again on every pass rather than held: a tunnel that fails is
+    /// thrown away by its supervisor and rebuilt, so the object this started with can be one nobody
+    /// is dialling any more.
+    /// </para>
+    /// </remarks>
+    private async Task<IOutboundInstance> ReadyOutboundAsync(
+        Outbound outbound, RedirectedTcpConnection connection, CancellationToken ct)
+    {
+        IOutboundInstance instance = _outbounds.GetOrCreate(outbound);
+
+        // Not supervised: nothing else is going to bring this up, so the source dials it itself on
+        // the way through, exactly as it always has.
+        if (!outbound.KeepConnected || instance.Tunnel is null) return instance;
+
+        bool waited = false;
+        while (instance.Tunnel is { IsRunning: false })
+        {
+            if (!waited)
+            {
+                waited = true;
+                _logger.LogInformation(
+                    "tcp pid={Pid} -> {Destination} is waiting for {Outbound} to come up; it will go "
+                    + "through as soon as the tunnel is up, or the application will time out first",
+                    connection.ProcessId, connection.OriginalDestination, outbound.Name);
+            }
+
+            await Task.Delay(TunnelPollInterval, ct).ConfigureAwait(false);
+            instance = _outbounds.GetOrCreate(outbound);
+        }
+
+        return instance;
     }
 
     // Direct is the machine's own stack: if it had no IPv6 the process could not have opened an
