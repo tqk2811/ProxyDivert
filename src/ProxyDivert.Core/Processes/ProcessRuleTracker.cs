@@ -1,9 +1,10 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.Processes.Models;
+using ProxyDivert.Core.Routing;
 using ProxyDivert.Core.Routing.Models;
 
 namespace ProxyDivert.Core.Processes;
@@ -27,7 +28,7 @@ namespace ProxyDivert.Core.Processes;
 /// of EVERY process, not just of those that started while the tool was watching — it now works for
 /// a browser that was already open before the engine was started.
 /// </remarks>
-public sealed class ProcessRuleTracker : IDisposable
+public sealed class ProcessRuleTracker : IProcessPolicySource, IDisposable
 {
     // A child's parent may itself be a child, so following the chain takes more than one pass. The
     // depth is bounded by the process tree, not by this number; it only stops a cycle (which the
@@ -69,9 +70,31 @@ public sealed class ProcessRuleTracker : IDisposable
     public bool TryGetTracked(uint processId, out TrackedProcess? process)
         => _tracked.TryGetValue(processId, out process);
 
-    /// <summary>The pid to policies map the routing resolver needs. Each list is in priority order.</summary>
-    public IReadOnlyDictionary<uint, IReadOnlyList<Guid>> BuildPolicyMap()
-        => _tracked.ToDictionary(kv => kv.Key, kv => kv.Value.PolicyIds);
+    /// <summary>
+    /// The policies applied to one process, in priority order. This is what the router asks, once
+    /// per connection.
+    /// </summary>
+    /// <remarks>
+    /// Answered straight out of the table of tracked processes rather than copied into a second
+    /// dictionary beside it. There is no copy to go stale and nothing to keep in step at the six
+    /// places this table changes — two of which (a filter edit re-describing a process in place, a
+    /// child moved onto its parent's new policies) raise no event, so under the old shape they
+    /// reached routing only because the caller rebuilt the whole table straight afterwards.
+    ///
+    /// A TrackedProcess is immutable and replaced whole, so the list handed out here is never the
+    /// one being edited.
+    /// </remarks>
+    public bool TryGetPolicyIds(uint processId, out IReadOnlyList<Guid> policyIds)
+    {
+        if (_tracked.TryGetValue(processId, out TrackedProcess? tracked))
+        {
+            policyIds = tracked.PolicyIds;
+            return true;
+        }
+
+        policyIds = Array.Empty<Guid>();
+        return false;
+    }
 
     /// <summary>
     /// Starts matching. Every process already in the table is considered first, and only then are

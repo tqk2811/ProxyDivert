@@ -52,6 +52,14 @@ public class ProcessRuleTrackerTests
         }
     }
 
+    // The tracker IS the pid -> policies table the router reads, so this is exactly what routing
+    // would see for that process.
+    private static IReadOnlyList<Guid> Policies(Fixture fixture, uint pid)
+    {
+        Assert.True(fixture.Tracker.TryGetPolicyIds(pid, out IReadOnlyList<Guid> ids), $"pid {pid} is not tracked");
+        return ids;
+    }
+
     private static ProcessRule Rule(string pattern, params Guid[] policies)
         => new ProcessRule
         {
@@ -160,7 +168,7 @@ public class ProcessRuleTrackerTests
 
         // 101 matches the filter on its own; 102 is there only because its grandparent does.
         Assert.Equal(new uint[] { 100, 101, 102 }, fixture.Attached.Select(p => p.ProcessId).OrderBy(id => id));
-        Assert.Equal(new[] { ProxyPolicy }, fixture.Tracker.BuildPolicyMap()[102]);
+        Assert.Equal(new[] { ProxyPolicy }, Policies(fixture, 102));
     }
 
     // Windows never clears a parent id, so a long-lived process can name a pid that has since gone
@@ -215,7 +223,7 @@ public class ProcessRuleTrackerTests
         // every flow those processes had for an instant.
         Assert.Empty(fixture.Attached);
         Assert.Empty(fixture.Detached);
-        Assert.Equal(new[] { ProxyPolicy }, fixture.Tracker.BuildPolicyMap()[100]);
+        Assert.Equal(new[] { ProxyPolicy }, Policies(fixture, 100));
     }
 
     [Fact]
@@ -228,7 +236,7 @@ public class ProcessRuleTrackerTests
 
         fixture.Tracker.ApplyRules(new[] { Rule("chrome.exe", ProxyPolicy) });
 
-        Assert.Equal(new[] { ProxyPolicy }, fixture.Tracker.BuildPolicyMap()[101]);
+        Assert.Equal(new[] { ProxyPolicy }, Policies(fixture, 101));
     }
 
     [Fact]
@@ -277,7 +285,7 @@ public class ProcessRuleTrackerTests
 
         // No filter claims it, so no filter edit can take it away.
         Assert.Empty(fixture.Detached);
-        Assert.Equal(new[] { ProxyPolicy }, fixture.Tracker.BuildPolicyMap()[100]);
+        Assert.Equal(new[] { ProxyPolicy }, Policies(fixture, 100));
     }
 
     // ---- socket-sniffing mode: judged from a pid, not from a process event -------------------
@@ -338,9 +346,9 @@ public class ProcessRuleTrackerTests
         Assert.True(fixture.Tracker.ShouldRedirect(100));
 
         Assert.True(fixture.Tracker.ShouldRedirect(300));
-        Assert.Equal(new[] { DirectPolicy }, fixture.Tracker.BuildPolicyMap()[300]);
+        Assert.Equal(new[] { DirectPolicy }, Policies(fixture, 300));
         // Adopted down the chain, so the middle process is ours too rather than being skipped over.
-        Assert.Contains(200u, fixture.Tracker.BuildPolicyMap().Keys);
+        Assert.True(fixture.Tracker.TryGetPolicyIds(200, out _));
     }
 
     [Fact]

@@ -15,6 +15,7 @@ using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Processes.Enums;
 using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing;
+using ProxyDivert.Core.Routing.Compiled;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn;
@@ -58,8 +59,6 @@ public sealed class RedirectEngine : IDisposable
     // What we have learned about which outbounds can actually reach IPv6. Lives across Start/Stop
     // because it describes the proxies, not the run.
     private readonly OutboundIpv6Capability _ipv6Capability = new OutboundIpv6Capability();
-
-    private AppConfig _config = AppConfig.CreateDefault();
 
     // What the engine is running, or null while it is stopped. Volatile because it is published and
     // taken away under _stateLock but read without it, from the relay threads: a handler takes the
@@ -128,8 +127,6 @@ public sealed class RedirectEngine : IDisposable
         {
             if (IsRunning) throw new InvalidOperationException("Engine already running");
 
-            _config = config;
-
             // Before the lock. The instances outlive the run, so this picks up whatever was edited
             // while the engine was off rather than starting from an empty cache — and leaves a VPN
             // tunnel that is already up exactly where it is. Rebuilding a stale one can mean
@@ -187,7 +184,15 @@ public sealed class RedirectEngine : IDisposable
     private EngineRun BuildRun(AppConfig config)
     {
         var cts = new CancellationTokenSource();
-        var resolvers = new ResolverSlot(BuildResolver(config, new Dictionary<uint, IReadOnlyList<Guid>>()));
+
+        // Before the routing table, because the table reads which policies a pid has from it. The
+        // process table is already running and already knows every process on the machine, so
+        // starting is a matter of reading it rather than of discovering anything.
+        var tracker = new ProcessRuleTracker(_loggerFactory.CreateLogger<ProcessRuleTracker>(), _inventory);
+        tracker.ProcessAttached += OnProcessAttached;
+        tracker.ProcessDetached += OnProcessDetached;
+
+        var resolvers = new ResolverSlot(BuildResolver(config, tracker));
 
         var options = new RedirectOptions
         {
@@ -215,12 +220,6 @@ public sealed class RedirectEngine : IDisposable
         var udpForwarder = new UdpProxyForwarder(
             redirector, _loggerFactory.CreateLogger<UdpProxyForwarder>(), cts.Token);
 
-        // The process table is already running and already knows every process on the machine, so
-        // starting is a matter of reading it rather than of discovering anything.
-        var tracker = new ProcessRuleTracker(_loggerFactory.CreateLogger<ProcessRuleTracker>(), _inventory);
-        tracker.ProcessAttached += OnProcessAttached;
-        tracker.ProcessDetached += OnProcessDetached;
-
         var tcp = new TcpConnectionRouter(
             resolvers, hostNames, Connections, _liveConnections, _outbounds, _ipv6Capability,
             processName: pid => tracker.TryGetTracked(pid, out TrackedProcess? tracked) ? tracked!.Name : null,
@@ -242,8 +241,6 @@ public sealed class RedirectEngine : IDisposable
         await _lifecycle.WaitAsync().ConfigureAwait(false);
         try
         {
-            lock (_stateLock) { _config = config; }
-
             EngineRun? run = _run;
             if (run is null) return;
 
@@ -258,11 +255,16 @@ public sealed class RedirectEngine : IDisposable
             // tab.
             await ReconcileOutboundsAsync(config).ConfigureAwait(false);
 
-            lock (_stateLock)
-            {
-                run.Tracker.ApplyRules(config.ProcessRules);
-                RebuildResolver();
-            }
+            // Published BEFORE the filters are applied, and the order is the whole of it: applying
+            // filters re-describes processes one at a time, handing each the policy ids of the
+            // configuration being saved. A connection arriving in the middle has to meet a routing
+            // table that knows those ids — the other way round it would be routed by a policy that
+            // was not in the table yet, which resolves to nothing and goes direct.
+            //
+            // No lock: this is the only writer of the routing table now that attaching a process no
+            // longer rebuilds it, and two saves cannot overlap (_lifecycle).
+            run.UseResolver(BuildResolver(config, run.Tracker));
+            run.Tracker.ApplyRules(config.ProcessRules);
 
             // The connections already running are read against the new rules as well. One the new
             // configuration would route somewhere else is closed — the application reconnects, and
@@ -398,12 +400,18 @@ public sealed class RedirectEngine : IDisposable
 
     // ---- process scope ----------------------------------------------------------------------
 
+    // A process joining or leaving the redirected set no longer touches the routing table: the
+    // table reads which policies a pid has from the tracker, and the tracker has already recorded
+    // it by the time this runs. All that is left is the driver's list of pids.
+    //
+    // This is what a browser start used to cost: sixty processes attaching in a few seconds, each
+    // one rebuilding the whole routing table — re-parsing every pattern of every policy and copying
+    // the pid map — on the process-event thread, under the engine's lock.
     private void OnProcessAttached(TrackedProcess process)
     {
         try
         {
             _run?.Redirector.AddTrackedProcessId(process.ProcessId);
-            RebuildResolver();
         }
         catch (Exception ex)
         {
@@ -417,7 +425,6 @@ public sealed class RedirectEngine : IDisposable
         try
         {
             _run?.Redirector.RemoveTrackedProcessId(process.ProcessId);
-            RebuildResolver();
         }
         catch (Exception ex)
         {
@@ -426,32 +433,21 @@ public sealed class RedirectEngine : IDisposable
         ProcessDetached?.Invoke(process);
     }
 
-    // Called from two directions: the UI thread applying an edited configuration, and the process
-    // event thread every time a process is attached or detached.
-    //
-    // All of it is under the lock, and both halves have to be. Reading _config outside it let the
-    // event thread build a resolver from the configuration as it was BEFORE a save and then write
-    // that over the one ApplyConfig had just published: the log said "configuration applied" while
-    // every new connection kept following the old policies until the next attach happened to
-    // rebuild it again. Building the policy map outside it has the same shape — two attaches at
-    // once, the one that finishes second overwrites with a map that is missing the other's process.
-    private void RebuildResolver()
+    // The configuration half of routing, compiled once here and then read by every connection until
+    // the next save. The process half is not in it — the resolver asks the tracker for that.
+    private RoutingPolicyResolver BuildResolver(AppConfig config, IProcessPolicySource processes)
     {
-        lock (_stateLock)
-        {
-            // A run that has just been taken away has nothing left to route, so there is no table
-            // to rebuild for it. This used to publish one built from an empty policy map, which
-            // nothing would ever read.
-            EngineRun? run = _run;
-            if (run is null) return;
+        var resolver = new RoutingPolicyResolver(
+            CompiledRuleSet.Compile(config.Policies), config.Outbounds, processes);
 
-            run.UseResolver(BuildResolver(_config, run.Tracker.BuildPolicyMap()));
-        }
+        // A pattern nobody can parse matches nothing, on every connection, for as long as it stays
+        // in the list — and inverted it claims everything instead. Compiling is the one moment
+        // anything can say so, so it is said here rather than nowhere.
+        foreach (RulePatternError error in resolver.RuleErrors)
+            _logger.LogWarning("this rule can never match as written: {Error}", error);
+
+        return resolver;
     }
-
-    private static RoutingPolicyResolver BuildResolver(
-        AppConfig config, IReadOnlyDictionary<uint, IReadOnlyList<Guid>> policyMap)
-        => new RoutingPolicyResolver(config.Policies, config.Outbounds, policyMap);
 
     private static Uri ParseDohEndpoint(string? raw)
         => Uri.TryCreate(raw, UriKind.Absolute, out Uri? uri) ? uri : new Uri("https://1.1.1.1/dns-query");
