@@ -49,6 +49,7 @@
     <sys:String x:Key="Str.Process.UnsavedQuestion">Bộ lọc này có thay đổi chưa lưu. Đóng cửa sổ bây giờ là mất hết.</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildrenLong">Bám theo cả tiến trình con nó sinh ra</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Cả tiến trình con</sys:String>
+    <sys:String x:Key="Str.Process.MatchedFilter">Luật tiến trình</sys:String>
     <sys:String x:Key="Str.Process.Policy">Bộ luật</sys:String>
     <sys:String x:Key="Str.Process.Policies">Các bộ luật</sys:String>
     <sys:String x:Key="Str.Process.PolicyOrderHint">Rule được xét từ bộ luật trên xuống, khớp cái nào trước thì cái đó quyết định. Bộ luật đứng đầu cũng quyết định kết nối đi đâu khi không rule nào khớp, và hai thiết lập UDP với QUIC.</sys:String>

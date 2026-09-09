@@ -27,6 +27,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- Cùng lý do như ở Core: vài thứ chỉ kiểm được bằng test nhưng không nên public trên
+		     ViewModel (vd hàm dựng cây tiến trình đang áp dụng). -->
+		<InternalsVisibleTo Include="ProxyDivert.Core.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="CommunityToolkit.Mvvm" />
 		<PackageReference Include="Hardcodet.NotifyIcon.Wpf" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" />

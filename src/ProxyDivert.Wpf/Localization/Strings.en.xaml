@@ -49,6 +49,7 @@
     <sys:String x:Key="Str.Process.UnsavedQuestion">This filter has changes that have not been saved. Closing the window now loses them.</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildrenLong">Follow the processes it starts</sys:String>
     <sys:String x:Key="Str.Process.IncludeChildren">Children</sys:String>
+    <sys:String x:Key="Str.Process.MatchedFilter">Process rule</sys:String>
     <sys:String x:Key="Str.Process.Policy">Policy</sys:String>
     <sys:String x:Key="Str.Process.Policies">Policies</sys:String>
     <sys:String x:Key="Str.Process.PolicyOrderHint">Rules are tried from the top policy down, and the first one that matches decides. The top policy also decides where a connection goes when nothing matches, and the UDP and QUIC settings.</sys:String>

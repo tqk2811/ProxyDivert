@@ -46,6 +46,20 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
     [ObservableProperty]
     private AppliedProcessNode? _selectedProcess;
 
+    // The column widths of the redirected-process tree. They live here rather than in the view
+    // because a tree has no columns of its own: the headings and every row bind to these numbers,
+    // which is what makes them line up, and dragging the splitter in the heading writes the new
+    // width back here. Keeping them on the view model also means a tab switch does not throw the
+    // arrangement away.
+    [ObservableProperty]
+    private double _appliedPidWidth = 64;
+
+    [ObservableProperty]
+    private double _appliedNameWidth = 190;
+
+    [ObservableProperty]
+    private double _appliedFilterWidth = 190;
+
     public ProcessesViewModel(AppServices services)
     {
         _services = services;
@@ -73,19 +87,27 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
     {
         AppliedProcesses.Clear();
 
-        Dictionary<Guid, string> policyNames = Policies
-            .GroupBy(p => p.Id)
-            .ToDictionary(g => g.Key, g => g.First().Name);
+        foreach (AppliedProcessNode root in BuildTree(_services.Engine.TrackedProcesses))
+            AppliedProcesses.Add(root);
+    }
 
-        List<TrackedProcess> tracked = _services.Engine.TrackedProcesses
+    /// <summary>The redirected processes as the tab shows them: roots, with adopted children under them.</summary>
+    internal static List<AppliedProcessNode> BuildTree(IEnumerable<TrackedProcess> processes)
+    {
+        List<TrackedProcess> tracked = processes
             .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(p => p.ProcessId)
             .ToList();
 
-        Dictionary<uint, AppliedProcessNode> nodes = tracked.ToDictionary(
-            p => p.ProcessId,
-            p => new AppliedProcessNode(
-                p, PolicyNames(p, policyNames)));
+        Dictionary<uint, TrackedProcess> byId = tracked
+            .GroupBy(p => p.ProcessId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        Dictionary<uint, AppliedProcessNode> nodes = byId.ToDictionary(
+            kv => kv.Key,
+            kv => new AppliedProcessNode(kv.Value, FilterName(kv.Value, byId)));
+
+        var roots = new List<AppliedProcessNode>();
 
         foreach (TrackedProcess process in tracked)
         {
@@ -101,23 +123,42 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
             }
             else
             {
-                AppliedProcesses.Add(node);
+                roots.Add(node);
             }
         }
+
+        return roots;
     }
 
-    // What the redirected-process list shows in its policy column. A process is routed by the whole
-    // list its filter named, in order, so the column says so — the first one alone would hide where
-    // half the rules came from.
-    private static string PolicyNames(TrackedProcess process, IReadOnlyDictionary<Guid, string> names)
+    // Which filter put this process under redirection. The tracker remembers it only on the process
+    // that actually matched one, so an adopted child has to be traced back up to whichever ancestor
+    // did — that is the filter whose action it is being routed by, and the one to go and edit.
+    //
+    // The walk is bounded rather than trusting the chain to end: pids are reused, and a chain that
+    // loops back on itself would hang the window rather than show a wrong name.
+    private static string FilterName(TrackedProcess process, IReadOnlyDictionary<uint, TrackedProcess> byId)
     {
-        var found = process.PolicyIds
-            .Select(id => names.TryGetValue(id, out string? name) ? name : null)
-            .Where(name => name != null)
-            .ToList();
+        TrackedProcess at = process;
 
-        return found.Count > 0 ? string.Join(" → ", found) : "—";
+        for (int step = 0; step < MaxParentSteps; step++)
+        {
+            if (at.MatchedRule != null) return at.MatchedRule.Name;
+
+            if (at.ParentProcessId == 0
+                || !byId.TryGetValue(at.ParentProcessId, out TrackedProcess? parent)
+                || ReferenceEquals(parent, at)) break;
+
+            at = parent;
+        }
+
+        // Nothing matched anywhere up the chain: the caller named this pid itself, through
+        // --pid or Launch suspended, so no filter describes it.
+        return "—";
     }
+
+    // Deep enough for any real process tree; short enough that a reused pid pointing at its own
+    // descendant cannot spin here.
+    private const int MaxParentSteps = 64;
 
     // Adding opens the editor straight away rather than dropping a blank row into the list. A
     // filter that exists but says nothing is a row the user has to notice and then go fix, and an
@@ -359,8 +400,16 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
         public string Name { get; }
         public string? Path { get; }
 
-        /// <summary>Name of the policy this process routes through.</summary>
-        public string Policy { get; }
+        /// <summary>
+        /// The filter that put this process under redirection — its parent's for an adopted child,
+        /// since that is the one that caught it.
+        /// </summary>
+        /// <remarks>
+        /// The policies it routes by are not repeated here. They are a property of the filter, the
+        /// grid above lists them against it, and a filter naming three of them made this column the
+        /// widest thing in the tab while saying nothing that could be acted on.
+        /// </remarks>
+        public string Filter { get; }
 
         /// <summary>True when no rule named this process: it came along with its parent.</summary>
         public bool IsChild { get; }
@@ -368,12 +417,12 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
         public ObservableCollection<AppliedProcessNode> Children { get; }
             = new ObservableCollection<AppliedProcessNode>();
 
-        public AppliedProcessNode(TrackedProcess process, string policyName)
+        public AppliedProcessNode(TrackedProcess process, string filterName)
         {
             Id = process.ProcessId;
             Name = process.Name;
             Path = process.ExecutablePath;
-            Policy = policyName;
+            Filter = filterName;
             IsChild = process.IsChild;
         }
     }

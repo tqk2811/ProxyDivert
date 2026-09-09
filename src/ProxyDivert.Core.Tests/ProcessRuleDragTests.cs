@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -41,9 +40,9 @@ public class ProcessRuleDragTests
             object? handler = null;
             int grips = 0;
 
-            RunOnStaThread(() =>
+            WpfHost.RunOnStaThread(() =>
             {
-                EnsureApplication();
+                WpfHost.EnsureApplication();
 
                 var stub = new ListStub();
                 stub.Rules.Add(Filter("one.exe"));
@@ -55,23 +54,23 @@ public class ProcessRuleDragTests
                 window.Show();
                 view.UpdateLayout();
 
-                DataGrid grid = Descendants<DataGrid>(view).First();
-                DataGridRow second = Descendants<DataGridRow>(grid)
+                DataGrid grid = WpfHost.Descendants<DataGrid>(view).First();
+                DataGridRow second = WpfHost.Descendants<DataGridRow>(grid)
                     .First(row => ReferenceEquals(row.DataContext, stub.Rules[1]));
 
-                grips = Descendants<FrameworkElement>(grid)
+                grips = WpfHost.Descendants<FrameworkElement>(grid)
                     .Count(element => DragReorderBehavior.GetIsDragHandle(element));
 
                 // Over a cell, which is what the pointer is actually over on a grid: the row it
                 // belongs to has to be the thing that answers.
-                DataGridCell cell = Descendants<DataGridCell>(second).First();
+                DataGridCell cell = WpfHost.Descendants<DataGridCell>(second).First();
                 Point point = cell.TransformToAncestor(grid)
                     .Transform(new Point(cell.ActualWidth / 2, cell.ActualHeight / 2));
 
                 (kind, droppedOn, handler) = ZoneUnder(grid, point);
 
                 window.Close();
-            });
+            }, "The rules grid");
 
             Assert.Equal(DropZoneKind.Row, kind);
             Assert.IsType<ProcessRule>(droppedOn);
@@ -120,46 +119,6 @@ public class ProcessRuleDragTests
             }
 
             return (DropZoneKind.None, null, null);
-        }
-
-        private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
-        {
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                DependencyObject child = VisualTreeHelper.GetChild(root, i);
-                if (child is T match) yield return match;
-
-                foreach (T deeper in Descendants<T>(child)) yield return deeper;
-            }
-        }
-
-        private static void EnsureApplication()
-        {
-            if (Application.Current == null)
-            {
-                var application = new ProxyDivert.Wpf.App();
-                application.InitializeComponent();
-            }
-
-            if (Application.Current.CheckAccess())
-                Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        }
-
-        private static void RunOnStaThread(Action action)
-        {
-            Exception? failure = null;
-            var thread = new Thread(() =>
-            {
-                try { action(); }
-                catch (Exception ex) { failure = ex; }
-            });
-
-            thread.SetApartmentState(ApartmentState.STA);
-            thread.Start();
-            thread.Join();
-
-            if (failure != null) throw new Xunit.Sdk.XunitException($"The rules grid failed to answer: {failure}");
         }
     }
 

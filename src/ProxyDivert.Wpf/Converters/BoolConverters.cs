@@ -57,3 +57,19 @@ public sealed class SameObjectConverter : IMultiValueConverter
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+// A column width kept as a plain number, so the rows of a tree can follow the header that a
+// GridSplitter is dragging.
+//
+// A tree is not a grid: its rows are drawn by a template, one per row, and nothing lines their
+// cells up with the headings above them. Binding both the heading's column and the cell to the
+// same number does line them up, and the splitter writes the new width back through this on its
+// way — which is what makes the drag reach the rows at all.
+public sealed class PixelWidthConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is double width ? new GridLength(width, GridUnitType.Pixel) : GridLength.Auto;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is GridLength length && length.IsAbsolute ? length.Value : 0d;
+}

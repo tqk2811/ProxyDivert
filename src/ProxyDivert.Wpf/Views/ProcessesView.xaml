@@ -146,34 +146,83 @@
                 </StackPanel>
 
                 <!-- Column headings for the tree below. They cannot line up with the deeper rows —
-                     a child is indented, that is the point of a tree — so they label the roots. -->
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="18,0,0,4">
-                    <TextBlock Style="{StaticResource Subtle}" Width="64" Text="{DynamicResource Str.Process.Pid}"/>
-                    <TextBlock Style="{StaticResource Subtle}" Width="190" Text="{DynamicResource Str.App.Name}"/>
-                    <TextBlock Style="{StaticResource Subtle}" Width="150" Text="{DynamicResource Str.Process.Policy}"/>
-                    <TextBlock Style="{StaticResource Subtle}" Text="{DynamicResource Str.Process.Path}"/>
-                </StackPanel>
+                     a child is indented, that is the point of a tree — so they label the roots.
+                     They are not buttons and nothing sorts on a click: the tree stands in one
+                     order, parents with their children under them, and sorting it by a column
+                     would take that apart.
+
+                     The widths live on the view model, and the rows below bind to the same three
+                     numbers. That is what carries a splitter drag down into the rows — a tree has
+                     no columns of its own to widen. -->
+                <Grid DockPanel.Dock="Top" Margin="18,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition MinWidth="40"
+                                          Width="{Binding AppliedPidWidth, Mode=TwoWay,
+                                                  Converter={StaticResource PixelWidth}}"/>
+                        <ColumnDefinition MinWidth="60"
+                                          Width="{Binding AppliedNameWidth, Mode=TwoWay,
+                                                  Converter={StaticResource PixelWidth}}"/>
+                        <ColumnDefinition MinWidth="60"
+                                          Width="{Binding AppliedFilterWidth, Mode=TwoWay,
+                                                  Converter={StaticResource PixelWidth}}"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Style="{StaticResource Subtle}"
+                               Text="{DynamicResource Str.Process.Pid}"/>
+                    <TextBlock Grid.Column="1" Style="{StaticResource Subtle}"
+                               Text="{DynamicResource Str.App.Name}"/>
+                    <TextBlock Grid.Column="2" Style="{StaticResource Subtle}"
+                               Text="{DynamicResource Str.Process.MatchedFilter}"/>
+                    <TextBlock Grid.Column="3" Style="{StaticResource Subtle}"
+                               Text="{DynamicResource Str.Process.Path}"/>
+
+                    <!-- Invisible, and hanging off the right edge of the column it widens: a
+                         visible bar between two headings would read as a border. -->
+                    <GridSplitter Grid.Column="0" Style="{StaticResource ColumnSplitter}"/>
+                    <GridSplitter Grid.Column="1" Style="{StaticResource ColumnSplitter}"/>
+                    <GridSplitter Grid.Column="2" Style="{StaticResource ColumnSplitter}"/>
+                </Grid>
 
                 <Grid>
                     <TreeView ItemsSource="{Binding AppliedProcesses}"
                               SelectedItemChanged="AppliedProcesses_SelectedItemChanged">
                         <TreeView.ItemTemplate>
                             <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                <!-- The widths come from the same three numbers the headings use,
+                                     through the proxy: a row is drawn by this template, and inside
+                                     one there is no ancestor to reach the view model by. -->
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding Id}" Width="64"
+                                    <TextBlock Text="{Binding Id}"
+                                               Width="{Binding Data.AppliedPidWidth, Source={StaticResource Vm}}"
                                                Foreground="{DynamicResource Brush.Text.Secondary}"/>
-                                    <TextBlock Text="{Binding Name}" Width="190" FontWeight="SemiBold"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{Binding Policy}" Width="150"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <Border CornerRadius="8" Padding="7,1" Margin="0,0,8,0"
-                                            VerticalAlignment="Center"
-                                            Background="{DynamicResource Brush.Accent.Subtle}"
-                                            Visibility="{Binding IsChild, Converter={StaticResource TrueToVisible}}">
-                                        <TextBlock Text="{DynamicResource Str.Process.Inherited}" FontSize="11"/>
-                                    </Border>
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                               Width="{Binding Data.AppliedNameWidth, Source={StaticResource Vm}}"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding Name}"/>
+
+                                    <!-- Which filter caught this process, rather than which policies
+                                         that filter routes it by: the policies belong to the filter
+                                         and are listed against it in the grid above, while the
+                                         filter is the thing to go and edit. An adopted child shows
+                                         its parent's, because that is the one that caught it — and
+                                         the badge beside it says so. -->
+                                    <StackPanel Orientation="Horizontal"
+                                                Width="{Binding Data.AppliedFilterWidth, Source={StaticResource Vm}}">
+                                        <TextBlock Text="{Binding Filter}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Filter}"/>
+                                        <Border CornerRadius="8" Padding="7,1" Margin="6,0,0,0"
+                                                VerticalAlignment="Center"
+                                                Background="{DynamicResource Brush.Accent.Subtle}"
+                                                Visibility="{Binding IsChild, Converter={StaticResource TrueToVisible}}">
+                                            <TextBlock Text="{DynamicResource Str.Process.Inherited}" FontSize="11"/>
+                                        </Border>
+                                    </StackPanel>
+
                                     <TextBlock Text="{Binding Path}" Style="{StaticResource Subtle}"
-                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding Path}"/>
                                 </StackPanel>
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>

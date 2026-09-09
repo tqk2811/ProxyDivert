@@ -30,6 +30,7 @@
             <conv:ConditionSummaryConverter x:Key="ConditionSummary"/>
             <conv:PolicyNamesConverter x:Key="PolicyNames"/>
             <conv:SameObjectConverter x:Key="SameObject"/>
+            <conv:PixelWidthConverter x:Key="PixelWidth"/>
             <conv:VpnTunnelForOutboundConverter x:Key="VpnTunnelForOutbound"/>
             <conv:VpnConnectButtonTextConverter x:Key="VpnConnectButtonText"/>
 

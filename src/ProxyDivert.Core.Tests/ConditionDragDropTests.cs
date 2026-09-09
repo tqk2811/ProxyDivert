@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -35,7 +34,7 @@ public class ConditionDragDropTests
         object? hitContext = null;
         object? expected = null;
 
-        RunOnStaThread(() =>
+        WpfHost.RunOnStaThread(() =>
         {
             using Editor editor = Editor.Open();
 
@@ -43,10 +42,10 @@ public class ConditionDragDropTests
             expected = leaf;
 
             FrameworkElement row = editor.ZoneOf(editor.Tree, leaf, DropZoneKind.Row);
-            TextBox pattern = Descendants<TextBox>(row).First();
+            TextBox pattern = WpfHost.Descendants<TextBox>(row).First();
 
             (kind, hitContext) = editor.ZoneUnder(editor.Tree, Centre(pattern, editor.Tree));
-        });
+        }, "The filter editor");
 
         Assert.Equal(DropZoneKind.Row, kind);
         Assert.Same(expected, hitContext);
@@ -62,7 +61,7 @@ public class ConditionDragDropTests
         object? hitContext = null;
         object? expected = null;
 
-        RunOnStaThread(() =>
+        WpfHost.RunOnStaThread(() =>
         {
             using Editor editor = Editor.Open();
 
@@ -75,7 +74,7 @@ public class ConditionDragDropTests
 
             (kind, hitContext) = editor.ZoneUnder(
                 editor.Tree, bracket.TransformToAncestor(editor.Tree).Transform(strip));
-        });
+        }, "The filter editor");
 
         Assert.Equal(DropZoneKind.GroupTail, kind);
         Assert.Same(expected, hitContext);
@@ -90,7 +89,7 @@ public class ConditionDragDropTests
         object? hitContext = null;
         object? expected = null;
 
-        RunOnStaThread(() =>
+        WpfHost.RunOnStaThread(() =>
         {
             using Editor editor = Editor.Open();
 
@@ -98,10 +97,10 @@ public class ConditionDragDropTests
             expected = policy;
 
             FrameworkElement row = editor.ZoneOf(editor.Actions, policy, DropZoneKind.Row);
-            CheckBox tick = Descendants<CheckBox>(row).First();
+            CheckBox tick = WpfHost.Descendants<CheckBox>(row).First();
 
             (kind, hitContext) = editor.ZoneUnder(editor.Actions, Centre(tick, editor.Actions));
-        });
+        }, "The filter editor");
 
         Assert.Equal(DropZoneKind.Row, kind);
         Assert.Same(expected, hitContext);
@@ -116,25 +115,25 @@ public class ConditionDragDropTests
         int rows = 0;
         bool rootHasOne = false;
 
-        RunOnStaThread(() =>
+        WpfHost.RunOnStaThread(() =>
         {
             using Editor editor = Editor.Open();
 
-            grips = Descendants<FrameworkElement>(editor.Tree)
+            grips = WpfHost.Descendants<FrameworkElement>(editor.Tree)
                 .Count(element => DragReorderBehavior.GetIsDragHandle(element)
                                   && element.IsVisible);
 
             // One condition at the top level, the bracket, and the two conditions inside it, plus
             // the outermost group's own row.
-            rows = Descendants<FrameworkElement>(editor.Tree)
+            rows = WpfHost.Descendants<FrameworkElement>(editor.Tree)
                 .Count(element => DragReorderBehavior.GetDropZone(element) is DropZoneKind.Row
                                                                            or DropZoneKind.GroupHeader);
 
-            rootHasOne = Descendants<FrameworkElement>(editor.Tree)
+            rootHasOne = WpfHost.Descendants<FrameworkElement>(editor.Tree)
                 .Any(element => DragReorderBehavior.GetIsDragHandle(element)
                                 && element.IsVisible
                                 && ReferenceEquals(element.DataContext, editor.Model.Root));
-        });
+        }, "The filter editor");
 
         Assert.Equal(rows - 1, grips);
         Assert.False(rootHasOne, "The outermost group offers a grip that cannot lead anywhere.");
@@ -162,7 +161,7 @@ public class ConditionDragDropTests
 
         public static Editor Open()
         {
-            EnsureApplication();
+            WpfHost.EnsureApplication();
 
             var policy = new RoutingPolicy
             {
@@ -177,16 +176,16 @@ public class ConditionDragDropTests
             window.Show();
             window.UpdateLayout();
 
-            List<ScrollViewer> surfaces = Descendants<ScrollViewer>(window)
+            List<ScrollViewer> surfaces = WpfHost.Descendants<ScrollViewer>(window)
                 .Where(DragReorderBehavior.GetIsDropSurface)
                 .ToList();
 
             return new Editor(window, model)
             {
-                Tree = surfaces.First(surface => Descendants<ContentControl>(surface)
+                Tree = surfaces.First(surface => WpfHost.Descendants<ContentControl>(surface)
                     .Any(content => content.Content is ConditionGroupViewModel)),
 
-                Actions = surfaces.First(surface => Descendants<ItemsControl>(surface)
+                Actions = surfaces.First(surface => WpfHost.Descendants<ItemsControl>(surface)
                     .Any(list => list.ItemsSource is IEnumerable<ProcessFilterViewModel.PolicyChoice>)),
             };
         }
@@ -195,7 +194,7 @@ public class ConditionDragDropTests
 
         /// <summary>The element that stands for one row, as the drag sees it.</summary>
         public FrameworkElement ZoneOf(ScrollViewer surface, object row, DropZoneKind kind)
-            => Descendants<FrameworkElement>(surface)
+            => WpfHost.Descendants<FrameworkElement>(surface)
                 .First(element => DragReorderBehavior.GetDropZone(element) == kind
                                   && ReferenceEquals(element.DataContext, row));
 
@@ -245,45 +244,4 @@ public class ConditionDragDropTests
                 },
             },
         };
-
-    private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
-    {
-        int count = VisualTreeHelper.GetChildrenCount(root);
-        for (int i = 0; i < count; i++)
-        {
-            DependencyObject child = VisualTreeHelper.GetChild(root, i);
-            if (child is T match) yield return match;
-
-            foreach (T deeper in Descendants<T>(child)) yield return deeper;
-        }
-    }
-
-    // One Application per process, and the tests that build views share it; see the WPF collection.
-    private static void EnsureApplication()
-    {
-        if (Application.Current == null)
-        {
-            var application = new ProxyDivert.Wpf.App();
-            application.InitializeComponent();
-        }
-
-        if (Application.Current.CheckAccess())
-            Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-    }
-
-    private static void RunOnStaThread(Action action)
-    {
-        Exception? failure = null;
-        var thread = new Thread(() =>
-        {
-            try { action(); }
-            catch (Exception ex) { failure = ex; }
-        });
-
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-
-        if (failure != null) throw new Xunit.Sdk.XunitException($"The filter editor failed to answer: {failure}");
-    }
 }
