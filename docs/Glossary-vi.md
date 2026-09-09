@@ -485,3 +485,26 @@ Nên tổng thời gian người dùng thấy khi tự bật lúc khởi động
 ## Hạn quay số VPN (ConnectTimeout)
 
 `VpnTunnelOptions.ConnectTimeout`, mặc định **90 giây**, là hạn cho **toàn bộ** cuộc quay số của driver VpnClient. Nó đo tổng thời gian chứ không đo **tiến triển**: một cuộc bắt tay chết đứng ở bước 3/6 vẫn ngồi đủ 90 giây rồi mới trả `OperationCanceledException`, dù ngay từ giây thứ 2 đã biết là hỏng (đường bắt tay lành lặn chỉ mất 4–7 s). Hạn theo tiến triển (bao lâu không nhận được gói nào từ máy chủ) biến 90 s thành vài giây, và đó là khác biệt giữa "chờ một phút rưỡi" với "thấy nó thử lại ngay".
+
+## Routed event của WPF (tunnel / bubble)
+
+Sự kiện đầu vào của WPF đi hai chặng: **tunnel** (`Preview*`) chạy từ phần tử NGOÀI CÙNG vào trong
+tới phần tử bị chạm, rồi **bubble** chạy ngược từ trong ra ngoài. Ai xử lý trước đặt `e.Handled` thì
+những chặng sau không nhận nữa. Với template lồng nhau (dòng trong nhóm, nhóm trong nhóm) điều này
+nghĩa là gắn handler theo từng dòng rất dễ để phần tử SAI trả lời: bubble thì ComboBox/TextBox trong
+dòng trả lời trước, còn tunnel thì nhóm ngoài cùng trả lời trước.
+
+## Hit-test (dò phần tử dưới con trỏ)
+
+`VisualTreeHelper.HitTest(gốc, điểm)` trả về phần tử đang thực sự nằm dưới một toạ độ. Ngược với
+routed event: thay vì hỏi "sự kiện này bubble tới ai", nó hỏi thẳng "cái gì đang ở dưới con trỏ",
+rồi đi ngược cây visual lên tìm tổ tiên gần nhất được đánh dấu. Đây là cách kéo thả trong cửa sổ bộ
+lọc xác định vùng thả. **Bẫy:** phần tử KHÔNG có `Background` (hoặc để `null`) thì trong suốt với
+hit-test — chuột xuyên qua nó xuống phần tử phía sau; phải đặt `Background="Transparent"`.
+
+## Attached property (thuộc tính gắn kèm)
+
+Thuộc tính do một lớp khác định nghĩa nhưng gắn lên phần tử bất kỳ trong XAML (dạng
+`b:DragReorderBehavior.DropZone="Row"`). Dùng để dán hành vi hoặc dữ liệu phụ lên phần tử mà không
+phải kế thừa hay viết code-behind cho từng view; vì nó là dependency property nên style/trigger bind
+được vào nó và tự cập nhật khi giá trị đổi.
