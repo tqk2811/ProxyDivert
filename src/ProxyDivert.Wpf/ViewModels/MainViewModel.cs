@@ -23,7 +23,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public SettingsViewModel Settings { get; }
 
     [ObservableProperty]
-    private bool _isRunning;
+    [NotifyPropertyChangedFor(nameof(IsRunning))]
+    [NotifyPropertyChangedFor(nameof(IsSwitchedOn))]
+    [NotifyPropertyChangedFor(nameof(IsBusy))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleEngineCommand))]
+    private EngineState _state;
+
+    /// <summary>True only once redirection is actually happening.</summary>
+    public bool IsRunning => State == EngineState.Running;
+
+    /// <summary>
+    /// Where the knob sits: on the right unless redirection is fully off. It moves to the right the
+    /// moment Start is asked for and comes back only once Stop has finished, so the knob never
+    /// claims the engine is gone while its driver handles are still closing.
+    /// </summary>
+    public bool IsSwitchedOn => State != EngineState.Stopped;
+
+    /// <summary>
+    /// True while the engine is coming up or going down. The switch is painted a third colour and
+    /// refuses a second press: starting opens the driver and dials tunnels, and a click landing in
+    /// the middle of that would be asking for a stop of something that is not up yet.
+    /// </summary>
+    public bool IsBusy => State is EngineState.Starting or EngineState.Stopping;
 
     /// <summary>
     /// Which tab is showing. Bound so that switching tabs can refresh what the new one displays.
@@ -110,16 +131,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // the engine is doing now, not by which control was pressed. Asynchronous because starting
     // opens the driver and stopping waits for it to let go — neither belongs on the thread that
     // paints the window — and the command stays disabled until the switch has actually moved.
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanToggleEngine))]
     private async Task ToggleEngine()
     {
         if (IsRunning) await StopAsync();
         else await StartAsync();
 
-        // The switch moved itself the moment it was clicked. If Start threw, IsRunning never
-        // changed and nothing would push the knob back — so say so explicitly either way.
-        OnPropertyChanged(nameof(IsRunning));
+        // The switch moved itself the moment it was clicked. If Start threw, State went back to
+        // Stopped and nothing would push the knob back — so say so explicitly either way.
+        OnPropertyChanged(nameof(IsSwitchedOn));
     }
+
+    private bool CanToggleEngine() => !IsBusy;
 
     /// <summary>
     /// Puts the switch back where the user left it at the end of the last run. Called once at
@@ -139,16 +162,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         await StartAsync();
-        OnPropertyChanged(nameof(IsRunning));
+        OnPropertyChanged(nameof(IsSwitchedOn));
     }
 
     private async Task StartAsync()
     {
-        if (IsRunning) return;
+        if (State != EngineState.Stopped) return;
+        // Set before the await, so the knob is already over on the right and painted "coming up"
+        // while the driver opens and the tunnels dial — seconds during which the old switch simply
+        // sat on the left and looked like nothing had been clicked.
+        State = EngineState.Starting;
         try
         {
             await _services.StartEngineAsync();
-            IsRunning = true;
+            State = EngineState.Running;
             StatusMessage = null;
             RememberEngineState();
             Processes.RefreshApplied();
@@ -163,15 +190,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             StatusMessage = $"{ex.GetType().Name}: {ex.Message}";
             // Leave nothing half-started: a failed Start must not leave WinDivert handles open.
             try { await _services.StopEngineAsync(); } catch { }
-            IsRunning = false;
+            State = EngineState.Stopped;
         }
     }
 
     private async Task StopAsync()
     {
-        if (!IsRunning) return;
-        await _services.StopEngineAsync();
-        IsRunning = false;
+        if (State != EngineState.Running) return;
+        State = EngineState.Stopping;
+        try
+        {
+            await _services.StopEngineAsync();
+        }
+        finally
+        {
+            // Whatever the driver did on the way down, the window is no longer redirecting: leaving
+            // the switch stuck on "going down" would mean it could never be pressed again.
+            State = EngineState.Stopped;
+        }
+
         RememberEngineState();
         // Nothing is being redirected any more, so the tree must not keep claiming otherwise.
         Processes.RefreshApplied();

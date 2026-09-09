@@ -27,7 +27,7 @@
                      vì WinDivert nạp driver kernel nên có bấm cũng không lên. -->
                 <MenuItem Header="{DynamicResource Str.Tray.Engine}"
                           IsCheckable="True"
-                          IsChecked="{Binding ViewModel.IsRunning, Mode=OneWay}"
+                          IsChecked="{Binding ViewModel.IsSwitchedOn, Mode=OneWay}"
                           IsEnabled="{Binding ViewModel.IsElevated}"
                           Command="{Binding ViewModel.ToggleEngineCommand}"/>
 

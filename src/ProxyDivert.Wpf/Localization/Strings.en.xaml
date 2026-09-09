@@ -8,6 +8,8 @@
     <sys:String x:Key="Str.App.Title">ProxyDivert</sys:String>
     <sys:String x:Key="Str.App.Running">Running</sys:String>
     <sys:String x:Key="Str.App.Stopped">Stopped</sys:String>
+    <sys:String x:Key="Str.App.Starting">Starting…</sys:String>
+    <sys:String x:Key="Str.App.Stopping">Stopping…</sys:String>
     <sys:String x:Key="Str.App.RestoreNeedsAdmin">Redirection was on when the tool last closed, but it cannot be switched back on without administrator rights.</sys:String>
     <sys:String x:Key="Str.App.Save">Save</sys:String>
     <sys:String x:Key="Str.App.Add">Add</sys:String>

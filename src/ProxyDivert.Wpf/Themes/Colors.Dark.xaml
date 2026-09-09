@@ -46,6 +46,8 @@
     <!-- Engine switch -->
     <SolidColorBrush x:Key="Brush.Switch.On" Color="#2FBF71"/>
     <SolidColorBrush x:Key="Brush.Switch.Off" Color="#3A4257"/>
+    <!-- Neither on nor off: the engine is coming up or going down. -->
+    <SolidColorBrush x:Key="Brush.Switch.Busy" Color="#E0A72C"/>
 
     <!-- Window caption buttons -->
     <SolidColorBrush x:Key="Brush.WindowButton.Foreground" Color="#C7CCD8"/>
