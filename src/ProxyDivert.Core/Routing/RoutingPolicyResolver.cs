@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProxyDivert.Core.Routing.Compiled;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 
@@ -8,31 +9,34 @@ namespace ProxyDivert.Core.Routing;
 
 // Turns (process, destination) into "which outbound".
 //
-// The resolver holds an immutable snapshot of the configuration: policies, outbounds, and the
-// pid -> policy assignments the process watcher has made. Editing the config builds a NEW resolver
-// rather than mutating this one, so a connection being routed right now can never observe a
-// half-applied rule change.
+// The resolver holds an immutable snapshot of the configuration: the compiled policies and the
+// outbounds. Editing the config builds a NEW resolver rather than mutating this one, so a
+// connection being routed right now can never observe a half-applied rule change.
+//
+// The pid -> policy assignments are NOT part of that snapshot: they are read live from whoever
+// tracks processes. Which process is under redirection changes several times a minute on a machine
+// running a browser, and rebuilding the whole table for each one meant re-parsing every pattern of
+// every policy sixty times over a browser start. Each pid's list of policy ids is itself replaced
+// whole, never edited in place, so a connection still resolves against one coherent list.
 //
 // A pid with no assignment resolves to the fallback policy (normally "everything direct"), which
 // matters because the relay can see a connection from a process the watcher has just dropped.
 public sealed class RoutingPolicyResolver
 {
-    private readonly IReadOnlyDictionary<Guid, RoutingPolicy> _policies;
+    private readonly CompiledRuleSet _ruleSet;
     private readonly IReadOnlyDictionary<Guid, Outbound> _outbounds;
-    private readonly IReadOnlyDictionary<uint, IReadOnlyList<Guid>> _policiesByProcessId;
-    private readonly RoutingPolicy _fallbackPolicy;
+    private readonly IProcessPolicySource _policiesByProcessId;
+    private readonly CompiledPolicy _fallbackPolicy;
 
     public RoutingPolicyResolver(
-        IEnumerable<RoutingPolicy> policies,
+        CompiledRuleSet ruleSet,
         IEnumerable<Outbound> outbounds,
-        IReadOnlyDictionary<uint, IReadOnlyList<Guid>> policiesByProcessId,
+        IProcessPolicySource policiesByProcessId,
         RoutingPolicy? fallbackPolicy = null)
     {
-        if (policies is null) throw new ArgumentNullException(nameof(policies));
+        _ruleSet = ruleSet ?? throw new ArgumentNullException(nameof(ruleSet));
         if (outbounds is null) throw new ArgumentNullException(nameof(outbounds));
-
-        _policies = policies.ToDictionary(p => p.Id);
-        _policiesByProcessId = policiesByProcessId ?? new Dictionary<uint, IReadOnlyList<Guid>>();
+        _policiesByProcessId = policiesByProcessId ?? ProcessPolicyMap.Empty;
 
         var byId = outbounds.ToDictionary(o => o.Id);
         // The two built-ins always resolve, whether or not the user's list contains them.
@@ -40,37 +44,61 @@ public sealed class RoutingPolicyResolver
         if (!byId.ContainsKey(Outbound.BlockId)) byId[Outbound.BlockId] = Outbound.CreateBlock();
         _outbounds = byId;
 
-        _fallbackPolicy = fallbackPolicy ?? new RoutingPolicy
+        _fallbackPolicy = CompiledRuleSet.CompilePolicy(fallbackPolicy ?? new RoutingPolicy
         {
             Id = Guid.Empty,
             Name = "Untracked",
             OutboundId = Outbound.DirectId,
-        };
+        });
     }
+
+    /// <summary>
+    /// Compiles the policies and resolves against a fixed pid map. For callers that have a
+    /// configuration and nothing tracking processes — tests, and one-off questions about what a
+    /// configuration would do.
+    /// </summary>
+    public RoutingPolicyResolver(
+        IEnumerable<RoutingPolicy> policies,
+        IEnumerable<Outbound> outbounds,
+        IReadOnlyDictionary<uint, IReadOnlyList<Guid>>? policiesByProcessId,
+        RoutingPolicy? fallbackPolicy = null)
+        : this(
+            CompiledRuleSet.Compile(policies ?? throw new ArgumentNullException(nameof(policies))),
+            outbounds,
+            ProcessPolicyMap.From(policiesByProcessId),
+            fallbackPolicy)
+    {
+    }
+
+    /// <summary>The rules of this configuration that could not be parsed. Empty when all of them can.</summary>
+    public IReadOnlyList<RulePatternError> RuleErrors => _ruleSet.Errors;
 
     /// <summary>
     /// The policies applied to this process, in the order the filter listed them. Empty never
     /// happens: a process nothing claims gets the fallback policy.
     /// </summary>
     public IReadOnlyList<RoutingPolicy> GetPolicies(uint processId)
-    {
-        if (!_policiesByProcessId.TryGetValue(processId, out IReadOnlyList<Guid>? ids) || ids.Count == 0)
-            return new[] { _fallbackPolicy };
-
-        // A policy the user deleted while its filter still names it is skipped rather than faked:
-        // its rules are gone, and pretending otherwise would route by a list nobody can see.
-        var found = new List<RoutingPolicy>(ids.Count);
-        foreach (Guid id in ids)
-            if (_policies.TryGetValue(id, out RoutingPolicy? policy)) found.Add(policy);
-
-        return found.Count > 0 ? found : new[] { _fallbackPolicy };
-    }
+        => GetCompiledPolicies(processId).Select(p => p.Source).ToList();
 
     /// <summary>
     /// The policy whose own settings apply to this process — the first one the filter listed. The
     /// rest contribute rules only.
     /// </summary>
-    public RoutingPolicy GetPolicy(uint processId) => GetPolicies(processId)[0];
+    public RoutingPolicy GetPolicy(uint processId) => GetCompiledPolicies(processId)[0].Source;
+
+    private IReadOnlyList<CompiledPolicy> GetCompiledPolicies(uint processId)
+    {
+        if (!_policiesByProcessId.TryGetPolicyIds(processId, out IReadOnlyList<Guid> ids) || ids.Count == 0)
+            return new[] { _fallbackPolicy };
+
+        // A policy the user deleted while its filter still names it is skipped rather than faked:
+        // its rules are gone, and pretending otherwise would route by a list nobody can see.
+        var found = new List<CompiledPolicy>(ids.Count);
+        foreach (Guid id in ids)
+            if (_ruleSet.TryGetPolicy(id, out CompiledPolicy? policy)) found.Add(policy!);
+
+        return found.Count > 0 ? found : new[] { _fallbackPolicy };
+    }
 
     // First matching enabled rule wins, across every policy in turn: all of the first policy's
     // rules in their own Order, then the second policy's, and so on. That is what the order in the
@@ -85,23 +113,23 @@ public sealed class RoutingPolicyResolver
     public RouteDecision Resolve(RouteTarget target)
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
-        IReadOnlyList<RoutingPolicy> policies = GetPolicies(target.ProcessId);
+        return Resolve(target, GetCompiledPolicies(target.ProcessId));
+    }
 
-        foreach (RoutingPolicy policy in policies)
+    private RouteDecision Resolve(RouteTarget target, IReadOnlyList<CompiledPolicy> policies)
+    {
+        foreach (CompiledPolicy policy in policies)
         {
-            foreach (RoutingRule rule in policy.Rules.Where(r => r.IsEnabled).OrderBy(r => r.Order))
+            foreach (CompiledRule rule in policy.Rules)
             {
-                bool match = HostMatcher.IsMatch(
-                    rule.Matcher, rule.Pattern, target.Host, target.Address, target.Port, target.IsUdp);
-                if (rule.IsNot) match = !match;
-                if (!match) continue;
+                if (!rule.IsMatch(target)) continue;
 
-                if (TryGetUsableOutbound(policy.OutboundId, out Outbound? outbound))
-                    return new RouteDecision(outbound!, policy, rule);
+                if (TryGetUsableOutbound(policy.Source.OutboundId, out Outbound? outbound))
+                    return new RouteDecision(outbound!, policy.Source, rule.Source);
             }
         }
 
-        return new RouteDecision(_outbounds[Outbound.DirectId], policies[0], null);
+        return new RouteDecision(_outbounds[Outbound.DirectId], policies[0].Source, null);
     }
 
     // UDP that is not DNS. The datagram follows the SAME decision its TCP twin would get, and only
@@ -121,12 +149,17 @@ public sealed class RoutingPolicyResolver
     public RouteDecision ResolveUdp(RouteTarget target)
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
-        RoutingPolicy policy = GetPolicy(target.ProcessId);
+
+        // Read once, and both the settings and the rules come from the same list: asking twice
+        // could see the process re-described in between and answer with one policy's BlockQuic
+        // against another policy's rules.
+        IReadOnlyList<CompiledPolicy> policies = GetCompiledPolicies(target.ProcessId);
+        RoutingPolicy policy = policies[0].Source;
 
         if (policy.UdpMode == UdpMode.Block)
             return new RouteDecision(_outbounds[Outbound.BlockId], policy, null);
 
-        RouteDecision tcpDecision = Resolve(target);
+        RouteDecision tcpDecision = Resolve(target, policies);
         // Neither of these has an outbound to ride, so UdpMode has nothing left to decide.
         if (!tcpDecision.UsesTunnel) return tcpDecision;
 
