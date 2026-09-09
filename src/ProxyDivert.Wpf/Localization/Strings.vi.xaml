@@ -105,6 +105,7 @@
     <sys:String x:Key="Str.Rules.Not">Phủ định</sys:String>
     <sys:String x:Key="Str.Rules.UdpMode">UDP</sys:String>
     <sys:String x:Key="Str.Rules.BlockQuic">Chặn QUIC (UDP/443)</sys:String>
+    <sys:String x:Key="Str.Rules.PatternProblems">Các luật sau không bao giờ khớp được với cách viết hiện tại:</sys:String>
     <sys:String x:Key="Str.Rules.BlockQuicHint">Thứ gì khớp các luật này thì đi qua đường ra của bộ luật; thứ không khớp rơi xuống bộ luật kế tiếp trong bộ lọc, không bộ luật nào nhận thì đi thẳng. Chặn QUIC để trình duyệt lùi về TCP — thứ mà proxy thật sự chở được.</sys:String>
 
     <sys:String x:Key="Str.Conn.Process">Tiến trình</sys:String>

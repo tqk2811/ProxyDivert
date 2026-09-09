@@ -29,6 +29,8 @@ public sealed class RulePatternError
     public string? Pattern { get; }
     public string Message { get; }
 
+    // Deliberately not a sentence: the label above it says what the list is, in the user's own
+    // language, and this is the row plus the parser's own words about it.
     public override string ToString()
-        => $"{PolicyName}: {Matcher}:{Pattern} cannot be used ({Message})";
+        => $"{PolicyName}: {Matcher}:{Pattern} — {Message}";
 }

@@ -92,6 +92,17 @@
                 <TextBlock DockPanel.Dock="Top" Style="{StaticResource Heading}"
                            Text="{DynamicResource Str.Rules.Rules}" Margin="0,0,0,6"/>
 
+                <!-- A rule whose pattern cannot be parsed matches nothing on every connection, and
+                     with Not ticked it claims everything instead. The row looks perfectly ordinary
+                     in the grid below either way, so it is named here. -->
+                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6"
+                            Visibility="{Binding HasPatternProblems, Converter={StaticResource TrueToVisible}}">
+                    <TextBlock Text="{DynamicResource Str.Rules.PatternProblems}" TextWrapping="Wrap"
+                               FontWeight="SemiBold" Foreground="{DynamicResource Brush.Warning}"/>
+                    <TextBlock Text="{Binding PatternProblems}" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Foreground="{DynamicResource Brush.Warning}"/>
+                </StackPanel>
+
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                     <StackPanel Orientation="Horizontal">
                         <Button Content="{DynamicResource Str.App.Add}" Command="{Binding AddRuleCommand}" MinWidth="70"/>

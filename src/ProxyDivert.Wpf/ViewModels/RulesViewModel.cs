@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ProxyDivert.Core.Routing.Compiled;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Wpf.Localization;
@@ -60,6 +62,39 @@ public sealed partial class RulesViewModel : ObservableObject
         foreach (Outbound outbound in _services.Config.Outbounds) Outbounds.Add(outbound);
 
         SelectedPolicy = Policies.FirstOrDefault(p => p.Id == previous) ?? Policies.FirstOrDefault();
+        CheckPatterns();
+    }
+
+    /// <summary>
+    /// The rules whose pattern cannot be parsed, one per line, or null while every pattern is
+    /// usable.
+    /// </summary>
+    /// <remarks>
+    /// Such a rule matches nothing, on every connection, for as long as it stays in the list — and
+    /// with Not ticked it claims everything instead. The row looks perfectly ordinary in the grid
+    /// either way, which is why the engine's log is not the only place this is said.
+    /// </remarks>
+    [ObservableProperty]
+    private string? _patternProblems;
+
+    public bool HasPatternProblems => !string.IsNullOrEmpty(PatternProblems);
+
+    partial void OnPatternProblemsChanged(string? value) => OnPropertyChanged(nameof(HasPatternProblems));
+
+    private void CheckPatterns()
+    {
+        // The same compile the engine does, so what is shown here is what the engine will use — not
+        // a second opinion written to agree with it.
+        IReadOnlyList<RulePatternError> errors = CompiledRuleSet.Compile(_services.Config.Policies).Errors;
+        PatternProblems = errors.Count == 0 ? null : string.Join(Environment.NewLine, errors);
+    }
+
+    // Every command that edits a rule ends here, so the check happens on each of them rather than
+    // only when the tab is opened again.
+    private void SaveAndApply()
+    {
+        _services.SaveAndApply();
+        CheckPatterns();
     }
 
     partial void OnSelectedPolicyChanged(RoutingPolicy? value)
@@ -117,7 +152,7 @@ public sealed partial class RulesViewModel : ObservableObject
 
         SelectedPolicy = policy;
 
-        _services.SaveAndApply();
+        SaveAndApply();
     }
 
     [RelayCommand]
@@ -134,7 +169,7 @@ public sealed partial class RulesViewModel : ObservableObject
         _services.Config.Policies.Add(policy);
         Policies.Add(policy);
         SelectedPolicy = policy;
-        _services.SaveAndApply();
+        SaveAndApply();
     }
 
     [RelayCommand]
@@ -168,7 +203,7 @@ public sealed partial class RulesViewModel : ObservableObject
         }
 
         SelectedPolicy = fallback;
-        _services.SaveAndApply();
+        SaveAndApply();
     }
 
     [RelayCommand]
@@ -187,7 +222,7 @@ public sealed partial class RulesViewModel : ObservableObject
         policy.Rules.Add(rule);
         Rules.Add(rule);
         SelectedRule = rule;
-        _services.SaveAndApply();
+        SaveAndApply();
     }
 
     [RelayCommand]
@@ -199,7 +234,7 @@ public sealed partial class RulesViewModel : ObservableObject
         policy.Rules.Remove(SelectedRule);
         Rules.Remove(SelectedRule);
         SelectedRule = null;
-        _services.SaveAndApply();
+        SaveAndApply();
     }
 
     [RelayCommand]
@@ -221,9 +256,9 @@ public sealed partial class RulesViewModel : ObservableObject
         // Renumber the whole list: gaps and duplicates from earlier edits disappear here.
         for (int i = 0; i < Rules.Count; i++) Rules[i].Order = i;
         SelectedRule = rule;
-        _services.SaveAndApply();
+        SaveAndApply();
     }
 
     [RelayCommand]
-    private void Save() => _services.SaveAndApply();
+    private void Save() => SaveAndApply();
 }
