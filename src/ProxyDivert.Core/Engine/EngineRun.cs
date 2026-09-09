@@ -34,6 +34,8 @@ internal sealed class EngineRun : IAsyncDisposable
         ProcessRuleTracker tracker,
         IConnectionHostNameResolver hostNames,
         UdpProxyForwarder udpForwarder,
+        TcpConnectionRouter tcp,
+        UdpFlowRouter udp,
         ResolverSlot resolvers,
         CancellationTokenSource cts)
     {
@@ -41,6 +43,8 @@ internal sealed class EngineRun : IAsyncDisposable
         Tracker = tracker ?? throw new ArgumentNullException(nameof(tracker));
         HostNames = hostNames ?? throw new ArgumentNullException(nameof(hostNames));
         UdpForwarder = udpForwarder ?? throw new ArgumentNullException(nameof(udpForwarder));
+        Tcp = tcp ?? throw new ArgumentNullException(nameof(tcp));
+        Udp = udp ?? throw new ArgumentNullException(nameof(udp));
         _resolvers = resolvers ?? throw new ArgumentNullException(nameof(resolvers));
         _cts = cts ?? throw new ArgumentNullException(nameof(cts));
     }
@@ -56,6 +60,12 @@ internal sealed class EngineRun : IAsyncDisposable
 
     /// <summary>The SOCKS5 UDP ASSOCIATE tunnels this run has open.</summary>
     public UdpProxyForwarder UdpForwarder { get; }
+
+    /// <summary>Where a redirected TCP connection goes, and how it gets there.</summary>
+    public TcpConnectionRouter Tcp { get; }
+
+    /// <summary>Whether a UDP flow is claimed at all, and where its datagrams go.</summary>
+    public UdpFlowRouter Udp { get; }
 
     /// <summary>The routing table as it stands right now. Read once per connection, never cached.</summary>
     public RoutingPolicyResolver Resolver => _resolvers.Resolver;

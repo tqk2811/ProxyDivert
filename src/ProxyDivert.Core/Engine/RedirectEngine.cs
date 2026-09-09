@@ -42,11 +42,6 @@ namespace ProxyDivert.Core.Engine;
 // connection being routed never sees a half-applied edit.
 public sealed class RedirectEngine : IDisposable
 {
-    // How long a connection may stay silent before routing gives up on reading a name from it.
-    // Protocols where the SERVER speaks first (SMTP, FTP, SSH) would otherwise stall here; they
-    // fall back to reverse DNS or to plain IP routing.
-    private static readonly TimeSpan HostPeekTimeout = TimeSpan.FromSeconds(3);
-
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<RedirectEngine> _logger;
     private readonly IProcessRedirectorFactory _redirectorFactory;
@@ -226,7 +221,15 @@ public sealed class RedirectEngine : IDisposable
         tracker.ProcessAttached += OnProcessAttached;
         tracker.ProcessDetached += OnProcessDetached;
 
-        return new EngineRun(redirector, tracker, hostNames, udpForwarder, resolvers, cts);
+        var tcp = new TcpConnectionRouter(
+            resolvers, hostNames, Connections, _liveConnections, _outbounds, _ipv6Capability,
+            processName: pid => tracker.TryGetTracked(pid, out TrackedProcess? tracked) ? tracked!.Name : null,
+            _loggerFactory);
+        var udp = new UdpFlowRouter(
+            resolvers, redirector.ReverseDns, udpForwarder, _outbounds, _ipv6Capability,
+            _loggerFactory.CreateLogger<UdpFlowRouter>());
+
+        return new EngineRun(redirector, tracker, hostNames, udpForwarder, tcp, udp, resolvers, cts);
     }
 
     // Applies an edited configuration without dropping the redirector: rules, outbounds and DNS
@@ -453,274 +456,27 @@ public sealed class RedirectEngine : IDisposable
     private static Uri ParseDohEndpoint(string? raw)
         => Uri.TryCreate(raw, UriKind.Absolute, out Uri? uri) ? uri : new Uri("https://1.1.1.1/dns-query");
 
-    // ---- TCP --------------------------------------------------------------------------------
+    // ---- the handlers the redirect options name -----------------------------------------------
 
-    private async Task HandleTcpAsync(RedirectedTcpConnection connection, CancellationToken ct)
+    // Each one is a hand-off: take the run once, give the work to the router that belongs to it.
+    // A null run means Stop has already been through, and the answers below are the ones that
+    // leak nothing.
+
+    private Task HandleTcpAsync(RedirectedTcpConnection connection, CancellationToken ct)
     {
-        // Taken once, at the top, and used for the whole connection. Stop may publish null a
-        // microsecond later; this connection is then ended by its token, not by finding half a run.
         EngineRun? run = _run;
-        if (run is null) return;
-
-        string processName = run.Tracker.TryGetTracked(connection.ProcessId, out TrackedProcess? tracked)
-            ? tracked!.Name
-            : $"pid {connection.ProcessId}";
-
-        var info = new ConnectionInfo(
-            connection.ProcessId, processName, connection.OriginalDestination, connection.Statistics);
-        Connections.Open(info);
-
-        LiveTcpConnection? live = null;
-        try
-        {
-            // Name first: SNI / Host header, then whatever DNS taught us about this IP.
-            long nameStarted = Stopwatch.GetTimestamp();
-            string? host = await run.HostNames
-                .TryResolveAsync(connection, HostPeekTimeout, ct).ConfigureAwait(false);
-            TimeSpan nameTime = Stopwatch.GetElapsedTime(nameStarted);
-            info.Host = host;
-
-            var target = new RouteTarget(
-                connection.ProcessId,
-                connection.OriginalDestination.Address,
-                connection.OriginalDestination.Port,
-                host);
-
-            RouteDecision decision = run.Resolver.Resolve(target);
-            info.OutboundName = decision.Outbound.Name;
-            info.RouteReason = decision.Reason;
-            Connections.Update(info);
-
-            _logger.LogInformation("tcp pid={Pid} {Target} -> {Decision}", connection.ProcessId, target, decision);
-
-            if (decision.IsBlocked)
-            {
-                info.Error = "blocked by rule";
-                return;
-            }
-
-            // From here the connection can be closed by a configuration change: the tunnel runs
-            // on the registry's token, and the registry knows what would have to change.
-            live = _liveConnections.Register(target, decision.Outbound, info, closeClient: connection.ClientTcp.Close, ct);
-            await TunnelAsync(connection, decision.Outbound, host, info, nameTime, live.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // Engine stopping, or the connection was cancelled — nothing to report, unless it was
-            // the configuration that ended it: that one the user asked for and may look for.
-            if (live?.ClosedForChangedRoute == true)
-                _logger.LogInformation("tcp pid={Pid} -> {Destination} {Reason}", connection.ProcessId, connection.OriginalDestination, info.Error);
-        }
-        catch (Exception) when (live?.ClosedForChangedRoute == true)
-        {
-            // The socket was closed under the copy loop; whatever it threw is that closure.
-            _logger.LogInformation("tcp pid={Pid} -> {Destination} {Reason}", connection.ProcessId, connection.OriginalDestination, info.Error);
-        }
-        catch (Exception ex)
-        {
-            info.Error = $"{ex.GetType().Name}: {ex.Message}";
-            _logger.LogWarning(ex, "tcp pid={Pid} -> {Destination} failed", connection.ProcessId, connection.OriginalDestination);
-        }
-        finally
-        {
-            if (live != null) _liveConnections.Unregister(live);
-            Connections.Close(info);
-        }
+        return run is null ? Task.CompletedTask : run.Tcp.HandleAsync(connection, ct);
     }
 
-    private async Task TunnelAsync(
-        RedirectedTcpConnection connection, Outbound outbound, string? host, ConnectionInfo info,
-        TimeSpan nameTime, CancellationToken ct)
-    {
-        IPEndPoint destination = connection.OriginalDestination;
-        bool isIpv6 = destination.Address.AddressFamily == AddressFamily.InterNetworkV6;
-
-        // Through a proxy, hand over the HOST NAME when we have one: the proxy then resolves it on
-        // its own side (remote DNS), so the destination is never leaked to the local resolver and
-        // CDN answers stay correct for the proxy's location. That is also the IPv6 fallback that
-        // costs nothing — a name lets an outbound without an IPv6 route pick the A record itself.
-        // Going direct, use the IP the process itself chose: re-resolving could pick a different
-        // server than the one the application decided on.
-        bool byName = !outbound.IsDirect && !string.IsNullOrEmpty(host);
-
-        // An IPv6 literal and no name to fall back on: there is no IPv4 address to reach this
-        // destination with, so an outbound without an IPv6 route cannot serve it at all. Refusing
-        // now — instead of waiting for a timeout — is what lets the application fall back to IPv4
-        // on its own (Happy Eyeballs retries the A record within a couple of hundred milliseconds).
-        if (isIpv6 && !byName && !_ipv6Capability.AllowsIpv6(outbound))
-        {
-            info.Error = "outbound has no IPv6 route and the connection carries no host name";
-            _logger.LogInformation(
-                "tcp pid={Pid} -> {Destination} refused: {Outbound} has no IPv6 route and the connection "
-                + "carries no host name to resolve to IPv4, so the application should retry over IPv4",
-                connection.ProcessId, destination, outbound.Name);
-            return;
-        }
-
-        IProxySource source = _outbounds.GetOrCreate(outbound).Source;
-        IConnectSource? tunnel = null;
-        Guid tunnelId = Guid.NewGuid();
-        try
-        {
-            tunnel = await source.GetConnectSourceAsync(tunnelId, ct).ConfigureAwait(false);
-
-            string targetHost = byName ? host! : destination.Address.ToString();
-            // UriBuilder brackets an IPv6 literal for us ("tcp://[2606:4700::1111]:443"), which is
-            // what the SOCKS5/HTTP address parsers expect to see.
-            var targetUri = new UriBuilder("tcp", targetHost, destination.Port).Uri;
-
-            long connectStarted = Stopwatch.GetTimestamp();
-            try
-            {
-                await tunnel.ConnectAsync(targetUri, ct).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (isIpv6 && !byName && !ct.IsCancellationRequested)
-            {
-                // First IPv6 destination this outbound failed to reach. Nothing says the far side
-                // is v4-only rather than that host being down, but assuming the cheaper of the two
-                // is right: later IPv6 connections are refused immediately instead of stalling,
-                // and named ones keep working because the outbound resolves them itself.
-                NoteIpv6Failure(outbound, destination, ex);
-                throw;
-            }
-
-            // The three legs a connection waits on, so a slow site can be blamed on the right one:
-            // the handshake through the relay (a stalled pump), the wait for the client to name
-            // its host (a preconnect that says nothing), or the upstream connect (the network).
-            _logger.LogInformation(
-                "tcp pid={Pid} -> {Target} up via {Outbound}: handshake {HandshakeMs}ms, name {NameMs}ms, connect {ConnectMs}ms",
-                connection.ProcessId, targetUri.Authority, outbound.Name,
-                (long)connection.CaptureToAccept.TotalMilliseconds,
-                (long)nameTime.TotalMilliseconds,
-                (long)Stopwatch.GetElapsedTime(connectStarted).TotalMilliseconds);
-
-            await tunnel.ForwardAsync(
-                connection.ClientStream, tunnelId, _loggerFactory,
-                clientName: $"pid{connection.ProcessId}", proxyName: outbound.Name,
-                cancellationToken: ct).ConfigureAwait(false);
-        }
-        finally
-        {
-            try { tunnel?.Dispose(); } catch { }
-        }
-    }
-
-    // Direct is the machine's own stack: if it had no IPv6 the process could not have opened an
-    // IPv6 connection in the first place, so one unreachable destination says nothing about it.
-    private void NoteIpv6Failure(Outbound outbound, IPEndPoint destination, Exception ex)
-    {
-        if (outbound.IsDirect) return;
-        if (!_ipv6Capability.RecordIpv6Failure(outbound)) return;
-
-        _outbounds.SetIpv6Support(outbound.Id, false);
-        _logger.LogInformation(ex,
-            "outbound {Outbound} marked IPv4-only after {Destination} failed. Later IPv6 destinations go "
-            + "out over IPv4, by name where one is known; set Ipv6Support=Enabled to override",
-            outbound.Name, destination);
-    }
-
-    // ---- UDP --------------------------------------------------------------------------------
-
-    // Asked on the packet path, before a UDP flow is redirected at all.
-    //
-    // A datagram routed Direct must never reach the relay: the relay forwards from its own socket,
-    // on a port nothing can map back to the process, so the query leaves and the answer is lost.
-    // That is what broke DNS — a browser with its own resolver got no answers at all. Leaving the
-    // flow untouched is the only thing that actually delivers "direct": the datagram goes out of
-    // the process's own socket and the reply comes straight back to it.
-    //
-    // The cost is stated plainly: a passed-through flow carries the machine's real address, which
-    // for DNS is the same exposure SystemSniff already accepts by definition. A user who wants
-    // their DNS tunnelled says so with a rule — a Protocol "udp" rule, or a Port "53" one — and
-    // the flow then resolves to an outbound instead of Direct and comes back here as "redirect".
-    //
-    // Block still goes through the relay: it is claimed by NAT and dropped there, so nothing about
-    // it reaches the wire. Passing a blocked datagram would leak the very thing it must not.
+    // Nothing left to redirect it to. Leaving the flow alone is also the safe answer: the datagram
+    // goes out of the process's own socket, exactly as it would with the engine switched off.
     private bool ShouldRedirectUdpFlow(uint processId, IPAddress destination, ushort destinationPort, bool isIpv6)
-    {
-        EngineRun? run = _run;
-        // Nothing left to redirect it to. Leaving the flow alone is also the safe answer: the
-        // datagram goes out of the process's own socket, exactly as it would with the engine off.
-        if (run is null) return false;
+        => _run?.Udp.ShouldRedirect(processId, destination, destinationPort, isIpv6) ?? false;
 
-        string? host = run.Redirector.ReverseDns.Resolve(destination);
-        var target = new RouteTarget(processId, destination, destinationPort, host, isUdp: true);
-
-        RouteDecision decision = run.Resolver.ResolveUdp(target);
-        if (!decision.IsDirect) return true;
-
-        _logger.LogDebug("udp pid={Pid} -> {Target} left direct, unredirected ({Reason})",
-            processId, target, decision.Reason);
-        return false;
-    }
-
-    // Returning the payload lets the relay send it out directly; returning null means "handled or
-    // dropped — do not send". Anything that cannot be tunnelled is dropped rather than leaked.
+    // Dropped rather than passed on: the run that would have tunnelled it is gone, and sending it
+    // out from here would carry the machine's real address.
     private byte[]? HandleUdpDatagram(RedirectedUdpDatagram datagram, CancellationToken ct)
-    {
-        EngineRun? run = _run;
-        // Dropped rather than passed on: the run that would have tunnelled it is gone, and sending
-        // it out from here would carry the machine's real address.
-        if (run is null) return null;
-
-        try
-        {
-            string? host = run.Redirector.ReverseDns.Resolve(datagram.OriginalDestination.Address);
-            var target = new RouteTarget(
-                datagram.ProcessId,
-                datagram.OriginalDestination.Address,
-                datagram.OriginalDestination.Port,
-                host,
-                isUdp: true);
-
-            RouteDecision decision = run.Resolver.ResolveUdp(target);
-
-            if (decision.IsBlocked) return null;
-
-            if (decision.IsDirect)
-            {
-                // Normally unreachable: ShouldRedirectUdpFlow keeps a Direct flow away from the
-                // relay entirely. It is still reached when the answer changed between the packet
-                // path and here — a DNS answer landing in between gives the flow a name it did not
-                // have, and a rule that then claims it. Forwarding from the relay's socket is all
-                // that is left at this point, and its reply has nowhere to go, so the sender sees
-                // one lost datagram and retries.
-                _logger.LogDebug(
-                    "udp pid={Pid} -> {Destination} resolved Direct after it was already redirected; "
-                    + "forwarding without a reply path, the sender will retry",
-                    datagram.ProcessId, datagram.OriginalDestination);
-                return datagram.Payload;
-            }
-
-            bool isIpv6 = datagram.OriginalDestination.AddressFamily == AddressFamily.InterNetworkV6;
-            // A UDP datagram carries no name to fall back on, so an outbound without an IPv6 route
-            // has nothing to send it over. Dropping is the safe answer: letting it out direct would
-            // expose the real address.
-            if (isIpv6 && !_ipv6Capability.AllowsIpv6(decision.Outbound))
-            {
-                _logger.LogDebug(
-                    "udp pid={Pid} -> {Destination} dropped: {Outbound} has no IPv6 route",
-                    datagram.ProcessId, datagram.OriginalDestination, decision.Outbound.Name);
-                return null;
-            }
-
-            IProxySource source = _outbounds.GetOrCreate(decision.Outbound).Source;
-            bool queued = run.UdpForwarder.Send(
-                decision.Outbound.Id, source,
-                (ushort)datagram.OriginalSource.Port,
-                datagram.OriginalDestination,
-                datagram.Payload,
-                isIpv6);
-            if (!queued)
-                _logger.LogDebug("udp pid={Pid} -> {Destination} dropped, the tunnel is not ready yet", datagram.ProcessId, datagram.OriginalDestination);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "udp pid={Pid} routing failed, dropping the datagram", datagram.ProcessId);
-            return null;
-        }
-    }
+        => _run?.Udp.HandleDatagram(datagram, ct);
 
     // ---- outbound testing --------------------------------------------------------------------
 
