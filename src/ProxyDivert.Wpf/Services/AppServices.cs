@@ -9,6 +9,7 @@ using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.DependencyInjection;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Logging;
+using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Processes.Enums;
 using ProxyDivert.Core.Routing.Models;
@@ -50,6 +51,12 @@ public sealed class AppServices : IAsyncDisposable
     /// touches them — see <see cref="StartEngineAsync"/>.
     /// </summary>
     public VpnConnectionKeeper Vpn { get; }
+
+    /// <summary>
+    /// What the Test button on the Outbounds tab asks. It builds a way out of its own rather than
+    /// borrowing the running one, so testing a VPN cannot disturb the tunnel that is up.
+    /// </summary>
+    public OutboundTester OutboundTester { get; }
 
     /// <summary>
     /// Every process running on this machine, with its path, its arguments and its parent. Started
@@ -121,6 +128,7 @@ public sealed class AppServices : IAsyncDisposable
         _logger = _provider.GetRequiredService<ILoggerFactory>().CreateLogger<AppServices>();
         Engine = _provider.GetRequiredService<RedirectEngine>();
         Vpn = _provider.GetRequiredService<VpnConnectionKeeper>();
+        OutboundTester = _provider.GetRequiredService<OutboundTester>();
 
         // Before anything else asks: collecting is what makes starting the engine cheap, and the
         // first sweep is about thirty milliseconds, so it is done here rather than deferred.

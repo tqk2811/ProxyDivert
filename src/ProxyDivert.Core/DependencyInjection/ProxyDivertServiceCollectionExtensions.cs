@@ -64,6 +64,11 @@ public static class ProxyDivertServiceCollectionExtensions
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IOutboundSourceBuilder), builder));
         services.TryAddSingleton<OutboundSourceFactory>();
 
+        // Deliberately built from the FACTORY and not from the registry: what the Test button opens
+        // is a throwaway that belongs to nobody, so pressing it cannot disturb — or take down — the
+        // VPN tunnel the same outbound is running on.
+        services.TryAddSingleton<OutboundTester>();
+
         // The outbound instances, and the VPN tunnels among them, belong to the APPLICATION rather
         // than to an engine run: a tunnel is the user's session with their provider, and switching
         // redirection off is not a reason to end it. Both are therefore singletons the engine

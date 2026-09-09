@@ -478,49 +478,6 @@ public sealed class RedirectEngine : IDisposable
     private byte[]? HandleUdpDatagram(RedirectedUdpDatagram datagram, CancellationToken ct)
         => _run?.Udp.HandleDatagram(datagram, ct);
 
-    // ---- outbound testing --------------------------------------------------------------------
-
-    /// <summary>
-    /// Opens a throwaway tunnel through an outbound to check that it works, without touching the
-    /// instance live traffic uses. Returns null on success, or the failure description.
-    /// </summary>
-    public static async Task<string?> TestOutboundAsync(
-        Outbound outbound, string testHost = "example.com", int testPort = 80,
-        ILoggerFactory? loggerFactory = null, string? wireProxyPath = null, CancellationToken ct = default)
-    {
-        if (outbound is null) throw new ArgumentNullException(nameof(outbound));
-        if (outbound.IsBlocked) return "Block never connects anywhere.";
-
-        // A VPN test starts its own wireproxy subprocess so it never disturbs a tunnel live traffic
-        // is already using — and it has to put that subprocess down itself. The factory owns
-        // nothing it builds, so what comes back is ours alone and its disposal is ours too.
-        OutboundSourceFactory factory = OutboundSourceFactory.CreateDefault();
-        IOutboundInstance? instance = null;
-        IConnectSource? tunnel = null;
-        try
-        {
-            instance = factory.Create(outbound, loggerFactory, wireProxyPath);
-            tunnel = await instance.Source.GetConnectSourceAsync(Guid.NewGuid(), ct).ConfigureAwait(false);
-            await tunnel.ConnectAsync(new UriBuilder("tcp", testHost, testPort).Uri, ct).ConfigureAwait(false);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            return $"{ex.GetType().Name}: {ex.Message}";
-        }
-        finally
-        {
-            try { tunnel?.Dispose(); } catch { }
-            // After the tunnel: for a VPN this is what kills wireproxy, and without it every press
-            // of Test left one more subprocess holding a SOCKS port and a WireGuard session for as
-            // long as the app ran.
-            if (instance is not null)
-            {
-                try { await instance.DisposeAsync().ConfigureAwait(false); } catch { }
-            }
-        }
-    }
-
     public async ValueTask DisposeAsync()
     {
         _outbounds.InstanceDropped -= OnOutboundInstanceDropped;

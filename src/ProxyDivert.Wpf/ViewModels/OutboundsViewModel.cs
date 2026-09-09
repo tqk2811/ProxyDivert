@@ -197,8 +197,8 @@ public sealed partial class OutboundsViewModel : ObservableObject
         TestResult = null;
         try
         {
-            string? error = await RedirectEngine
-                .TestOutboundAsync(outbound, wireProxyPath: _services.Config.WireProxyPath)
+            string? error = await _services.OutboundTester
+                .TestAsync(outbound, wireProxyPath: _services.Config.WireProxyPath)
                 .ConfigureAwait(true);
             TestResult = error is null
                 ? (string)Application.Current.Resources["Str.Outbound.TestOk"]
