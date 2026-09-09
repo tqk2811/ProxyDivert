@@ -73,8 +73,12 @@ public sealed class EtwProcessEventSource : IProcessEventSource
             _session.EnableProvider(ProviderName, TraceEventLevel.Informational, ProcessKeyword);
             _session.Source.Dynamic.All += OnEvent;
 
-            // Process() blocks until the session is disposed, so it gets a thread of its own.
-            _pump = Task.Run(PumpAsync);
+            // Process() blocks until the session is disposed, so it gets a thread of its own —
+            // and LongRunning is what actually asks for one. Task.Run, which this used to say,
+            // borrows a thread-pool worker and never gives it back, which is a worker the pool has
+            // to replace at its own slow rate while everything else in the process waits.
+            _pump = Task.Factory.StartNew(
+                PumpAsync, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
             _logger.LogDebug("the process table follows the {Provider} ETW provider", ProviderName);
             return true;
