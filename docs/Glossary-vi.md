@@ -464,3 +464,9 @@ Thay vì để N field nullable trên một lớp dài, cùng được gán lúc
 ## Slot (ô giữ giá trị hoán được)
 
 Một đối tượng nhỏ chỉ để **giữ chỗ** cho một giá trị bị thay nguyên khối, và được truyền đi thay cho chính giá trị đó. Dùng khi bên đọc cần thấy giá trị MỚI NHẤT nhưng không được sở hữu hay sửa nó: bên đọc nhận `IResolverSource` (chỉ có getter), bên ghi giữ `ResolverSlot` và gọi `Use(...)`. Nó cũng cắt được vòng phụ thuộc lúc dựng — router cần đọc bảng định tuyến mà [đối tượng theo lượt chạy](#L460) lại giữ router — mà không phải cho ai một tham chiếu ngược sửa được. Khác với việc truyền `Func<T>`: slot có một chủ ghi rõ ràng và đọc được tên trong stack trace.
+
+## Luật đã biên dịch (compiled rule set)
+
+Tách một bảng quyết định thành **phần đổi chậm** (cấu hình người dùng lưu) và **phần đổi nhanh** (trạng thái chạy), rồi chỉ dựng lại phần đổi chậm khi nó thật sự đổi. Ở ProxyDivert phần đổi chậm là `CompiledRuleSet`: mỗi `Pattern` (chuỗi người dùng gõ) được **parse một lần lúc lưu** thành một `IHostPredicate` — CIDR đã mask sẵn, regex đã compile, dải cổng đã tách — rule tắt bị loại và phần còn lại sắp theo `Order`. Phần đổi nhanh là "pid nào đang thuộc policy nào", đọc sống qua `IProcessPolicySource`.
+
+Trộn hai phần vào một snapshot là cái bẫy: mỗi lần một tiến trình được nhận hay bỏ (một lần mở trình duyệt là sáu chục lần trong vài giây) lại phải dựng lại **cả** bảng, tức parse lại mọi pattern của mọi policy. Cái mua được thứ hai quan trọng không kém: có một **thời điểm biên dịch** thì mới có chỗ nói "pattern này không dùng được" — trước đó nó chỉ lặng lẽ không khớp gì trên mọi kết nối, mà nếu luật đó bật `IsNot` thì lại **khớp tất cả**.
