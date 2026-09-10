@@ -154,7 +154,7 @@ Bước 1 không dùng được trong mấy trường hợp, lúc đó phải ch
   **Tải** ở mục *Watermark SoftEther* trong tab Cài đặt (hoặc nút **Tải watermark** hiện ngay trên
   dòng đường ra SoftEther) là tool tải khối đó từ mã nguồn chính thức về, lưu cạnh `ProxyDivert.exe`
   rồi tự dùng — không phải khai đường dẫn ở đâu cả. Tool KHÔNG bao giờ tự tải: phải bấm.
-- Chưa đường ra VPN nào được kiểm chứng với máy chủ thật trên máy này.
+- Đã chạy thật với VPN Gate: **SSTP**, **L2TP/IPsec** và **SoftEther** (SoftEther cần khối watermark, xem mục trên). OpenVPN và WireGuard chưa kiểm chứng với máy chủ thật trên máy này.
 
 ## Đường ra VPN
 

@@ -205,7 +205,7 @@ Chưa kiểm được bằng đường hầm thật: máy chưa có `wireproxy.e
 14. `Vpn/Client/InTunnelResolver`: tự hỏi DNS A/AAAA qua socket UDP của đường hầm, cache theo TTL, không có DNS từ VPN thì dùng 1.1.1.1/8.8.8.8 **vẫn trong đường hầm**. Bản demo dùng `Dns.GetHostAddressesAsync` của máy thật nên [rò rỉ DNS](Glossary-vi.md#L113) — đây là chỗ phải sửa chứ không bê nguyên.
 15. `--vpn` của CLI nhận cùng thứ ô URL nhận, thêm `--vpn-user/--vpn-pass/--vpn-psk/--vpn-protocol`.
 
-Chưa kiểm chứng với máy chủ VPN thật. SoftEther còn cần khối [watermark](Glossary-vi.md#L121) thật mới qua được máy chủ thật.
+Đã kiểm chứng với máy chủ VPN Gate thật: SSTP, L2TP/IPsec, SoftEther đều dựng được đường hầm (10/09/2026). SoftEther cần khối [watermark](Glossary-vi.md#L121) thật, và cần khai `client_str`/`client_ver`/`client_build` trong login PACK — thiếu thì máy chủ nhận login rồi giết phiên dữ liệu bằng TLS alert. OpenVPN và WireGuard native chưa thử với máy chủ thật.
 
 ### Bước 4. Redesign TqkLibrary.WinDivert — ĐÃ XONG 2026-09-03
 

@@ -163,7 +163,7 @@ Step 1 is unavailable in a few cases, and step 2's guess is what remains:
   *SoftEther watermark* on the Settings tab (or **Get watermark**, which appears on a SoftEther row
   itself) and the blob is fetched from the official sources, saved next to `ProxyDivert.exe` and
   used from there — no path to configure. Nothing is ever downloaded unless you press it.
-- No VPN outbound has been verified against a live server on this machine yet.
+- Verified against live VPN Gate servers: **SSTP**, **L2TP/IPsec** and **SoftEther** (the last one needs the watermark blob, above). OpenVPN and WireGuard have not been tried against a live server on this machine.
 
 ## The VPN outbound
 
