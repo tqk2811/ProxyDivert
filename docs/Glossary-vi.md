@@ -534,3 +534,14 @@ thì gửi lại y nguyên gói cũ, tối đa `max requests` lần (mặc đị
 lượt gửi lại thì bên gửi chỉ **ngừng gửi**, RFC không bắt nó phải báo lỗi cho tầng trên — nên nếu
 tầng trên chỉ ngồi `await` chờ "link up" mà không tự đặt hạn, nó sẽ treo im lặng cho tới khi hạn
 tổng của cả lần quay số hết giờ.
+
+## Row ViewModel (hàng có trạng thái riêng)
+
+Mỗi hàng của một lưới là một object riêng implement `INotifyPropertyChanged`, bọc lấy model và ghi
+xuyên xuống nó, thay vì bind thẳng lưới vào model. Lý do không phải "cho đúng MVVM": model POCO
+không raise gì cả, nên sửa một ô xong các ô khác của cùng hàng vẫn hiện giá trị cũ, và mẹo duy nhất
+để lưới vẽ lại là **gỡ hàng ra khỏi collection rồi cắm lại** — mà gỡ ra thì `ListBox`/`DataGrid` bỏ
+chọn nó, kéo theo mọi thứ phụ thuộc lựa chọn đó. Lợi ích thứ hai quan trọng hơn: có một chỗ **giữa
+ô nhập và model** để từ chối sửa (hàng built-in) và để nói cái vừa gõ sai ở đâu, thay vì để lỗi
+trôi tới lần kết nối đầu tiên. Trong ProxyDivert: `OutboundRowViewModel`, `PolicyRowViewModel`,
+`RuleRowViewModel`, `ProcessFilterRowViewModel`.
