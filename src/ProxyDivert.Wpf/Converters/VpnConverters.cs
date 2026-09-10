@@ -9,47 +9,21 @@ using ProxyDivert.Wpf.ViewModels;
 namespace ProxyDivert.Wpf.Converters;
 
 /// <summary>
-/// The tunnel row belonging to one outbound, or <c>null</c> when the engine holds none for it.
-/// </summary>
-/// <remarks>
-/// The grid's rows are outbounds and the tunnels are a separate list keyed by outbound id, so the
-/// status cell has to do the lookup itself. The second binding is that list and the third is its
-/// count: a converter is re-run when one of its bindings changes, and a collection that gains or
-/// loses a tunnel raises nothing on the collection property itself — the count is what notices.
-/// The returned view model raises its own changes, so a tunnel going up or down needs no help.
-/// </remarks>
-public sealed class VpnTunnelForOutboundConverter : IMultiValueConverter
-{
-    public object? Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
-    {
-        if (values.Length < 2 || values[0] is not Guid id || values[1] is not IEnumerable tunnels)
-            return null;
-
-        return tunnels.OfType<VpnTunnelViewModel>().FirstOrDefault(t => t.Id == id);
-    }
-
-    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
-        => throw new NotSupportedException("Display only.");
-}
-
-/// <summary>
 /// What the tunnel button offers this outbound: Disconnect while a tunnel is being held up,
 /// Connect otherwise.
 /// </summary>
 /// <remarks>
-/// The same three bindings as <see cref="VpnTunnelForOutboundConverter"/>, plus the language
-/// version — a converter's output does not follow a DynamicResource, so without it the button
-/// would keep the wording of whichever language was loaded when the row was built.
+/// Whether there is a tunnel is the row's own answer now — it used to be looked up here, from the
+/// outbound's id against a separate list, with the list's count bound as well because a collection
+/// that gains an item raises nothing on the property holding it. What is left is the wording, and
+/// the language version alongside it: a converter's output does not follow a DynamicResource, so
+/// without it the button would keep whichever language was loaded when the row was built.
 /// </remarks>
 public sealed class VpnConnectButtonTextConverter : IMultiValueConverter
 {
     public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {
-        bool connected = values.Length > 1
-            && values[0] is Guid id
-            && values[1] is IEnumerable tunnels
-            && tunnels.OfType<VpnTunnelViewModel>().Any(t => t.Id == id);
-
+        bool connected = values.Length > 0 && values[0] is true;
         return LocalizationManager.Get(connected ? "Str.Vpn.Disconnect" : "Str.Vpn.Connect");
     }
 

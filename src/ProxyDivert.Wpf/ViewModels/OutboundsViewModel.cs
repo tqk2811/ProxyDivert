@@ -17,13 +17,15 @@ namespace ProxyDivert.Wpf.ViewModels;
 
 // The Outbounds tab: the list of ways out of the machine.
 //
-// Direct and Block are kept in the list but not editable — a policy has to be able to reference
-// them, and letting the user rename or delete them would only produce broken rules.
+// Each row is an OutboundRowViewModel over the configuration's own Outbound. Direct and Block are
+// in the list — a policy has to be able to reference them — and the row is what refuses to let them
+// be edited.
 public sealed partial class OutboundsViewModel : ObservableObject
 {
     private readonly AppServices _services;
 
-    public ObservableCollection<Outbound> Outbounds { get; } = new ObservableCollection<Outbound>();
+    public ObservableCollection<OutboundRowViewModel> Outbounds { get; }
+        = new ObservableCollection<OutboundRowViewModel>();
 
     public Array Kinds { get; } = new[]
     {
@@ -37,20 +39,13 @@ public sealed partial class OutboundsViewModel : ObservableObject
     public Array VpnProtocols { get; } = Enum.GetValues(typeof(VpnProtocol));
 
     [ObservableProperty]
-    private Outbound? _selected;
+    private OutboundRowViewModel? _selected;
 
     [ObservableProperty]
     private string? _testResult;
 
     [ObservableProperty]
     private bool _isTesting;
-
-    /// <summary>
-    /// The VPN tunnels being held up right now, whether or not anything is being redirected. A row
-    /// with no tunnel here is one that is switched off, and its button offers Connect.
-    /// </summary>
-    public ObservableCollection<VpnTunnelViewModel> VpnTunnels { get; }
-        = new ObservableCollection<VpnTunnelViewModel>();
 
     public OutboundsViewModel(AppServices services)
     {
@@ -65,17 +60,15 @@ public sealed partial class OutboundsViewModel : ObservableObject
     {
         // Held across the refill, since a tab switch calls this and the selection is the user's
         // place in the list.
-        Outbound? previous = Selected;
+        Guid? previous = Selected?.Id;
 
         Outbounds.Clear();
         foreach (Outbound outbound in _services.Config.Outbounds)
-            Outbounds.Add(outbound);
+            Outbounds.Add(new OutboundRowViewModel(outbound));
 
-        Selected = previous != null && Outbounds.Contains(previous) ? previous : null;
+        Selected = previous is null ? null : Outbounds.FirstOrDefault(r => r.Id == previous);
 
-        VpnTunnels.Clear();
-        foreach (VpnStatus status in _services.Vpn.Statuses)
-            VpnTunnels.Add(new VpnTunnelViewModel(status));
+        foreach (VpnStatus status in _services.Vpn.Statuses) ApplyVpnStatus(status);
         ToggleVpnCommand.NotifyCanExecuteChanged();
     }
 
@@ -85,35 +78,31 @@ public sealed partial class OutboundsViewModel : ObservableObject
     /// </summary>
     public void RefreshVpnCommands() => ToggleVpnCommand.NotifyCanExecuteChanged();
 
-    /// <summary>True when the engine is holding a tunnel up for this outbound.</summary>
-    private bool IsConnected(Outbound outbound) => VpnTunnels.Any(t => t.Id == outbound.Id);
-
     // Connect and Disconnect are the same button: which one it is depends on the tunnel, not on
     // which control was pressed. The engine is never told — a tunnel going up or down changes
     // nothing about how a connection is routed.
     [RelayCommand(CanExecute = nameof(CanToggleVpn))]
-    private void ToggleVpn(Outbound? outbound)
+    private void ToggleVpn(OutboundRowViewModel? row)
     {
-        if (outbound is null) return;
+        if (row is null) return;
 
-        _services.SetVpnConnectedAsync(outbound, !IsConnected(outbound));
+        _services.SetVpnConnectedAsync(row.Model, !row.IsConnected);
         // The tunnel answers on its own thread a moment from now; until then the button would
         // still offer what it offered before.
         ToggleVpnCommand.NotifyCanExecuteChanged();
     }
 
-    private bool CanToggleVpn(Outbound? outbound)
+    private bool CanToggleVpn(OutboundRowViewModel? row)
     {
-        if (outbound is null || !_services.Vpn.CanKeep(outbound) || !outbound.IsEnabled)
-            return false;
+        if (row is null || !_services.Vpn.CanKeep(row.Model) || !row.IsEnabled) return false;
 
         // Connecting is always allowed. Disconnecting is not, while redirection is on and a filter
         // routes through this tunnel: taking it down would leave every connection that filter
         // catches failing at a tunnel that is no longer there, with nothing on screen to say why.
         // Switch redirection off, or point the filter elsewhere, and the button comes back.
-        if (!IsConnected(outbound)) return true;
+        if (!row.IsConnected) return true;
         return !_services.Engine.IsRunning
-            || !OutboundUsage.RoutedOutboundIds(_services.Config).Contains(outbound.Id);
+            || !OutboundUsage.RoutedOutboundIds(_services.Config).Contains(row.Id);
     }
 
     // Called from the tunnel's supervision thread. BeginInvoke, never Invoke: the thread that
@@ -126,28 +115,21 @@ public sealed partial class OutboundsViewModel : ObservableObject
 
     private void ApplyVpnStatus(VpnStatus status)
     {
-        VpnTunnelViewModel? row = VpnTunnels.FirstOrDefault(t => t.Id == status.OutboundId);
+        // A status for an outbound that is no longer in the list — deleted while its tunnel was
+        // coming down — has no row to land on, and needs none.
+        OutboundRowViewModel? row = Outbounds.FirstOrDefault(r => r.Id == status.OutboundId);
+        if (row is null) return;
 
         // A stopped tunnel is one the keeper is no longer holding up — switched off, disabled or
-        // deleted — so its cell goes back to offering Connect rather than sitting there greyed.
-        if (status.State == VpnConnectionState.Stopped)
-        {
-            if (row != null) VpnTunnels.Remove(row);
-            ToggleVpnCommand.NotifyCanExecuteChanged();
-            return;
-        }
-
-        if (row is null) VpnTunnels.Add(new VpnTunnelViewModel(status));
-        else row.Update(status);
+        // deleted — so the cell goes back to offering Connect rather than sitting there greyed.
+        if (status.State == VpnConnectionState.Stopped) row.Tunnel = null;
+        else if (row.Tunnel is null) row.Tunnel = new VpnTunnelViewModel(status);
+        else row.Tunnel.Update(status);
 
         // Which button the row offers follows the tunnel, so it is re-asked here rather than only
         // when the user clicks something.
         ToggleVpnCommand.NotifyCanExecuteChanged();
     }
-
-    // True for the two built-ins, which the UI keeps read-only. The grid asks the row itself, so
-    // the answer lives on the outbound and this only forwards it.
-    public static bool IsBuiltIn(Outbound outbound) => outbound.IsBuiltIn;
 
     [RelayCommand]
     private void Add()
@@ -155,13 +137,15 @@ public sealed partial class OutboundsViewModel : ObservableObject
         var outbound = new Outbound
         {
             Id = Guid.NewGuid(),
-            Name = $"proxy {Outbounds.Count(o => !IsBuiltIn(o)) + 1}",
+            Name = $"proxy {Outbounds.Count(r => !r.IsBuiltIn) + 1}",
             Kind = OutboundKind.Socks5,
             Url = "socks5://127.0.0.1:1080",
         };
         _services.Config.Outbounds.Add(outbound);
-        Outbounds.Add(outbound);
-        Selected = outbound;
+
+        var row = new OutboundRowViewModel(outbound);
+        Outbounds.Add(row);
+        Selected = row;
         _services.SaveAndApply();
     }
 
@@ -186,15 +170,15 @@ public sealed partial class OutboundsViewModel : ObservableObject
     [RelayCommand]
     private async Task TestAsync()
     {
-        Outbound? outbound = Selected;
-        if (outbound is null) return;
+        OutboundRowViewModel? row = Selected;
+        if (row is null) return;
 
         IsTesting = true;
         TestResult = null;
         try
         {
             string? error = await _services.OutboundTester
-                .TestAsync(outbound, wireProxyPath: _services.Config.WireProxyPath)
+                .TestAsync(row.Model, wireProxyPath: _services.Config.WireProxyPath)
                 .ConfigureAwait(true);
             TestResult = error is null
                 ? (string)Application.Current.Resources["Str.Outbound.TestOk"]

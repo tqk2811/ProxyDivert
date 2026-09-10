@@ -1,5 +1,5 @@
 using System.Windows.Controls;
-using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Wpf.ViewModels;
 
 namespace ProxyDivert.Wpf.Views;
 
@@ -16,6 +16,6 @@ public partial class OutboundsView : UserControl
     // are the only rows there are, and a whole grid greyed out reads as a broken tab.
     private void Grid_BeginningEdit(object sender, DataGridBeginningEditEventArgs e)
     {
-        if (e.Row.Item is Outbound outbound && outbound.IsBuiltIn) e.Cancel = true;
+        if (e.Row.Item is OutboundRowViewModel row && !row.IsEditable) e.Cancel = true;
     }
 }

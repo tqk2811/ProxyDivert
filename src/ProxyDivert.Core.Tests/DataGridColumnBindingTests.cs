@@ -11,6 +11,7 @@ using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models.Conditions;
 using AppDurationConverter = ProxyDivert.Wpf.Converters.DurationConverter;
 using ProxyDivert.Wpf.Localization;
+using ProxyDivert.Wpf.ViewModels;
 using ProxyDivert.Wpf.Views;
 using Xunit;
 
@@ -121,21 +122,23 @@ public class DataGridColumnBindingTests
         {
             EnsureApplication();
 
-            var direct = ProxyDivert.Core.Routing.Models.Outbound.CreateDirect();
-            var proxy = new ProxyDivert.Core.Routing.Models.Outbound
+            // Rows, not models: the grid binds to OutboundRowViewModel, which is what answers
+            // IsBuiltIn and Kind to the triggers below.
+            var direct = new OutboundRowViewModel(ProxyDivert.Core.Routing.Models.Outbound.CreateDirect());
+            var proxy = new OutboundRowViewModel(new ProxyDivert.Core.Routing.Models.Outbound
             {
                 Id = Guid.NewGuid(),
                 Name = "proxy 1",
                 Kind = OutboundKind.Socks5,
                 Url = "socks5://127.0.0.1:1080",
-            };
-            var vpn = new ProxyDivert.Core.Routing.Models.Outbound
+            });
+            var vpn = new OutboundRowViewModel(new ProxyDivert.Core.Routing.Models.Outbound
             {
                 Id = Guid.NewGuid(),
                 Name = "office",
                 Kind = OutboundKind.Vpn,
                 Url = "sstp://vpn.example.com:443",
-            };
+            });
 
             var stub = new ViewModelStub();
             foreach (object outbound in new object[] { direct, proxy, vpn }) stub.Outbounds.Add(outbound);

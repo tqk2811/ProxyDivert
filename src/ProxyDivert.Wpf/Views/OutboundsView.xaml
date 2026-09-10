@@ -69,6 +69,22 @@
             </Style.Triggers>
         </Style>
 
+        <!-- An address that cannot be used says so on the cell it was typed into: the wording the
+             parser used, on the row it belongs to. The alternative was finding out at the first
+             connection through it, with the user already waiting. Built-in rows never have one —
+             they take no address at all — so the two triggers cannot want the cell at once. -->
+        <Style x:Key="AddressCell" TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HasAddressProblem}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}"/>
+                    <Setter Property="ToolTip" Value="{Binding AddressProblem}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Which VPN to speak is a question only a VPN row can answer. On a proxy row the picker
              would offer settings that change nothing, so it is there — the column stays in place
              for the rows that need it — but greyed. Direct and Block are covered by the same rule:
@@ -156,7 +172,8 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Url}"
-                                        Binding="{Binding Url, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                        Binding="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
+                                        CellStyle="{StaticResource AddressCell}" Width="*"/>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Username}"
                                         Binding="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Password}"
@@ -196,11 +213,13 @@
                                         ToolTip="{DynamicResource Str.Vpn.ConnectHint}"
                                         Command="{Binding Data.ToggleVpnCommand, Source={StaticResource Vm}}"
                                         CommandParameter="{Binding}">
+                                    <!-- The row knows whether it has a tunnel, so the only thing
+                                         left for the converter is the wording — and the language
+                                         version with it, because a converter's output does not
+                                         follow a DynamicResource. -->
                                     <Button.Content>
                                         <MultiBinding Converter="{StaticResource VpnConnectButtonText}" Mode="OneWay">
-                                            <Binding Path="Id"/>
-                                            <Binding Path="Data.VpnTunnels" Source="{StaticResource Vm}"/>
-                                            <Binding Path="Data.VpnTunnels.Count" Source="{StaticResource Vm}"/>
+                                            <Binding Path="IsConnected"/>
                                             <Binding Path="Version" Source="{x:Static loc:LocalizationScope.Instance}"/>
                                         </MultiBinding>
                                     </Button.Content>
@@ -217,15 +236,8 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <ContentControl VerticalAlignment="Center"
-                                                ContentTemplate="{StaticResource VpnTunnelCell}">
-                                    <ContentControl.Content>
-                                        <MultiBinding Converter="{StaticResource VpnTunnelForOutbound}" Mode="OneWay">
-                                            <Binding Path="Id"/>
-                                            <Binding Path="Data.VpnTunnels" Source="{StaticResource Vm}"/>
-                                            <Binding Path="Data.VpnTunnels.Count" Source="{StaticResource Vm}"/>
-                                        </MultiBinding>
-                                    </ContentControl.Content>
-                                </ContentControl>
+                                                Content="{Binding Tunnel}"
+                                                ContentTemplate="{StaticResource VpnTunnelCell}"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
