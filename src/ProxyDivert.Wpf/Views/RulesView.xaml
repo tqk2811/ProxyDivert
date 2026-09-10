@@ -6,6 +6,18 @@
          model through this proxy instead of an ancestor lookup that cannot resolve. -->
     <UserControl.Resources>
         <b:BindingProxy x:Key="Vm" Data="{Binding}"/>
+
+        <!-- A pattern that will not compile matches nothing on every connection, and with Not
+             ticked it claims everything instead. The list above the grid names all of them across
+             every policy; this says which row, on the cell it was typed into. -->
+        <Style x:Key="PatternCell" TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasPatternProblem}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}"/>
+                    <Setter Property="ToolTip" Value="{Binding PatternProblem}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
     <Grid Margin="4">
         <Grid.ColumnDefinitions>
@@ -148,7 +160,8 @@
                                                 EditingElementStyle="{StaticResource EnumComboColumn}"
                                                 Width="120"/>
                         <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Pattern}"
-                                            Binding="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                            Binding="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
+                                            CellStyle="{StaticResource PatternCell}" Width="*"/>
                         <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.Rules.Not}"
                                                 Binding="{Binding IsNot, UpdateSourceTrigger=PropertyChanged}" Width="55"/>
                     </DataGrid.Columns>

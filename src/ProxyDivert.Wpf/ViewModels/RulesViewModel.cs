@@ -17,13 +17,19 @@ namespace ProxyDivert.Wpf.ViewModels;
 // Order is an explicit number rather than list position, so moving a rule is a renumber of the two
 // rows involved instead of a rebuild — and the saved file keeps the order even if something else
 // reorders the list.
+//
+// Both lists hold row view models over the configuration's own objects. A policy and a rule are
+// plain data with nothing to raise a change, and the tab used to work around that by taking a row
+// out of its collection and putting it straight back.
 public sealed partial class RulesViewModel : ObservableObject
 {
     private readonly AppServices _services;
 
-    public ObservableCollection<RoutingPolicy> Policies { get; } = new ObservableCollection<RoutingPolicy>();
+    public ObservableCollection<PolicyRowViewModel> Policies { get; }
+        = new ObservableCollection<PolicyRowViewModel>();
 
-    public ObservableCollection<RoutingRule> Rules { get; } = new ObservableCollection<RoutingRule>();
+    public ObservableCollection<RuleRowViewModel> Rules { get; }
+        = new ObservableCollection<RuleRowViewModel>();
 
     public ObservableCollection<Outbound> Outbounds { get; } = new ObservableCollection<Outbound>();
 
@@ -32,14 +38,14 @@ public sealed partial class RulesViewModel : ObservableObject
     public Array UdpModes { get; } = Enum.GetValues(typeof(UdpMode));
 
     [ObservableProperty]
-    private RoutingPolicy? _selectedPolicy;
+    private PolicyRowViewModel? _selectedPolicy;
 
     [ObservableProperty]
-    private RoutingRule? _selectedRule;
+    private RuleRowViewModel? _selectedRule;
 
     /// <summary>The row being renamed right now, or null. That row draws a box instead of text.</summary>
     [ObservableProperty]
-    private RoutingPolicy? _renamingPolicy;
+    private PolicyRowViewModel? _renamingPolicy;
 
     /// <summary>What is in the rename box. Only means anything while <see cref="RenamingPolicy"/> is set.</summary>
     [ObservableProperty]
@@ -56,7 +62,8 @@ public sealed partial class RulesViewModel : ObservableObject
         Guid? previous = SelectedPolicy?.Id;
 
         Policies.Clear();
-        foreach (RoutingPolicy policy in _services.Config.Policies) Policies.Add(policy);
+        foreach (RoutingPolicy policy in _services.Config.Policies)
+            Policies.Add(new PolicyRowViewModel(policy));
 
         Outbounds.Clear();
         foreach (Outbound outbound in _services.Config.Outbounds) Outbounds.Add(outbound);
@@ -71,8 +78,9 @@ public sealed partial class RulesViewModel : ObservableObject
     /// </summary>
     /// <remarks>
     /// Such a rule matches nothing, on every connection, for as long as it stays in the list — and
-    /// with Not ticked it claims everything instead. The row looks perfectly ordinary in the grid
-    /// either way, which is why the engine's log is not the only place this is said.
+    /// with Not ticked it claims everything instead. The row says so on its own cell; this is the
+    /// list of all of them, because a filter can name several policies and only one of them is on
+    /// screen at a time.
     /// </remarks>
     [ObservableProperty]
     private string? _patternProblems;
@@ -97,11 +105,14 @@ public sealed partial class RulesViewModel : ObservableObject
         CheckPatterns();
     }
 
-    partial void OnSelectedPolicyChanged(RoutingPolicy? value)
+    partial void OnSelectedPolicyChanged(PolicyRowViewModel? value)
     {
         Rules.Clear();
+        SelectedRule = null;
         if (value is null) return;
-        foreach (RoutingRule rule in value.Rules.OrderBy(r => r.Order)) Rules.Add(rule);
+
+        foreach (RoutingRule rule in value.Model.Rules.OrderBy(r => r.Order))
+            Rules.Add(new RuleRowViewModel(rule));
     }
 
     // ==== renaming a policy, in place in the list ====
@@ -113,7 +124,7 @@ public sealed partial class RulesViewModel : ObservableObject
 
     /// <summary>Starts renaming one row. The list draws a box in place of that row's text.</summary>
     [RelayCommand]
-    public void BeginRename(RoutingPolicy? policy)
+    public void BeginRename(PolicyRowViewModel? policy)
     {
         if (policy is null) return;
 
@@ -128,7 +139,7 @@ public sealed partial class RulesViewModel : ObservableObject
     [RelayCommand]
     public void CommitRename()
     {
-        RoutingPolicy? policy = RenamingPolicy;
+        PolicyRowViewModel? policy = RenamingPolicy;
         if (policy is null) return;
 
         RenamingPolicy = null;
@@ -136,21 +147,10 @@ public sealed partial class RulesViewModel : ObservableObject
         string name = (PolicyName ?? string.Empty).Trim();
         if (name.Length == 0 || name == policy.Name) return;
 
+        // The row raises the change itself, so the list redraws where it stands. It used to be
+        // taken out of the collection and put back — the only way to make WPF read a plain model
+        // again — and that unselected the policy, which emptied the rule grid underneath.
         policy.Name = name;
-
-        // A RoutingPolicy is plain data with nothing to raise a change, so the list has to be told.
-        // Assigning the row back over itself does NOT do it: same reference in and out, so WPF sees
-        // no change, keeps the container it already has, and the row goes on showing the old name
-        // until the tab is rebuilt. The row has to actually leave the collection for its container
-        // to be thrown away and its bindings read again.
-        int index = Policies.IndexOf(policy);
-        if (index >= 0)
-        {
-            Policies.RemoveAt(index);
-            Policies.Insert(index, policy);
-        }
-
-        SelectedPolicy = policy;
 
         SaveAndApply();
     }
@@ -167,15 +167,17 @@ public sealed partial class RulesViewModel : ObservableObject
             Name = LocalizationManager.Format("Str.Rules.NewPolicy", Policies.Count + 1),
         };
         _services.Config.Policies.Add(policy);
-        Policies.Add(policy);
-        SelectedPolicy = policy;
+
+        var row = new PolicyRowViewModel(policy);
+        Policies.Add(row);
+        SelectedPolicy = row;
         SaveAndApply();
     }
 
     [RelayCommand]
     private void RemovePolicy()
     {
-        RoutingPolicy? policy = SelectedPolicy;
+        PolicyRowViewModel? policy = SelectedPolicy;
         if (policy is null) return;
 
         // The configuration takes the policy out of every filter that named it, and refuses when
@@ -192,7 +194,7 @@ public sealed partial class RulesViewModel : ObservableObject
     [RelayCommand]
     private void AddRule()
     {
-        RoutingPolicy? policy = SelectedPolicy;
+        PolicyRowViewModel? policy = SelectedPolicy;
         if (policy is null) return;
 
         var rule = new RoutingRule
@@ -200,22 +202,25 @@ public sealed partial class RulesViewModel : ObservableObject
             Id = Guid.NewGuid(),
             Matcher = HostMatcherType.Wildcard,
             Pattern = "*.example.com",
-            Order = policy.Rules.Count == 0 ? 0 : policy.Rules.Max(r => r.Order) + 1,
+            Order = policy.Model.Rules.Count == 0 ? 0 : policy.Model.Rules.Max(r => r.Order) + 1,
         };
-        policy.Rules.Add(rule);
-        Rules.Add(rule);
-        SelectedRule = rule;
+        policy.Model.Rules.Add(rule);
+
+        var row = new RuleRowViewModel(rule);
+        Rules.Add(row);
+        SelectedRule = row;
         SaveAndApply();
     }
 
     [RelayCommand]
     private void RemoveRule()
     {
-        RoutingPolicy? policy = SelectedPolicy;
-        if (policy is null || SelectedRule is null) return;
+        PolicyRowViewModel? policy = SelectedPolicy;
+        RuleRowViewModel? rule = SelectedRule;
+        if (policy is null || rule is null) return;
 
-        policy.Rules.Remove(SelectedRule);
-        Rules.Remove(SelectedRule);
+        policy.Model.Rules.Remove(rule.Model);
+        Rules.Remove(rule);
         SelectedRule = null;
         SaveAndApply();
     }
@@ -228,7 +233,7 @@ public sealed partial class RulesViewModel : ObservableObject
 
     private void Move(int delta)
     {
-        RoutingRule? rule = SelectedRule;
+        RuleRowViewModel? rule = SelectedRule;
         if (rule is null) return;
 
         int index = Rules.IndexOf(rule);
@@ -237,7 +242,7 @@ public sealed partial class RulesViewModel : ObservableObject
 
         Rules.Move(index, target);
         // Renumber the whole list: gaps and duplicates from earlier edits disappear here.
-        for (int i = 0; i < Rules.Count; i++) Rules[i].Order = i;
+        for (int i = 0; i < Rules.Count; i++) Rules[i].Model.Order = i;
         SelectedRule = rule;
         SaveAndApply();
     }

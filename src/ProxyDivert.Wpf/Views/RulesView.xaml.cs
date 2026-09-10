@@ -24,7 +24,7 @@ public partial class RulesView : UserControl
         if (e.OriginalSource is not DependencyObject source) return;
 
         ListBoxItem? row = FindAncestor<ListBoxItem>(source);
-        if (row?.DataContext is not ProxyDivert.Core.Routing.Models.RoutingPolicy policy) return;
+        if (row?.DataContext is not PolicyRowViewModel policy) return;
 
         model.BeginRename(policy);
 

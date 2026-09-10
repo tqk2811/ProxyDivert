@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Wpf.ViewModels;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;
@@ -29,8 +30,8 @@ public class PolicyRenameTests
         public object? SelectedPolicy { get; set; }
         public string PolicyName { get; set; } = string.Empty;
 
-        private RoutingPolicy? _renamingPolicy;
-        public RoutingPolicy? RenamingPolicy
+        private PolicyRowViewModel? _renamingPolicy;
+        public PolicyRowViewModel? RenamingPolicy
         {
             get => _renamingPolicy;
             set
@@ -54,8 +55,8 @@ public class PolicyRenameTests
         {
             EnsureApplication();
 
-            var work = new RoutingPolicy { Id = Guid.NewGuid(), Name = "Work" };
-            var games = new RoutingPolicy { Id = Guid.NewGuid(), Name = "Games" };
+            var work = new PolicyRowViewModel(new RoutingPolicy { Id = Guid.NewGuid(), Name = "Work" });
+            var games = new PolicyRowViewModel(new RoutingPolicy { Id = Guid.NewGuid(), Name = "Games" });
 
             var stub = new Stub();
             stub.Policies.Add(work);
@@ -93,10 +94,10 @@ public class PolicyRenameTests
     }
 
     // The half a stub cannot check: that the list actually redraws. A RoutingPolicy is plain data
-    // with nothing to raise a change, so the view model has to tell the collection — and assigning
-    // the row back over itself does not, because the same reference in and out is not a change as
-    // far as WPF is concerned. The name was saved and the list went on showing the old one until
-    // the tab was rebuilt, which is exactly what a user sees as "renaming does nothing".
+    // with nothing to raise a change, so the name was saved and the list went on showing the old
+    // one until the tab was rebuilt — exactly what a user sees as "renaming does nothing". The row
+    // view model raises it now; before that it took taking the row out of the collection and
+    // putting it back, which had a cost of its own (see the test below).
     //
     // Runs the real view model against a real configuration file, so the save is checked too.
     [Fact]
@@ -125,7 +126,7 @@ public class PolicyRenameTests
                 window.Show();
                 view.UpdateLayout();
 
-                RoutingPolicy first = model.Policies[0];
+                PolicyRowViewModel first = model.Policies[0];
                 model.BeginRename(first);
                 model.PolicyName = "Renamed";
                 model.CommitRename();
@@ -159,6 +160,65 @@ public class PolicyRenameTests
         Assert.Contains(namesOnScreen, name => name.Contains("Policy"));
 
         Assert.Contains("Renamed", savedFile);
+    }
+
+    // What the old redraw cost. Taking the row out of the collection makes the LIST unselect it —
+    // which is why this needs a real one on screen — unselecting a policy empties the rule grid,
+    // and the rule the user had picked was gone by the time the new name appeared. Renaming a
+    // policy quietly threw away where they were in it.
+    [Fact]
+    public void Renaming_a_policy_leaves_the_rule_the_user_had_picked_alone()
+    {
+        bool sameRule = false;
+        object? policyAfter = null;
+        int rulesAfter = 0;
+
+        RunOnStaThread(() =>
+        {
+            EnsureApplication();
+
+            string directory = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), "ProxyDivertTests", Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(directory);
+            string path = System.IO.Path.Combine(directory, "config.json");
+
+            var services = new ProxyDivert.Wpf.Services.AppServices(path);
+            try
+            {
+                var model = new ProxyDivert.Wpf.ViewModels.RulesViewModel(services);
+                model.AddRuleCommand.Execute(null);
+
+                var view = new ProxyDivert.Wpf.Views.RulesView { DataContext = model };
+                var window = new Window { Width = 1200, Height = 800, Content = view };
+                window.Show();
+                view.UpdateLayout();
+
+                PolicyRowViewModel policy = model.Policies[0];
+                object? rule = model.SelectedRule;
+
+                model.BeginRename(policy);
+                model.PolicyName = "Renamed";
+                model.CommitRename();
+                view.UpdateLayout();
+
+                sameRule = rule != null && ReferenceEquals(rule, model.SelectedRule);
+                policyAfter = model.SelectedPolicy;
+                rulesAfter = model.Rules.Count;
+
+                window.Close();
+                services.WhenIdleAsync().Wait(TimeSpan.FromSeconds(10));
+            }
+            finally
+            {
+                services.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+
+            System.IO.Directory.Delete(directory, recursive: true);
+        });
+
+        Assert.True(sameRule, "the rename lost the selected rule");
+        Assert.NotNull(policyAfter);
+        Assert.Equal(1, rulesAfter);
     }
 
     private static IEnumerable<string> VisibleBoxes(ListBox list)
