@@ -159,8 +159,9 @@ Step 1 is unavailable in a few cases, and step 2's guess is what remains:
   back to TCP.
 - Games with a kernel anti-cheat may treat packet redirection as interference.
 - **SoftEther** needs the genuine watermark blob to reach a real server, which is GPL data this
-  repository cannot ship — without it the server answers HTTP 403. Supply it with a `Watermark =`
-  line in a `.vpn` file.
+  repository cannot ship — without it the server answers HTTP 403. Run `Get-SoftEtherWatermark.ps1`
+  (in `tools/`, and copied next to the exe on build) to fetch the blob from the official sources onto
+  your machine, then point a `Watermark =` line in a `.vpn` file at it.
 - No VPN outbound has been verified against a live server on this machine yet.
 
 ## The VPN outbound

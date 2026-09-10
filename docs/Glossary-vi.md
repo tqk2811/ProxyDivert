@@ -553,3 +553,9 @@ Giao thức VPN của Microsoft: dựng một phiên **PPP** bên trong một k�
 ## Virtual Hub của SoftEther
 
 Máy chủ SoftEther không phục vụ trực tiếp một mạng, mà chia thành nhiều **hub ảo** — mỗi hub là một switch Ethernet ảo riêng, có danh sách người dùng riêng. Vì thế lúc đăng nhập client phải nói **hub nào** ngoài user/pass; sai tên hub thì trượt ngay ở bước login. Trên VPN Gate mọi máy chủ đều dùng chung một hub tên `VPNGATE`. Trong ProxyDivert tên hub nằm ở **phần path của URL** — `softether://host:443/VPNGATE` — hoặc ở dòng `Hub =` trong file `.vpn`.
+
+## NAT-T (NAT traversal của IPsec) và hai chế độ quay số L2TP
+
+IPsec gốc chở dữ liệu bằng **ESP — một giao thức IP riêng (proto 50)**, không có số cổng, nên router NAT ở nhà không biết đường trả gói về. NAT-T (RFC 3948) bọc ESP vào **UDP/4500** để NAT xử lý được như mọi luồng UDP khác. Hai đầu phát hiện có NAT hay không bằng NAT-D trong pha 1 (Main Mode), rồi mới quyết định "trôi" sang 4500.
+
+Driver L2TP/IPsec ở đây mặc định chạy `ForcedNatT`: khai NAT-D **giả** để máy chủ luôn kết luận là có NAT và luôn trôi sang UDP/4500, gửi từ một **cổng nguồn ngẫu nhiên**. Hệ quả thực tế: không cần quyền admin, không cần chiếm UDP/500 nên **không đụng dịch vụ IKEEXT/RasMan của Windows** (VPN L2TP có sẵn của Windows vẫn dùng bình thường). Chế độ còn lại `HonestFirst` mới bind cổng 500 thật và có thể chở ESP native proto-50 — cần raw socket và quyền cao hơn, hiện ProxyDivert không gọi tới.
