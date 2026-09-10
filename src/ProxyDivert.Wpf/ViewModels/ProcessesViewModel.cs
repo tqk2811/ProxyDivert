@@ -32,7 +32,8 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
 {
     private readonly AppServices _services;
 
-    public ObservableCollection<ProcessRule> Rules { get; } = new ObservableCollection<ProcessRule>();
+    public ObservableCollection<ProcessFilterRowViewModel> Rules { get; }
+        = new ObservableCollection<ProcessFilterRowViewModel>();
 
     /// <summary>Roots of the redirected-process tree; children hang off <see cref="AppliedProcessNode.Children"/>.</summary>
     public ObservableCollection<AppliedProcessNode> AppliedProcesses { get; }
@@ -41,7 +42,7 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
     public ObservableCollection<RoutingPolicy> Policies { get; } = new ObservableCollection<RoutingPolicy>();
 
     [ObservableProperty]
-    private ProcessRule? _selectedRule;
+    private ProcessFilterRowViewModel? _selectedRule;
 
     [ObservableProperty]
     private AppliedProcessNode? _selectedProcess;
@@ -71,15 +72,16 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
     {
         // Held across the refill: this runs on every tab switch, and clearing the grid would
         // otherwise drop whatever row the user had picked before stepping away.
-        ProcessRule? previous = SelectedRule;
+        Guid? previous = SelectedRule?.Id;
 
         Rules.Clear();
-        foreach (ProcessRule rule in _services.Config.ProcessRules) Rules.Add(rule);
+        foreach (ProcessRule rule in _services.Config.ProcessRules)
+            Rules.Add(new ProcessFilterRowViewModel(rule));
 
         Policies.Clear();
         foreach (RoutingPolicy policy in _services.Config.Policies) Policies.Add(policy);
 
-        SelectedRule = previous != null && Rules.Contains(previous) ? previous : null;
+        SelectedRule = previous is null ? null : Rules.FirstOrDefault(r => r.Id == previous);
     }
 
     [RelayCommand]
@@ -203,26 +205,16 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
     }
 
     [RelayCommand]
-    private void EditRule(ProcessRule? rule)
+    private void EditRule(ProcessFilterRowViewModel? row)
     {
-        rule ??= SelectedRule;
-        if (rule is null || !Edit(rule)) return;
+        row ??= SelectedRule;
+        if (row is null || !Edit(row.Model)) return;
 
-        // A ProcessRule is plain data with nothing to raise a change, so the row is put back into
-        // the collection to make the grid rebuild it. Cheaper than making the whole model
-        // observable for two columns that only change behind a dialog.
-        //
-        // Out and back in, not assigned over itself: the same reference in and out is not a change
-        // as far as WPF is concerned, so the container stays and the cell keeps showing the filter
-        // as it was before the edit.
-        int index = Rules.IndexOf(rule);
-        if (index >= 0)
-        {
-            Rules.RemoveAt(index);
-            Rules.Insert(index, rule);
-        }
-
-        SelectedRule = rule;
+        // The two cells the dialog changes are the ones the grid cannot edit itself, so the row is
+        // asked to read them again. It used to be taken out of the collection and put back — the
+        // only way to make WPF re-read a plain model — which unselected it on the way past.
+        row.Refresh();
+        SelectedRule = row;
 
         _services.SaveAndApply();
     }
@@ -231,7 +223,7 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
     private void RemoveRule()
     {
         if (SelectedRule is null) return;
-        _services.Config.ProcessRules.Remove(SelectedRule);
+        _services.Config.ProcessRules.Remove(SelectedRule.Model);
         Rules.Remove(SelectedRule);
         SelectedRule = null;
         _services.SaveAndApply();
@@ -247,12 +239,12 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
     // the rows could be dragged there was no way to say which came first at all — they stood in the
     // order they happened to be added in.
     //
-    // Answered here rather than on ProcessRule: a filter is the saved model, straight out of the
-    // configuration, and it has no business knowing which window is drawing it.
+    // Answered here rather than on the row: the row draws one filter, and which order the filters
+    // stand in is the list's business.
 
     public bool CanAccept(object dragged, object target, DropWhere where)
-        => dragged is ProcessRule moved
-        && target is ProcessRule onto
+        => dragged is ProcessFilterRowViewModel moved
+        && target is ProcessFilterRowViewModel onto
         && !ReferenceEquals(moved, onto)
         && where is DropWhere.Before or DropWhere.After;
 
@@ -261,11 +253,11 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
         if (!CanAccept(dragged, target, where)) return;
 
         MoveRuleTo(
-            (ProcessRule)dragged,
-            Rules.IndexOf((ProcessRule)target) + (where == DropWhere.After ? 1 : 0));
+            (ProcessFilterRowViewModel)dragged,
+            Rules.IndexOf((ProcessFilterRowViewModel)target) + (where == DropWhere.After ? 1 : 0));
     }
 
-    private void MoveRuleTo(ProcessRule rule, int index)
+    private void MoveRuleTo(ProcessFilterRowViewModel rule, int index)
     {
         int from = Rules.IndexOf(rule);
         if (from < 0) return;
@@ -282,7 +274,7 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
         // The grid is a copy of the saved list, and it is the saved order the engine matches
         // against: rearranging only the copy would look right and change nothing about what runs.
         _services.Config.ProcessRules.Clear();
-        foreach (ProcessRule moved in Rules) _services.Config.ProcessRules.Add(moved);
+        foreach (ProcessFilterRowViewModel moved in Rules) _services.Config.ProcessRules.Add(moved.Model);
 
         SelectedRule = rule;
         _services.SaveAndApply();
@@ -320,8 +312,10 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
     private Task Add(ProcessRule rule)
     {
         _services.Config.ProcessRules.Add(rule);
-        Rules.Add(rule);
-        SelectedRule = rule;
+
+        var row = new ProcessFilterRowViewModel(rule);
+        Rules.Add(row);
+        SelectedRule = row;
         return _services.SaveAndApply();
     }
 

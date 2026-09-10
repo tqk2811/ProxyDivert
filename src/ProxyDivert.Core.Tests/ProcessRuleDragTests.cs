@@ -139,7 +139,7 @@ public class ProcessRuleDragTests
             services.Config.ProcessRules.Add(Filter("three.exe"));
 
             var model = new ProcessesViewModel(services);
-            ProcessRule first = model.Rules[0];
+            ProcessFilterRowViewModel first = model.Rules[0];
 
             Assert.True(model.CanAccept(first, model.Rules[2], DropWhere.After));
             model.Accept(first, model.Rules[2], DropWhere.After);
@@ -173,7 +173,7 @@ public class ProcessRuleDragTests
             services.Config.ProcessRules.Add(Filter("two.exe"));
 
             var model = new ProcessesViewModel(services);
-            ProcessRule first = model.Rules[0];
+            ProcessFilterRowViewModel first = model.Rules[0];
 
             Assert.False(model.CanAccept(first, first, DropWhere.After));
 
