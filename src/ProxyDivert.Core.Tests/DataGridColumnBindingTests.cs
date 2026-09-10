@@ -197,6 +197,91 @@ public class DataGridColumnBindingTests
         Assert.True(proxyAcceptedEdit, "No row can be edited at all — the refusal is not limited to the built-ins.");
     }
 
+    // The offer to fetch the SoftEther watermark is a XAML trigger on a property, which is exactly
+    // the kind of thing the compiler never checks: bind it to a name that is not there and the
+    // button either never appears or appears on every row. Both are only visible by running it.
+    [Fact]
+    public void The_watermark_button_is_offered_only_where_it_is_needed()
+    {
+        bool onSoftEther = false;
+        bool onSstp = false;
+        bool onProxy = false;
+        bool afterTheBlobArrives = true;
+
+        string folder = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "pd-grid-" + Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(folder);
+
+        RunOnStaThread(() =>
+        {
+            EnsureApplication();
+
+            using var store = new ProxyDivert.Core.Vpn.SoftEtherWatermarkStore(
+                searchPaths: new[] { folder });
+
+            var softEther = new OutboundRowViewModel(new ProxyDivert.Core.Routing.Models.Outbound
+            {
+                Id = Guid.NewGuid(),
+                Name = "vpngate",
+                Kind = OutboundKind.Vpn,
+                Url = "softether://vpn.example.com:443/VPNGATE",
+            }, store);
+            var sstp = new OutboundRowViewModel(new ProxyDivert.Core.Routing.Models.Outbound
+            {
+                Id = Guid.NewGuid(),
+                Name = "office",
+                Kind = OutboundKind.Vpn,
+                Url = "sstp://vpn.example.com:443",
+            }, store);
+            var proxy = new OutboundRowViewModel(new ProxyDivert.Core.Routing.Models.Outbound
+            {
+                Id = Guid.NewGuid(),
+                Name = "proxy 1",
+                Kind = OutboundKind.Socks5,
+                Url = "socks5://127.0.0.1:1080",
+            }, store);
+
+            var stub = new ViewModelStub();
+            foreach (object outbound in new object[] { softEther, sstp, proxy }) stub.Outbounds.Add(outbound);
+
+            var view = new OutboundsView { DataContext = stub };
+            var window = new Window { Width = 1400, Height = 900, Content = view };
+            window.Show();
+            view.UpdateLayout();
+
+            DataGrid grid = FindVisuals<DataGrid>(view).First();
+            onSoftEther = WatermarkButtonShown(grid, softEther);
+            onSstp = WatermarkButtonShown(grid, sstp);
+            onProxy = WatermarkButtonShown(grid, proxy);
+
+            // One blob serves the whole machine, so fetching it has to take the offer off the row.
+            var blob = new byte[1411];
+            blob[0] = (byte)'G'; blob[1] = (byte)'I'; blob[2] = (byte)'F'; blob[3] = (byte)'8';
+            blob[blob.Length - 1] = 0x3B;
+            System.IO.File.WriteAllBytes(
+                System.IO.Path.Combine(folder, ProxyDivert.Core.Vpn.SoftEtherWatermarkStore.FileName), blob);
+            softEther.RefreshWatermarkNeed();
+            view.UpdateLayout();
+            afterTheBlobArrives = WatermarkButtonShown(grid, softEther);
+
+            window.Close();
+        });
+
+        try { System.IO.Directory.Delete(folder, recursive: true); } catch { }
+
+        Assert.True(onSoftEther, "A SoftEther row with no watermark does not offer to fetch one.");
+        Assert.False(onSstp, "An SSTP row offers a watermark it has no use for.");
+        Assert.False(onProxy, "A SOCKS row offers a VPN watermark.");
+        Assert.False(afterTheBlobArrives, "The offer stays up after the watermark has been fetched.");
+    }
+
+    private static bool WatermarkButtonShown(DataGrid grid, object row)
+    {
+        string caption = (string)Application.Current.Resources["Str.Outbound.FetchWatermark"];
+        return FindVisuals<Button>(RowFor(grid, row))
+            .Any(button => button.IsVisible && Equals(button.Content, caption));
+    }
+
     private static DataGridColumn ComboColumnFor(DataGrid grid, string path)
         => grid.Columns
             .OfType<DataGridComboBoxColumn>()

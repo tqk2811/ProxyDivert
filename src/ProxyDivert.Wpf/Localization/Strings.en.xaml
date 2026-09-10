@@ -128,6 +128,14 @@
     <sys:String x:Key="Str.Settings.Ipv6Hint">Redirect sends the IPv6 traffic through the rules like IPv4. Block drops it so the application falls back to IPv4 — use it when the way out has no IPv6 route. Ignore lets it leave untouched, bypassing the proxy.</sys:String>
     <sys:String x:Key="Str.Settings.WireProxy">wireproxy.exe</sys:String>
     <sys:String x:Key="Str.Settings.WireProxyHint">Needed only by VPN outbounds: wireproxy runs the WireGuard tunnel in user space, with no TUN adapter. Leave empty to look next to ProxyDivert.exe and then on PATH.</sys:String>
+    <sys:String x:Key="Str.Outbound.FetchWatermark">Get watermark</sys:String>
+    <sys:String x:Key="Str.Settings.Watermark">SoftEther watermark</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkHint">Needed only by a SoftEther outbound: a real server refuses a session that does not carry this blob. It is GPL data ProxyDivert cannot ship, so it is fetched from the official SoftEther sources and saved next to ProxyDivert.exe.</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkFetch">Download</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkFetching">Downloading…</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkMissing">Not on this machine yet — a SoftEther server will answer HTTP 403.</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkFound">Ready: {0}</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkFailed">Download failed: {0}</sys:String>
     <sys:String x:Key="Str.Settings.EventSource">Process detection</sys:String>
     <sys:String x:Key="Str.Settings.EventSourceHint">How the tool learns that a process has started, which is what decides how soon its traffic can be redirected. Locked while WinDivert is on.</sys:String>
     <sys:String x:Key="Str.Settings.DetectionProcessEvents">Process events</sys:String>

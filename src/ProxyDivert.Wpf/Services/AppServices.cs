@@ -59,6 +59,16 @@ public sealed class AppServices : IAsyncDisposable
     public OutboundTester OutboundTester { get; }
 
     /// <summary>
+    /// Where the SoftEther watermark blob is on this machine, and the download that fetches it.
+    /// </summary>
+    /// <remarks>
+    /// The blob is GPL data the application cannot ship, so a SoftEther outbound is unusable until
+    /// someone goes and gets it. That is a button rather than something done on the way to dialling:
+    /// a network tool should not reach out to the internet on its own.
+    /// </remarks>
+    public SoftEtherWatermarkStore Watermarks { get; }
+
+    /// <summary>
     /// Every process running on this machine, with its path, its arguments and its parent.
     /// </summary>
     /// <remarks>
@@ -140,6 +150,7 @@ public sealed class AppServices : IAsyncDisposable
         Engine = _provider.GetRequiredService<RedirectEngine>();
         Vpn = _provider.GetRequiredService<VpnConnectionKeeper>();
         OutboundTester = _provider.GetRequiredService<OutboundTester>();
+        Watermarks = _provider.GetRequiredService<SoftEtherWatermarkStore>();
 
         // Resolved but not started — see the remarks on the property. Choosing the event source is
         // free while it is stopped (it only records the choice), and doing it here means the table

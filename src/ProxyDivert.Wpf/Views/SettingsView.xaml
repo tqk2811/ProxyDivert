@@ -82,6 +82,18 @@
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
                                Text="{DynamicResource Str.Settings.WireProxyHint}"/>
 
+                    <!-- No path box for this one: the blob has a fixed name and two places it may
+                         live, so what the user needs is the button and the answer to "is it here". -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="{DynamicResource Str.Settings.Watermark}" VerticalAlignment="Center" MinWidth="120"/>
+                        <Button Content="{DynamicResource Str.Settings.WatermarkFetch}"
+                                Command="{Binding FetchWatermarkCommand}" MinWidth="90"/>
+                        <TextBlock Text="{Binding WatermarkStatus}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                   TextWrapping="Wrap" MaxWidth="420" Style="{StaticResource Subtle}"/>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.WatermarkHint}"/>
+
                     <CheckBox Content="{DynamicResource Str.Settings.AutoSaveLog}"
                               IsChecked="{Binding AutoSaveLog}" Margin="0,0,0,4"/>
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,8" TextWrapping="Wrap"

@@ -11,6 +11,7 @@ using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Vpn.Models;
+using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.Services;
 
 namespace ProxyDivert.Wpf.ViewModels;
@@ -64,7 +65,7 @@ public sealed partial class OutboundsViewModel : ObservableObject
 
         Outbounds.Clear();
         foreach (Outbound outbound in _services.Config.Outbounds)
-            Outbounds.Add(new OutboundRowViewModel(outbound));
+            Outbounds.Add(new OutboundRowViewModel(outbound, _services.Watermarks));
 
         Selected = previous is null ? null : Outbounds.FirstOrDefault(r => r.Id == previous);
 
@@ -143,7 +144,7 @@ public sealed partial class OutboundsViewModel : ObservableObject
         };
         _services.Config.Outbounds.Add(outbound);
 
-        var row = new OutboundRowViewModel(outbound);
+        var row = new OutboundRowViewModel(outbound, _services.Watermarks);
         Outbounds.Add(row);
         Selected = row;
         _services.SaveAndApply();
@@ -162,6 +163,31 @@ public sealed partial class OutboundsViewModel : ObservableObject
         Outbounds.Remove(Selected);
         Selected = null;
         _services.SaveAndApply();
+    }
+
+    /// <summary>
+    /// Fetches the SoftEther watermark blob, from the row that is missing it.
+    /// </summary>
+    /// <remarks>
+    /// The same download as the one on the Settings tab, offered here because this is where someone
+    /// finds out they need it: they have just typed softether:// into a row. Every row is re-asked
+    /// afterwards, not only this one — the blob is one file for the whole machine, so fetching it
+    /// answers the question for all of them at once.
+    /// </remarks>
+    [RelayCommand]
+    private async Task FetchWatermarkAsync(OutboundRowViewModel? row)
+    {
+        try
+        {
+            string path = await _services.Watermarks.DownloadAsync().ConfigureAwait(true);
+            TestResult = LocalizationManager.Format("Str.Settings.WatermarkFound", path);
+        }
+        catch (Exception ex)
+        {
+            TestResult = LocalizationManager.Format("Str.Settings.WatermarkFailed", ex.Message);
+        }
+
+        foreach (OutboundRowViewModel each in Outbounds) each.RefreshWatermarkNeed();
     }
 
     [RelayCommand]

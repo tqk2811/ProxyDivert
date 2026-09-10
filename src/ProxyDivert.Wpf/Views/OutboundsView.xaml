@@ -207,6 +207,28 @@
                                             IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
+                              <StackPanel>
+                                <!-- Only on a SoftEther row with no blob on the machine, which is
+                                     also the only row whose Connect button is certain to fail:
+                                     the server refuses the session with a 403 and says nothing
+                                     about what is missing. Offered here as well as in Settings
+                                     because this is where the user finds out they need it. -->
+                                <Button Margin="0,2" Padding="6,1" MinWidth="90"
+                                        Content="{DynamicResource Str.Outbound.FetchWatermark}"
+                                        ToolTip="{DynamicResource Str.Settings.WatermarkHint}"
+                                        Command="{Binding Data.FetchWatermarkCommand, Source={StaticResource Vm}}"
+                                        CommandParameter="{Binding}">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding NeedsWatermark}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
                                 <Button Margin="0,2" Padding="6,1" MinWidth="90"
                                         Style="{StaticResource VpnConnectButton}"
                                         ToolTipService.ShowOnDisabled="True"
@@ -224,6 +246,7 @@
                                         </MultiBinding>
                                     </Button.Content>
                                 </Button>
+                              </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>

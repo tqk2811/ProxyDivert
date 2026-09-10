@@ -43,6 +43,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _eventSource = services.Config.ProcessEventSource;
         _detection = services.Config.ProcessDetection;
 
+        RefreshWatermarkStatus();
         VerifyStartWithWindows();
     }
 
@@ -280,6 +281,54 @@ public sealed partial class SettingsViewModel : ObservableObject
         };
         if (dialog.ShowDialog() == true) DiagnosticLogPath = dialog.FileName;
     }
+
+    /// <summary>
+    /// What the SoftEther watermark line says: where the blob is, or that it is not here yet.
+    /// </summary>
+    /// <remarks>
+    /// Read off the disk each time rather than remembered, because the file can also arrive from
+    /// the script that ships beside the exe — and a line claiming "not fetched" next to a file that
+    /// is plainly there is worse than no line at all.
+    /// </remarks>
+    [ObservableProperty]
+    private string _watermarkStatus = string.Empty;
+
+    [ObservableProperty]
+    private bool _isFetchingWatermark;
+
+    public void RefreshWatermarkStatus()
+    {
+        string? path = _services.Watermarks.Find();
+        WatermarkStatus = path is null
+            ? Loc.S("Str.Settings.WatermarkMissing")
+            : LocalizationManager.Format("Str.Settings.WatermarkFound", path);
+    }
+
+    // Never on the way to dialling a tunnel, only here: a tool whose whole job is to control what
+    // leaves this machine should not make a connection of its own that nobody asked for.
+    [RelayCommand(CanExecute = nameof(CanFetchWatermark))]
+    private async Task FetchWatermarkAsync()
+    {
+        IsFetchingWatermark = true;
+        FetchWatermarkCommand.NotifyCanExecuteChanged();
+        WatermarkStatus = Loc.S("Str.Settings.WatermarkFetching");
+        try
+        {
+            string path = await _services.Watermarks.DownloadAsync().ConfigureAwait(true);
+            WatermarkStatus = LocalizationManager.Format("Str.Settings.WatermarkFound", path);
+        }
+        catch (Exception ex)
+        {
+            WatermarkStatus = LocalizationManager.Format("Str.Settings.WatermarkFailed", ex.Message);
+        }
+        finally
+        {
+            IsFetchingWatermark = false;
+            FetchWatermarkCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private bool CanFetchWatermark() => !IsFetchingWatermark;
 
     [RelayCommand]
     private void BrowseWireProxy()

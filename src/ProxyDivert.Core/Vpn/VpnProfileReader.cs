@@ -78,6 +78,24 @@ public static class VpnProfileReader
             && address.Path!.EndsWith(".conf", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Whether this outbound would be dialled as SoftEther, decided from the boxes alone.
+    /// </summary>
+    /// <remarks>
+    /// Asked by the user interface, which offers to fetch the watermark blob on exactly the rows
+    /// that need one. It is the same reading of the scheme <see cref="Read"/> does, rather than a
+    /// second one in the view that could come to disagree about "se://".
+    /// </remarks>
+    public static bool IsSoftEther(VpnProtocol protocol, string? url)
+    {
+        if (protocol == VpnProtocol.SoftEther) return true;
+        if (protocol != VpnProtocol.Auto) return false;
+
+        OutboundAddress.TryParse(OutboundKind.Vpn, url, protocol, out OutboundAddress? address, out _);
+        return address is { Kind: OutboundAddressKind.VpnEndpoint }
+            && FromScheme(address.Uri!.Scheme) == VpnProtocol.SoftEther;
+    }
+
     /// <summary>The same question for a caller holding the raw box rather than a read one.</summary>
     public static bool RunsOnWireProxy(VpnProtocol protocol, string? url)
     {

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Vpn;
 using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Vpn.Models;
 using ProxyDivert.Wpf.ViewModels;
@@ -182,5 +183,96 @@ public class OutboundRowViewModelTests
 
         Assert.True(row.IsConnected);
         Assert.Contains(nameof(row.IsConnected), changed);
+    }
+
+    // ==== the SoftEther watermark, which is the one thing a row cannot be given by typing ====
+
+    private static OutboundRowViewModel Vpn(
+        string? url, SoftEtherWatermarkStore? watermarks, VpnProtocol protocol = VpnProtocol.Auto)
+        => new OutboundRowViewModel(
+            new Outbound
+            {
+                Id = Guid.NewGuid(),
+                Name = "vpn",
+                Kind = OutboundKind.Vpn,
+                Url = url,
+                VpnProtocol = protocol,
+            },
+            watermarks);
+
+    [Fact]
+    public void ASoftEtherRow_AsksForTheWatermarkWhenTheMachineHasNone()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "pd-row-" + Guid.NewGuid().ToString("N"));
+        using var store = new SoftEtherWatermarkStore(searchPaths: new[] { folder });
+
+        Assert.True(Vpn("softether://vpn.example.com:443/VPN", store).NeedsWatermark);
+    }
+
+    // Every other dialled protocol works without one, so offering the download there is noise.
+    [Theory]
+    [InlineData("sstp://vpn.example.com:443")]
+    [InlineData("l2tp://vpn.example.com")]
+    [InlineData("ikev2://vpn.example.com")]
+    public void ARowOfAnotherProtocol_DoesNotAskForIt(string url)
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "pd-row-" + Guid.NewGuid().ToString("N"));
+        using var store = new SoftEtherWatermarkStore(searchPaths: new[] { folder });
+
+        Assert.False(Vpn(url, store).NeedsWatermark);
+    }
+
+    // The protocol box says SoftEther even where the URL says nothing about it.
+    [Fact]
+    public void ARowToldItIsSoftEtherByHand_AsksForItToo()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "pd-row-" + Guid.NewGuid().ToString("N"));
+        using var store = new SoftEtherWatermarkStore(searchPaths: new[] { folder });
+
+        Assert.True(Vpn("vpn.example.com:443/VPN", store, VpnProtocol.SoftEther).NeedsWatermark);
+    }
+
+    [Fact]
+    public void OnceTheBlobIsThere_TheRowStopsAsking()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "pd-row-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            using var store = new SoftEtherWatermarkStore(searchPaths: new[] { folder });
+            OutboundRowViewModel row = Vpn("softether://vpn.example.com:443/VPN", store);
+            Assert.True(row.NeedsWatermark);
+
+            var blob = new byte[1411];
+            blob[0] = (byte)'G'; blob[1] = (byte)'I'; blob[2] = (byte)'F'; blob[3] = (byte)'8';
+            blob[blob.Length - 1] = 0x3B;
+            File.WriteAllBytes(Path.Combine(folder, SoftEtherWatermarkStore.FileName), blob);
+
+            List<string> changed = Watch(row);
+            row.RefreshWatermarkNeed();
+
+            Assert.False(row.NeedsWatermark);
+            Assert.Contains(nameof(row.NeedsWatermark), changed);
+        }
+        finally
+        {
+            try { Directory.Delete(folder, recursive: true); } catch { }
+        }
+    }
+
+    // Typing softether:// into a row that was something else must offer the download there and
+    // then, without waiting for a save or a tab switch.
+    [Fact]
+    public void SwitchingARowToSoftEther_RaisesTheQuestionImmediately()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "pd-row-" + Guid.NewGuid().ToString("N"));
+        using var store = new SoftEtherWatermarkStore(searchPaths: new[] { folder });
+        OutboundRowViewModel row = Vpn("sstp://vpn.example.com:443", store);
+        List<string> changed = Watch(row);
+
+        row.Url = "softether://vpn.example.com:443/VPN";
+
+        Assert.True(row.NeedsWatermark);
+        Assert.Contains(nameof(row.NeedsWatermark), changed);
     }
 }

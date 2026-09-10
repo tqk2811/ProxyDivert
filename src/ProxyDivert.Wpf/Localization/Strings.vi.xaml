@@ -128,6 +128,14 @@
     <sys:String x:Key="Str.Settings.Ipv6Hint">Redirect: đưa IPv6 qua luật định tuyến y như IPv4. Block: chặn để ứng dụng tự lùi về IPv4 — dùng khi đường ra không có tuyến IPv6. Ignore: thả cho đi thẳng, tức là lọt ra ngoài proxy.</sys:String>
     <sys:String x:Key="Str.Settings.WireProxy">wireproxy.exe</sys:String>
     <sys:String x:Key="Str.Settings.WireProxyHint">Chỉ cần cho đường ra VPN: wireproxy chạy đường hầm WireGuard ở tầng ứng dụng, không tạo card mạng ảo. Bỏ trống thì tìm cạnh ProxyDivert.exe rồi tới PATH.</sys:String>
+    <sys:String x:Key="Str.Outbound.FetchWatermark">Tải watermark</sys:String>
+    <sys:String x:Key="Str.Settings.Watermark">Watermark SoftEther</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkHint">Chỉ cần cho đường ra SoftEther: máy chủ thật từ chối phiên không mang khối này. Đây là dữ liệu GPL nên ProxyDivert không đóng gói kèm, mà tải từ mã nguồn SoftEther chính thức rồi lưu cạnh ProxyDivert.exe.</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkFetch">Tải</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkFetching">Đang tải…</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkMissing">Máy này chưa có — máy chủ SoftEther sẽ trả HTTP 403.</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkFound">Đã có: {0}</sys:String>
+    <sys:String x:Key="Str.Settings.WatermarkFailed">Tải hỏng: {0}</sys:String>
     <sys:String x:Key="Str.Settings.EventSource">Cách phát hiện tiến trình</sys:String>
     <sys:String x:Key="Str.Settings.EventSourceHint">Cách công cụ biết một tiến trình vừa khởi động, tức thứ quyết định traffic của nó được chuyển hướng sớm hay muộn. Khoá khi WinDivert đang bật.</sys:String>
     <sys:String x:Key="Str.Settings.DetectionProcessEvents">Sự kiện tiến trình</sys:String>

@@ -58,6 +58,12 @@ public static class ProxyDivertServiceCollectionExtensions
         // is being redirected, so starting the engine costs a read rather than a rediscovery.
         services.TryAddSingleton<ProcessInventory>();
 
+        // Where the SoftEther watermark blob is, and the download that puts it there. Registered for
+        // the sake of the download — the blob is fetched once, by a button — while the build path
+        // asks its own instance where the file is, which is a look at two folders and no state.
+        services.TryAddSingleton(sp => new SoftEtherWatermarkStore(
+            loggerFactory: sp.GetService<ILoggerFactory>()));
+
         // One builder per kind of way out. A new kind is a new class registered here, and nothing
         // else in the application changes.
         foreach (IOutboundSourceBuilder builder in OutboundSourceFactory.DefaultBuilders())

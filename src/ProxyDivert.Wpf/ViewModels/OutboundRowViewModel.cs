@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using ProxyDivert.Core.Outbounds.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Vpn;
 using ProxyDivert.Core.Vpn.Enums;
 
 namespace ProxyDivert.Wpf.ViewModels;
@@ -28,9 +29,16 @@ namespace ProxyDivert.Wpf.ViewModels;
 /// </remarks>
 public sealed partial class OutboundRowViewModel : ObservableObject
 {
-    public OutboundRowViewModel(Outbound model)
+    private readonly SoftEtherWatermarkStore? _watermarks;
+
+    /// <param name="watermarks">
+    /// Where the SoftEther watermark blob is, so a row that needs one can say so and offer to fetch
+    /// it. Null leaves that offer off the row entirely, which is what a test binding a grid wants.
+    /// </param>
+    public OutboundRowViewModel(Outbound model, SoftEtherWatermarkStore? watermarks = null)
     {
         Model = model ?? throw new ArgumentNullException(nameof(model));
+        _watermarks = watermarks;
     }
 
     /// <summary>The outbound itself, for the commands that work on the configuration.</summary>
@@ -152,6 +160,21 @@ public sealed partial class OutboundRowViewModel : ObservableObject
 
     public bool HasAddressProblem => AddressProblem != null;
 
+    /// <summary>
+    /// Whether this row is a SoftEther outbound with no watermark blob on the machine — the one
+    /// thing a VPN row can be missing that is neither typed in a box nor fixable by typing.
+    /// </summary>
+    /// <remarks>
+    /// Asked here, next to <see cref="AddressProblem"/>, and for the same reason: it reads the disk,
+    /// which the routing path must never do, and it is re-asked when a cell is edited so switching
+    /// the protocol box to SoftEther offers the download straight away.
+    /// </remarks>
+    public bool NeedsWatermark
+        => _watermarks != null
+            && IsVpn
+            && VpnProfileReader.IsSoftEther(Model.VpnProtocol, Model.Url)
+            && _watermarks.Find() is null;
+
     // ==== the tunnel, for a VPN row ====
 
     /// <summary>
@@ -170,6 +193,12 @@ public sealed partial class OutboundRowViewModel : ObservableObject
 
     partial void OnTunnelChanged(VpnTunnelViewModel? value) => OnPropertyChanged(nameof(IsConnected));
 
+    /// <summary>
+    /// Re-asks <see cref="NeedsWatermark"/>. For after the blob has been fetched — by this row, by
+    /// another one, or by the button on the Settings tab.
+    /// </summary>
+    public void RefreshWatermarkNeed() => OnPropertyChanged(nameof(NeedsWatermark));
+
     /// <summary>Re-reads every cell. For when something outside the grid changed the model.</summary>
     public void Refresh()
     {
@@ -180,6 +209,7 @@ public sealed partial class OutboundRowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(AddressProblem));
         OnPropertyChanged(nameof(HasAddressProblem));
+        OnPropertyChanged(nameof(NeedsWatermark));
     }
 
     /// <summary>
