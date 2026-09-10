@@ -545,3 +545,11 @@ chọn nó, kéo theo mọi thứ phụ thuộc lựa chọn đó. Lợi ích th
 ô nhập và model** để từ chối sửa (hàng built-in) và để nói cái vừa gõ sai ở đâu, thay vì để lỗi
 trôi tới lần kết nối đầu tiên. Trong ProxyDivert: `OutboundRowViewModel`, `PolicyRowViewModel`,
 `RuleRowViewModel`, `ProcessFilterRowViewModel`.
+
+## MS-SSTP (Secure Socket Tunneling Protocol)
+
+Giao thức VPN của Microsoft: dựng một phiên **PPP** bên trong một kết nối **TLS cổng 443**, nên với thiết bị mạng ở giữa nó trông y hệt HTTPS và hầu như không bị chặn. Đăng nhập bằng tài khoản/mật khẩu (MS-CHAPv2), **không cần** [PSK](#L117) và không cần khối [watermark](#L121) như SoftEther — nên trong ProxyDivert nó là giao thức quay số bằng địa chỉ dễ dùng nhất: chỉ cần `sstp://host:443` cộng user/pass. Máy chủ VPN Gate dùng chứng chỉ tự ký; driver SSTP ở đây mặc định **không kiểm chứng chỉ** (`certificateValidationCallback` null ⇒ nhận mọi chứng chỉ), nên chứng chỉ tự ký không làm hỏng kết nối — đổi lại TLS ở đây chỉ để nguỵ trang và chống nghe lén thụ động, danh tính máy chủ do lớp xác thực PPP bên trong bảo đảm.
+
+## Virtual Hub của SoftEther
+
+Máy chủ SoftEther không phục vụ trực tiếp một mạng, mà chia thành nhiều **hub ảo** — mỗi hub là một switch Ethernet ảo riêng, có danh sách người dùng riêng. Vì thế lúc đăng nhập client phải nói **hub nào** ngoài user/pass; sai tên hub thì trượt ngay ở bước login. Trên VPN Gate mọi máy chủ đều dùng chung một hub tên `VPNGATE`. Trong ProxyDivert tên hub nằm ở **phần path của URL** — `softether://host:443/VPNGATE` — hoặc ở dòng `Hub =` trong file `.vpn`.
