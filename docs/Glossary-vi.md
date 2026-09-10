@@ -120,7 +120,7 @@ Một chuỗi bí mật **dùng chung cho cả nhóm**, dùng ở pha 1 của IP
 
 ## Watermark của SoftEther
 
-Một khối chữ ký nhị phân mà client SoftEther chính thức gửi kèm lúc đăng nhập; máy chủ SoftEther thật kiểm khối này và trả **HTTP 403** nếu thiếu. Khối đó là dữ liệu GPL nên không nằm trong repo TqkLibrary.VpnClient, và cũng không thể tự sinh. Muốn dùng đường ra SoftEther với máy chủ thật thì phải tự lấy file blob rồi khai bằng dòng `Watermark = <đường dẫn>` trong file `.vpn` — đây là lý do SoftEther là giao thức duy nhất trong sáu giao thức không dùng được nếu chỉ điền URL.
+Một khối chữ ký nhị phân mà client SoftEther chính thức gửi kèm lúc đăng nhập; máy chủ SoftEther thật kiểm khối này và trả **HTTP 403** nếu thiếu. Thực chất nó là một ảnh **GIF** 1411 byte nằm trong mảng `BYTE WaterMark[]` của file `src/Cedar/WaterMark.c` thuộc mã nguồn SoftEther (dù giao thức gửi nó dưới header `Content-Type: image/jpeg`). Khối đó là dữ liệu GPL nên không đóng gói kèm được: **phân phối** tác phẩm GPL mới bị ràng buộc, còn **tải về máy mình để dùng** thì không (GPLv2 §0), nên ProxyDivert đi tải thay vì kèm sẵn — nút *Tải* ở tab Cài đặt và nút *Tải watermark* trên dòng đường ra SoftEther, hoặc `tools/Get-SoftEtherWatermark.ps1` cho ai thích dòng lệnh. File lưu tên `softether-watermark.dat` cạnh exe (không ghi được thì `%LOCALAPPDATA%\ProxyDivert`) và được tự dùng cho mọi đường ra SoftEther; dòng `Watermark = <đường dẫn>` trong file `.vpn` vẫn thắng khi có. Bẫy khi tự trích: ngay dưới mảng watermark còn mảng `Saitama[]` — lấy nhầm thì file vẫn hợp lệ mà máy chủ vẫn 403.
 
 ## Driver VPN tự kết nối lại
 

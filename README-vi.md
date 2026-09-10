@@ -150,9 +150,10 @@ Bước 1 không dùng được trong mấy trường hợp, lúc đó phải ch
   thì UDP bị chặn chứ không rò ra ngoài. QUIC (UDP/443) chặn mặc định để trình duyệt lùi về TCP.
 - Game có anti-cheat kernel có thể coi việc chuyển hướng gói tin là can thiệp.
 - **SoftEther** cần đúng khối [watermark](docs/Glossary-vi.md#L121) thật mới nói chuyện được với máy
-  chủ thật; khối đó là dữ liệu GPL nên repo này không kèm — thiếu nó máy chủ trả HTTP 403. Chạy
-  `Get-SoftEtherWatermark.ps1` (nằm trong `tools/`, và được chép ra cạnh exe khi build) để tải khối
-  đó từ mã nguồn chính thức về máy, rồi khai bằng dòng `Watermark =` trong file `.vpn`.
+  chủ thật; khối đó là dữ liệu GPL nên repo này không kèm — thiếu nó máy chủ trả HTTP 403. Bấm
+  **Tải** ở mục *Watermark SoftEther* trong tab Cài đặt (hoặc nút **Tải watermark** hiện ngay trên
+  dòng đường ra SoftEther) là tool tải khối đó từ mã nguồn chính thức về, lưu cạnh `ProxyDivert.exe`
+  rồi tự dùng — không phải khai đường dẫn ở đâu cả. Tool KHÔNG bao giờ tự tải: phải bấm.
 - Chưa đường ra VPN nào được kiểm chứng với máy chủ thật trên máy này.
 
 ## Đường ra VPN
