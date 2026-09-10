@@ -11,11 +11,12 @@
     Script chỉ tải file .c từ repo chính thức, cắt lấy đúng mảng WaterMark[] và ghi ra file nhị phân.
     Không byte nào của SoftEther nằm trong script này.
 
-    File kết quả mặc định nằm NGOÀI cây source (%LOCALAPPDATA%\ProxyDivert) để không commit nhầm.
+    File kết quả mặc định nằm ngay CẠNH SCRIPT — cạnh ProxyDivert.exe khi chạy bản đã build, hoặc
+    trong tools/ khi chạy từ repo (tên file đã nằm trong .gitignore nên không commit nhầm được).
     Khai nó bằng dòng "Watermark = <đường dẫn>" trong file .vpn của đường ra SoftEther.
 
 .PARAMETER OutPath
-    Nơi ghi file nhị phân. Mặc định %LOCALAPPDATA%\ProxyDivert\softether-watermark.dat.
+    Nơi ghi file nhị phân. Mặc định softether-watermark.dat cạnh chính script này.
 
 .PARAMETER Ref
     Nhánh hoặc tag của repo SoftEtherVPN để lấy nguồn. Mặc định master.
@@ -49,7 +50,7 @@ $MinimumSize = 512
 $MaximumSize = 65536
 
 if (-not $OutPath) {
-    $OutPath = Join-Path $env:LOCALAPPDATA 'ProxyDivert\softether-watermark.dat'
+    $OutPath = Join-Path $PSScriptRoot 'softether-watermark.dat'
 }
 $OutPath = [IO.Path]::GetFullPath($OutPath)
 
@@ -112,7 +113,13 @@ if ($outDirectory -and -not (Test-Path -LiteralPath $outDirectory)) {
 }
 
 # WriteAllBytes chứ không phải toán tử '>': PS 5.1 coi '>' là ghi text UTF-16LE và làm hỏng file nhị phân.
-[IO.File]::WriteAllBytes($OutPath, $bytes)
+try {
+    [IO.File]::WriteAllBytes($OutPath, $bytes)
+}
+catch [UnauthorizedAccessException] {
+    # Mặc định ghi cạnh script, mà script thì đi cùng exe — chỗ đó có thể là Program Files.
+    throw "Không ghi được vào '$OutPath' (thiếu quyền). Chạy lại với -OutPath trỏ vào chỗ ghi được, ví dụ: -OutPath `"`$env:LOCALAPPDATA\ProxyDivert\softether-watermark.dat`""
+}
 
 Write-Host "Đã ghi $($bytes.Length) byte vào $OutPath"
 Write-Host ""
