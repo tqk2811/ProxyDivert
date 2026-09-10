@@ -206,19 +206,12 @@
                                          and are listed against it in the grid above, while the
                                          filter is the thing to go and edit. An adopted child shows
                                          its parent's, because that is the one that caught it — and
-                                         the badge beside it says so. -->
-                                    <StackPanel Orientation="Horizontal"
-                                                Width="{Binding Data.AppliedFilterWidth, Source={StaticResource Vm}}">
-                                        <TextBlock Text="{Binding Filter}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   ToolTip="{Binding Filter}"/>
-                                        <Border CornerRadius="8" Padding="7,1" Margin="6,0,0,0"
-                                                VerticalAlignment="Center"
-                                                Background="{DynamicResource Brush.Accent.Subtle}"
-                                                Visibility="{Binding IsChild, Converter={StaticResource TrueToVisible}}">
-                                            <TextBlock Text="{DynamicResource Str.Process.Inherited}" FontSize="11"/>
-                                        </Border>
-                                    </StackPanel>
+                                         it sits under that parent in the tree, which says as much
+                                         without a badge. -->
+                                    <TextBlock Text="{Binding Filter}"
+                                               Width="{Binding Data.AppliedFilterWidth, Source={StaticResource Vm}}"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding Filter}"/>
 
                                     <TextBlock Text="{Binding Path}" Style="{StaticResource Subtle}"
                                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"

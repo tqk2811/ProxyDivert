@@ -59,7 +59,6 @@
     <sys:String x:Key="Str.Process.AddFromSelection">Tạo luật từ dòng đang chọn</sys:String>
     <sys:String x:Key="Str.Process.Launch">Chạy ở trạng thái tạm dừng…</sys:String>
     <sys:String x:Key="Str.Process.LaunchHint">Chạy chương trình ở trạng thái tạm dừng để gắn chuyển hướng trước kết nối đầu tiên, không lọt gói nào lúc khởi động.</sys:String>
-    <sys:String x:Key="Str.Process.Inherited">kế thừa</sys:String>
     <sys:String x:Key="Str.Process.NoneApplied">Chưa áp dụng cho tiến trình nào. Bấm chạy, rồi mọi tiến trình khớp luật sẽ hiện ở đây.</sys:String>
 
     <!-- Cửa sổ dựng điều kiện. Toán tử chỉ nằm ở đầu mỗi nhóm, nên chữ trên combo phải đọc thành

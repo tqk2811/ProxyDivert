@@ -405,9 +405,6 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
         /// </remarks>
         public string Filter { get; }
 
-        /// <summary>True when no rule named this process: it came along with its parent.</summary>
-        public bool IsChild { get; }
-
         public ObservableCollection<AppliedProcessNode> Children { get; }
             = new ObservableCollection<AppliedProcessNode>();
 
@@ -417,7 +414,6 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
             Name = process.Name;
             Path = process.ExecutablePath;
             Filter = filterName;
-            IsChild = process.IsChild;
         }
     }
 }

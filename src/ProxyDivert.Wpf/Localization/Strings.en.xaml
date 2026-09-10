@@ -59,7 +59,6 @@
     <sys:String x:Key="Str.Process.AddFromSelection">Add rule from selection</sys:String>
     <sys:String x:Key="Str.Process.Launch">Launch suspended…</sys:String>
     <sys:String x:Key="Str.Process.LaunchHint">Launching a program suspended lets the redirect attach before its first connection, so nothing escapes at startup.</sys:String>
-    <sys:String x:Key="Str.Process.Inherited">child</sys:String>
     <sys:String x:Key="Str.Process.NoneApplied">Nothing is being redirected. Start the engine, and every process a rule claims turns up here.</sys:String>
 
     <!-- The condition editor. The operator lives at the top of a group and nowhere else, so these
