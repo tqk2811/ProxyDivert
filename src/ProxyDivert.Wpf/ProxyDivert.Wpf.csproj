@@ -23,6 +23,14 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- Khối watermark của SoftEther là dữ liệu GPL nên không thể đóng gói kèm; thứ đi cùng exe
+		     là script tải nó về từ nguồn chính thức, để người dùng chạy được ngay cạnh chỗ cài mà
+		     không phải đi tìm repo. -->
+		<None Include="..\..\tools\Get-SoftEtherWatermark.ps1" Link="Get-SoftEtherWatermark.ps1"
+		      CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\ProxyDivert.Core\ProxyDivert.Core.csproj" />
 	</ItemGroup>
 
