@@ -116,8 +116,32 @@ public class AppliedProcessTreeTests
         Assert.Equal("steamwebhelper.exe", Assert.Single(roots[1].Children).Name);
     }
 
+    // The argument column shows the command line without its first token: Windows puts the
+    // executable at the front of it, the column beside this one already shows that path, and
+    // repeating it pushed the flags — the only part worth reading — out past the trim.
+    [Theory]
+    [InlineData(@"""C:\Program Files\App\app.exe"" --port 8080", "--port 8080")]
+    [InlineData(@"C:\app\app.exe --port 8080", "--port 8080")]
+    [InlineData(@"""C:\Program Files\App\app.exe""", "")]
+    [InlineData("app.exe", "")]
+    [InlineData("   app.exe  --flag  ", "--flag")]
+    public void The_argument_column_drops_the_executable_the_path_column_already_shows(
+        string commandLine, string expected)
+    {
+        Assert.Equal(expected, Node.SplitArguments(commandLine));
+    }
+
+    // Null is not the same as no arguments: the command line could not be read at all — a process
+    // that exited between the listing and the read, or one owned by another user — and an empty
+    // cell claiming "started with nothing" would be a statement this code cannot stand behind.
+    [Fact]
+    public void A_command_line_that_could_not_be_read_stays_unknown()
+    {
+        Assert.Null(Node.SplitArguments(null));
+    }
+
     // A tree has no columns. The headings and the cells under them are separate elements that only
-    // line up because both read the same three numbers off the view model, and the splitter in the
+    // line up because both read the same numbers off the view model, and the splitter in the
     // heading writes back to them. A property renamed on one side of that and not the other leaves
     // the columns at their natural width — nothing fails, the tab simply stops lining up.
     [Collection("WPF")]
@@ -142,7 +166,7 @@ public class AppliedProcessTreeTests
                     view.UpdateLayout();
 
                     Grid headings = WpfHost.Descendants<Grid>(view)
-                        .First(grid => grid.ColumnDefinitions.Count == 4
+                        .First(grid => grid.ColumnDefinitions.Count == 5
                                        && WpfHost.Descendants<GridSplitter>(grid).Any());
 
                     first = headings.ColumnDefinitions[0].ActualWidth;
@@ -158,7 +182,7 @@ public class AppliedProcessTreeTests
 
             // One on every column that can be widened, which is all of them but the last: the last
             // takes whatever is left over.
-            Assert.Equal(3, splitters);
+            Assert.Equal(4, splitters);
         }
 
         // Only what the headings read. The rest of the view binds to nothing here, which costs a
@@ -174,6 +198,8 @@ public class AppliedProcessTreeTests
             public double AppliedNameWidth { get; set; } = 234;
 
             public double AppliedFilterWidth { get; set; } = 210;
+
+            public double AppliedPathWidth { get; set; } = 300;
 
             public ObservableCollection<Node> AppliedProcesses { get; } = new ObservableCollection<Node>();
         }

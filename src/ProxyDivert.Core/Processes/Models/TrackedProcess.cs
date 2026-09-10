@@ -11,6 +11,13 @@ public sealed class TrackedProcess
     public string Name { get; }
     public string? ExecutablePath { get; }
 
+    /// <summary>
+    /// The command line the process was started with, or null when it could not be read. Carried
+    /// along because this is the text a command-line condition is matched against: showing it is
+    /// what lets the user see why a filter did or did not catch a process.
+    /// </summary>
+    public string? CommandLine { get; }
+
     // The rule that matched. Null for a child adopted through IncludeChildren, and for a process
     // the caller named directly (see IsExplicit).
     public ProcessRule? MatchedRule { get; }
@@ -35,11 +42,13 @@ public sealed class TrackedProcess
     public TrackedProcess(
         uint processId, string name, string? executablePath, ProcessRule? matchedRule,
         IReadOnlyList<Guid> policyIds,
-        uint parentProcessId = 0, bool isExplicit = false, bool includeChildren = false)
+        uint parentProcessId = 0, bool isExplicit = false, bool includeChildren = false,
+        string? commandLine = null)
     {
         ProcessId = processId;
         Name = name;
         ExecutablePath = executablePath;
+        CommandLine = commandLine;
         MatchedRule = matchedRule;
         PolicyIds = policyIds ?? Array.Empty<Guid>();
         ParentProcessId = parentProcessId;
@@ -53,6 +62,7 @@ public sealed class TrackedProcess
         ProcessId = source.ProcessId;
         Name = source.Name;
         ExecutablePath = source.ExecutablePath;
+        CommandLine = source.CommandLine;
         MatchedRule = matchedRule;
         PolicyIds = policyIds;
         ParentProcessId = source.ParentProcessId;

@@ -165,6 +165,9 @@
                         <ColumnDefinition MinWidth="60"
                                           Width="{Binding AppliedFilterWidth, Mode=TwoWay,
                                                   Converter={StaticResource PixelWidth}}"/>
+                        <ColumnDefinition MinWidth="60"
+                                          Width="{Binding AppliedPathWidth, Mode=TwoWay,
+                                                  Converter={StaticResource PixelWidth}}"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
@@ -176,12 +179,15 @@
                                Text="{DynamicResource Str.Process.MatchedFilter}"/>
                     <TextBlock Grid.Column="3" Style="{StaticResource Subtle}"
                                Text="{DynamicResource Str.Process.Path}"/>
+                    <TextBlock Grid.Column="4" Style="{StaticResource Subtle}"
+                               Text="{DynamicResource Str.Process.Arguments}"/>
 
                     <!-- Invisible, and hanging off the right edge of the column it widens: a
                          visible bar between two headings would read as a border. -->
                     <GridSplitter Grid.Column="0" Style="{StaticResource ColumnSplitter}"/>
                     <GridSplitter Grid.Column="1" Style="{StaticResource ColumnSplitter}"/>
                     <GridSplitter Grid.Column="2" Style="{StaticResource ColumnSplitter}"/>
+                    <GridSplitter Grid.Column="3" Style="{StaticResource ColumnSplitter}"/>
                 </Grid>
 
                 <Grid>
@@ -214,8 +220,18 @@
                                                ToolTip="{Binding Filter}"/>
 
                                     <TextBlock Text="{Binding Path}" Style="{StaticResource Subtle}"
+                                               Width="{Binding Data.AppliedPathWidth, Source={StaticResource Vm}}"
                                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                                ToolTip="{Binding Path}"/>
+
+                                    <!-- What the process was started with, minus the executable
+                                         the column beside this one already shows. The tooltip
+                                         gives the whole command line back, because that — not
+                                         this trimmed tail — is the text an Argument condition is
+                                         matched against. -->
+                                    <TextBlock Text="{Binding Arguments}" Style="{StaticResource Subtle}"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding CommandLine}"/>
                                 </StackPanel>
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>

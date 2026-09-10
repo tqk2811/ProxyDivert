@@ -61,6 +61,9 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
     [ObservableProperty]
     private double _appliedFilterWidth = 190;
 
+    [ObservableProperty]
+    private double _appliedPathWidth = 320;
+
     public ProcessesViewModel(AppServices services)
     {
         _services = services;
@@ -395,6 +398,20 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
         public string? Path { get; }
 
         /// <summary>
+        /// What the process was started with, minus the executable the path column already shows.
+        /// Empty when it was started with nothing, and null when the command line could not be
+        /// read at all — a process that had already exited, or one owned by another user.
+        /// </summary>
+        public string? Arguments { get; }
+
+        /// <summary>
+        /// The whole command line, executable included. This is the text an Argument condition is
+        /// matched against, so the cell hands it back on hover: the trimmed column says what the
+        /// process is doing, and the tooltip says what the filter actually reads.
+        /// </summary>
+        public string? CommandLine { get; }
+
+        /// <summary>
         /// The filter that put this process under redirection — its parent's for an adopted child,
         /// since that is the one that caught it.
         /// </summary>
@@ -414,6 +431,35 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
             Name = process.Name;
             Path = process.ExecutablePath;
             Filter = filterName;
+            CommandLine = process.CommandLine;
+            Arguments = SplitArguments(process.CommandLine);
+        }
+
+        // The command line without its first token. Windows hands back one string with the
+        // executable at the front — usually the same path the column beside this one already
+        // shows — and repeating it here would push the flags, the only part worth reading, out
+        // past the trim. A quoted executable may itself hold spaces, so the quotes decide where
+        // it ends whenever the string opens with one.
+        internal static string? SplitArguments(string? commandLine)
+        {
+            if (commandLine == null) return null;
+
+            string text = commandLine.TrimStart();
+            if (text.Length == 0) return string.Empty;
+
+            int end;
+            if (text[0] == '"')
+            {
+                end = text.IndexOf('"', 1);
+                end = end < 0 ? text.Length : end + 1;
+            }
+            else
+            {
+                end = text.IndexOf(' ');
+                if (end < 0) end = text.Length;
+            }
+
+            return text.Substring(end).Trim();
         }
     }
 }

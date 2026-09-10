@@ -247,7 +247,8 @@ public sealed class ProcessRuleTracker : IProcessPolicySource, IDisposable
             policyIds: new[] { policyId },
             parentProcessId: 0,
             isExplicit: true,
-            includeChildren: includeChildren);
+            includeChildren: includeChildren,
+            commandLine: info?.CommandLine);
 
         if (!_tracked.TryAdd(processId, tracked)) return _tracked[processId];
         _logger.LogInformation("attached pid={Pid} name={Name} explicitly, policy={Policy}", processId, tracked.Name, policyId);
@@ -277,7 +278,8 @@ public sealed class ProcessRuleTracker : IProcessPolicySource, IDisposable
             // The filter said "and its children", and a grandchild is one. Without passing this on
             // an adopted process claimed no children of its own, so a tree stopped one level down:
             // a launcher's browser was redirected and the browser's tabs were not.
-            includeChildren: parent.IncludeChildren);
+            includeChildren: parent.IncludeChildren,
+            commandLine: info?.CommandLine);
 
         if (!_tracked.TryAdd(childPid, child)) return;
         _logger.LogInformation(
@@ -336,7 +338,8 @@ public sealed class ProcessRuleTracker : IProcessPolicySource, IDisposable
 
         var tracked = new TrackedProcess(
             process.ProcessId, process.Name, process.ExecutablePath,
-            rule, rule.PolicyIds, process.ParentProcessId);
+            rule, rule.PolicyIds, process.ParentProcessId,
+            commandLine: process.CommandLine);
 
         if (!_tracked.TryAdd(process.ProcessId, tracked)) return false;
 
