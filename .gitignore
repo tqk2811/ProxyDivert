@@ -11,3 +11,10 @@ Directory.Build.rsp
 
 # Runtime config written next to exe
 *.config.json
+
+# VPN configuration a user drops in: these hold passwords, keys, and the SoftEther
+# watermark blob (GPL data fetched by tools/Get-SoftEtherWatermark.ps1 — never commit it)
+*.vpn
+*.ovpn
+softether-watermark.dat
+se.dat
