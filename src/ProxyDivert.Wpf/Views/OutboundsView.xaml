@@ -173,7 +173,7 @@
                     </DataGridTemplateColumn>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Url}"
                                         Binding="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
-                                        CellStyle="{StaticResource AddressCell}" Width="*"/>
+                                        CellStyle="{StaticResource AddressCell}" Width="*" MinWidth="240"/>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Username}"
                                         Binding="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Password}"

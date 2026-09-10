@@ -5,7 +5,7 @@
         xmlns:themes="clr-namespace:ProxyDivert.Wpf.Themes"
         Title="{DynamicResource Str.App.Title}"
         Icon="pack://application:,,,/ProxyDivert;component/Assets/app.ico"
-        Height="720" Width="1180" MinHeight="520" MinWidth="900"
+        Height="720" Width="1300" MinHeight="520" MinWidth="900"
         WindowStartupLocation="Manual"
         Background="{DynamicResource Brush.Window.Background}"
         TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
