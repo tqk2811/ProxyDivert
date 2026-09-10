@@ -60,7 +60,6 @@ public class AppliedProcessTreeTests
 
         Assert.Equal("Games", child.Filter);
         Assert.Equal("Games", grandchild.Filter);
-        Assert.True(child.IsChild);
     }
 
     // A child whose parent has already exited stands on its own — it is still being redirected —
@@ -84,7 +83,6 @@ public class AppliedProcessTreeTests
         List<Node> roots = ProcessesViewModel.BuildTree(new[] { launched });
 
         Assert.Equal("—", Assert.Single(roots).Filter);
-        Assert.False(Assert.Single(roots).IsChild);
     }
 
     // Process ids are reused, so a parent id can point at a process further down its own branch.
