@@ -49,6 +49,27 @@ public sealed class VpnProfile
     /// </summary>
     public bool RunsOnWireProxy => Protocol == VpnProtocol.WireGuardWireProxy;
 
+    /// <summary>
+    /// The same profile pointed at a watermark blob. Used where the outbound named none of its own
+    /// and one was found on the machine — the .vpn file's own <c>Watermark =</c> line is read first
+    /// and is not overridden here, because a path someone typed beats one that was merely found.
+    /// </summary>
+    public VpnProfile WithSoftEtherWatermark(string? path)
+        => string.IsNullOrWhiteSpace(SoftEtherWatermarkPath) && !string.IsNullOrWhiteSpace(path)
+            ? new VpnProfile
+            {
+                Protocol = Protocol,
+                Host = Host,
+                Port = Port,
+                Hub = Hub,
+                ConfigPath = ConfigPath,
+                Username = Username,
+                Password = Password,
+                PreSharedKey = PreSharedKey,
+                SoftEtherWatermarkPath = path,
+            }
+            : this;
+
     public override string ToString()
         => ConfigPath is not null
             ? $"{Protocol} ({ConfigPath})"

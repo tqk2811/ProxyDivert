@@ -6,6 +6,7 @@ using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn;
 using ProxyDivert.Core.Vpn.Client;
+using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Vpn.Models;
 using TqkLibrary.Proxy.Vpn.WireProxyCli;
 
@@ -28,6 +29,15 @@ namespace ProxyDivert.Core.Outbounds.Builders;
 /// </remarks>
 public sealed class VpnOutboundBuilder : IOutboundSourceBuilder
 {
+    // Only ever asked where the blob is, which is a look at two folders — so this costs nothing to
+    // hold and never opens a socket. The download is the user's own button, elsewhere.
+    private readonly SoftEtherWatermarkStore _watermarks;
+
+    public VpnOutboundBuilder(SoftEtherWatermarkStore? watermarks = null)
+    {
+        _watermarks = watermarks ?? new SoftEtherWatermarkStore();
+    }
+
     public OutboundKind Kind => OutboundKind.Vpn;
 
     // A subprocess or an in-process driver, either way something that is up between requests and
@@ -37,6 +47,13 @@ public sealed class VpnOutboundBuilder : IOutboundSourceBuilder
     public IOutboundInstance Build(Outbound outbound, OutboundBuildContext context)
     {
         VpnProfile profile = VpnProfileReader.Read(outbound);
+
+        // SoftEther is the one protocol that needs a file the application cannot ship. An outbound
+        // configured straight in its URL box has nowhere to name it, so the blob fetched by the
+        // download button is filled in here — leaving softether:// usable without a .vpn file at all.
+        if (profile.Protocol == VpnProtocol.SoftEther)
+            profile = profile.WithSoftEtherWatermark(_watermarks.Find());
+
         return profile.RunsOnWireProxy
             ? BuildOnWireProxy(outbound, context, profile.ConfigPath!)
             : BuildInProcess(outbound, context, profile);
