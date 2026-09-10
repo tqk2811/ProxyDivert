@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using ProxyDivert.Core.Outbounds.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 
@@ -45,18 +46,21 @@ public static class OutboundSignature
             sb.Append('|').Append((int)outbound.VpnProtocol)
               .Append('|').Append(outbound.PreSharedKey)
               .Append('|').Append(wireProxyPath)
-              .Append('|').Append(StampFile(outbound.Url));
+              .Append('|').Append(StampFile(outbound.Address));
         }
 
         return sb.ToString();
     }
 
-    private static string StampFile(string? path)
+    // Only the outbounds whose box actually names a file have one to stamp. It used to be handed
+    // the raw box for every VPN, which meant an address-based one — sstp://vpn.example.com — was
+    // asked for the last write time of a "file" by that name on every save, and answered "?".
+    private static string StampFile(OutboundAddress? address)
     {
-        if (string.IsNullOrWhiteSpace(path)) return "-";
+        if (address is null || !address.IsFile) return "-";
         try
         {
-            var info = new FileInfo(Environment.ExpandEnvironmentVariables(path!.Trim().Trim('"')));
+            var info = new FileInfo(address.Path!);
             if (!info.Exists) return "-";
             return info.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture)
                 + ":" + info.Length.ToString(CultureInfo.InvariantCulture);

@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using ProxyDivert.Core.Outbounds.Enums;
+using ProxyDivert.Core.Outbounds.Models;
+using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Vpn.Models;
@@ -40,34 +43,18 @@ public static class VpnProfileReader
     {
         if (outbound is null) throw new ArgumentNullException(nameof(outbound));
 
-        string raw = Expand(outbound.Url);
-        if (raw.Length == 0)
-            throw new InvalidOperationException(
-                $"VPN outbound '{outbound.Name}' has nothing in its URL box. Point it at a configuration "
-                + "file, or at a server such as sstp://vpn.example.com:443.");
+        // What the box holds is OutboundAddress's decision, made once and shared with the routing
+        // path and the signature. What to do about it — which protocol, which file, which of them
+        // wireproxy may run — is this reader's, and stays here.
+        OutboundAddress? address = outbound.Address;
+        if (address is null)
+            throw OutboundAddress.Unreadable(
+                $"VPN outbound '{outbound.Name}'", outbound.Url, outbound.AddressProblem);
 
-        VpnProtocol declared = outbound.VpnProtocol;
-
-        if (raw.Contains("://", StringComparison.Ordinal))
-            return FromAddress(outbound, raw, declared);
-
-        // No scheme, but the user has already said it is one of the address-based protocols: then
-        // the box is a bare "host" or "host:port", which is how a server is usually pasted. A path
-        // is excluded first — otherwise "D:\vpn\jp.ovpn" would be dialled as the host "d", and the
-        // resulting failure would say nothing about what actually went wrong.
-        if (IsDialled(declared) && !LooksLikePath(raw))
-            return FromAddress(outbound, SchemeFor(declared) + "://" + raw, declared);
-
-        return FromFile(outbound, raw, declared);
+        return address.Kind == OutboundAddressKind.VpnEndpoint
+            ? FromAddress(outbound, address, outbound.VpnProtocol)
+            : FromFile(outbound, address.Path!, outbound.VpnProtocol);
     }
-
-    // A directory separator or a drive letter. Not asking the file system: this runs before we know
-    // the file exists, and "the path you typed is wrong" is a better message than "that host does
-    // not resolve".
-    private static bool LooksLikePath(string raw)
-        => raw.IndexOf('\\') >= 0
-           || raw.IndexOf('/') >= 0
-           || (raw.Length > 1 && raw[1] == ':');
 
     /// <summary>
     /// Whether this outbound's tunnel is run by the external wireproxy binary, decided WITHOUT
@@ -77,26 +64,30 @@ public static class VpnProfileReader
     /// It is asked on the routing path, once per connection, to work out whether the outbound can
     /// carry UDP — wireproxy's SOCKS5 is TCP-only while an in-process tunnel is not. Reading the
     /// configuration file there would put a file system call in front of every connection, so the
-    /// question is answered from the URL alone. That is also why a .vpn file may not name wireproxy:
-    /// it would be a claim this function cannot see.
+    /// question is answered from the address box alone. That is also why a .vpn file may not name
+    /// wireproxy: it would be a claim this function cannot see.
     /// </remarks>
-    public static bool RunsOnWireProxy(VpnProtocol protocol, string? url)
+    public static bool RunsOnWireProxy(VpnProtocol protocol, OutboundAddress? address)
     {
         if (protocol == VpnProtocol.WireGuardWireProxy) return true;
         if (protocol != VpnProtocol.Auto) return false;
 
-        string raw = Expand(url);
-        if (raw.Length == 0 || raw.Contains("://", StringComparison.Ordinal)) return false;
-
         // A bare .conf is a WireGuard file, and by default those keep going through wireproxy so
         // that configurations made before any of this existed behave exactly as they did.
-        return raw.EndsWith(".conf", StringComparison.OrdinalIgnoreCase);
+        return address is { Kind: OutboundAddressKind.VpnConfigFile }
+            && address.Path!.EndsWith(".conf", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static VpnProfile FromAddress(Outbound outbound, string url, VpnProtocol declared)
+    /// <summary>The same question for a caller holding the raw box rather than a read one.</summary>
+    public static bool RunsOnWireProxy(VpnProtocol protocol, string? url)
     {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
-            throw new FormatException($"VPN outbound '{outbound.Name}' has an unreadable address: {outbound.Url}");
+        OutboundAddress.TryParse(OutboundKind.Vpn, url, protocol, out OutboundAddress? address, out _);
+        return RunsOnWireProxy(protocol, address);
+    }
+
+    private static VpnProfile FromAddress(Outbound outbound, OutboundAddress address, VpnProtocol declared)
+    {
+        Uri uri = address.Uri!;
 
         VpnProtocol detected = FromScheme(uri.Scheme);
         VpnProtocol protocol = declared == VpnProtocol.Auto ? detected : declared;
@@ -111,17 +102,13 @@ public static class VpnProfileReader
                 $"VPN outbound '{outbound.Name}': {protocol} is configured from a file, so the URL box "
                 + "must hold a path rather than an address.");
 
-        string host = uri.Host.Trim('[', ']');
-        if (host.Length == 0)
-            throw new FormatException($"VPN outbound '{outbound.Name}' has no server in its address.");
-
         // Only SSTP and SoftEther have a port worth choosing; L2TP and IKEv2 are fixed by their
         // protocols (UDP 500/4500, and L2TP inside), so a port there would be ignored anyway.
-        int port = uri.Port > 0 ? uri.Port : DefaultTlsPort;
+        int port = address.Port > 0 ? address.Port : DefaultTlsPort;
 
-        // SoftEther needs the virtual hub as well, and the path is the natural place for it —
-        // it is a name, not a secret, so it belongs in the visible box.
-        string? hub = protocol == VpnProtocol.SoftEther ? uri.AbsolutePath.Trim('/') : null;
+        // The hub was read off the address for every scheme; only SoftEther wants one, and only
+        // SoftEther is missing something without it.
+        string? hub = protocol == VpnProtocol.SoftEther ? address.Hub : null;
         if (protocol == VpnProtocol.SoftEther && string.IsNullOrEmpty(hub))
             throw new InvalidOperationException(
                 $"VPN outbound '{outbound.Name}': SoftEther needs the virtual hub, as in "
@@ -130,7 +117,7 @@ public static class VpnProfileReader
         return new VpnProfile
         {
             Protocol = protocol,
-            Host = host,
+            Host = address.Host!,
             Port = port,
             Hub = hub,
             Username = Blank(outbound.Username),
@@ -342,15 +329,6 @@ public static class VpnProfileReader
         "wireproxy" or "wireguard-wireproxy" => VpnProtocol.WireGuardWireProxy,
         _ => VpnProtocol.Auto,
     };
-
-    // Environment variables and surrounding quotes are both things people paste in without meaning
-    // to; expanding here keeps every caller from having to remember.
-    internal static string Expand(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-        try { return Environment.ExpandEnvironmentVariables(value.Trim().Trim('"')).Trim(); }
-        catch { return value.Trim().Trim('"'); }
-    }
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }

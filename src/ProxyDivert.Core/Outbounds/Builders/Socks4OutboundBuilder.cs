@@ -14,7 +14,7 @@ public sealed class Socks4OutboundBuilder : IOutboundSourceBuilder
 
     public IOutboundInstance Build(Outbound outbound, OutboundBuildContext context)
     {
-        Uri uri = OutboundUrl.Parse(outbound, "socks4");
+        Uri uri = OutboundUrl.Parse(outbound);
         bool isSocks4a = uri.Scheme.Equals("socks4a", StringComparison.OrdinalIgnoreCase);
 
         // SOCKS4 authenticates with a user id only — there is no password in the protocol. Nor is

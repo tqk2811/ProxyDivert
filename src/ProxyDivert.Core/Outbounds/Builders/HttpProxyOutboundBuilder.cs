@@ -15,7 +15,7 @@ public sealed class HttpProxyOutboundBuilder : IOutboundSourceBuilder
 
     public IOutboundInstance Build(Outbound outbound, OutboundBuildContext context)
     {
-        Uri uri = OutboundUrl.Parse(outbound, "http");
+        Uri uri = OutboundUrl.Parse(outbound);
         var source = new HttpProxySource(uri, context.LoggerFactory);
         if (OutboundUrl.HasCredential(outbound))
             source.Credential = new ProxyCredential(outbound.Username!, outbound.Password!);

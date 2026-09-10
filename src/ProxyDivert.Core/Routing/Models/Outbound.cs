@@ -1,5 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
+using ProxyDivert.Core.Outbounds.Enums;
+using ProxyDivert.Core.Outbounds.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Vpn;
 using ProxyDivert.Core.Vpn.Enums;
@@ -17,14 +19,72 @@ public sealed class Outbound
 
     public required string Name { get; set; }
 
-    public required OutboundKind Kind { get; set; }
+    public required OutboundKind Kind
+    {
+        get => _kind;
+        set { _kind = value; _address = null; }
+    }
 
     // "http://host:port", "socks5://host:port". Null for Direct and Block.
     //
     // For Vpn it is either a configuration file the provider gave you (a .ovpn or a .conf), or the
     // VPN server itself for the protocols that have no such file ("sstp://vpn.example.com:443").
-    // See VpnProfileReader, which is the only thing that interprets it.
-    public string? Url { get; set; }
+    // What it turns out to be is Address; what to do about that is VpnProfileReader's business.
+    public string? Url
+    {
+        get => _url;
+        set { _url = value; _address = null; }
+    }
+
+    /// <summary>
+    /// What <see cref="Url"/> means, read once, or null when it cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// Cached because the routing path asks: whether a VPN carries UDP comes down to what is in
+    /// that box, and it is asked once per connection. The three properties the answer depends on
+    /// throw the cache away when they are set, so a row edited in the grid is re-read rather than
+    /// answering as it used to.
+    ///
+    /// The cache is one reference holding the answer rather than a value plus a "have we done it
+    /// yet" flag: a connection thread reading this while another one fills it in must see both or
+    /// neither, and two fields can be published in either order.
+    /// </remarks>
+    [JsonIgnore]
+    public OutboundAddress? Address
+    {
+        get
+        {
+            Parsed? parsed = _address;
+            if (parsed is null)
+            {
+                OutboundAddress.TryParse(_kind, _url, _vpnProtocol, out OutboundAddress? read, out _);
+                _address = parsed = new Parsed(read);
+            }
+            return parsed.Value;
+        }
+    }
+
+    /// <summary>Why <see cref="Url"/> cannot be read, or null when it can — or wants no address.</summary>
+    [JsonIgnore]
+    public string? AddressProblem
+    {
+        get
+        {
+            OutboundAddress.TryParse(_kind, _url, _vpnProtocol, out _, out string? error);
+            return error;
+        }
+    }
+
+    private OutboundKind _kind;
+    private string? _url;
+    private volatile Parsed? _address;
+
+    private sealed class Parsed
+    {
+        public Parsed(OutboundAddress? value) => Value = value;
+
+        public OutboundAddress? Value { get; }
+    }
 
     public string? Username { get; set; }
 
@@ -38,7 +98,13 @@ public sealed class Outbound
     // Which VPN this outbound speaks. Auto reads it off the URL, which is right nearly always; the
     // one thing it cannot guess is whether a WireGuard .conf should be run by wireproxy (what it
     // has always done, and still the default) or in this process.
-    public VpnProtocol VpnProtocol { get; set; } = VpnProtocol.Auto;
+    public VpnProtocol VpnProtocol
+    {
+        get => _vpnProtocol;
+        set { _vpnProtocol = value; _address = null; }
+    }
+
+    private VpnProtocol _vpnProtocol = VpnProtocol.Auto;
 
     public bool IsEnabled { get; set; } = true;
 
@@ -64,12 +130,13 @@ public sealed class Outbound
     // .conf running on it downgrades "UDP through the outbound" to Block rather than leaking the
     // datagrams; a tunnel run in this process owns a whole userspace IP stack and carries UDP
     // itself. The question is answered from the URL alone, never by reading the file — this is on
-    // the routing path, once per connection.
+    // the routing path, once per connection, which is also why it asks the already-read Address
+    // rather than the string.
     [JsonIgnore]
     public bool SupportsUdp => Kind switch
     {
         OutboundKind.Direct or OutboundKind.Socks5 => true,
-        OutboundKind.Vpn => !VpnProfileReader.RunsOnWireProxy(VpnProtocol, Url),
+        OutboundKind.Vpn => !VpnProfileReader.RunsOnWireProxy(_vpnProtocol, Address),
         _ => false,
     };
 

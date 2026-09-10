@@ -9,6 +9,7 @@ using ProxyDivert.Cli;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Engine.Models;
+using ProxyDivert.Core.Outbounds.Models;
 using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Processes.Enums;
 using ProxyDivert.Core.Processes.Models;
@@ -308,17 +309,13 @@ return 0;
 static string Describe(TrackedProcess process)
     => $"pid={process.ProcessId,-6} {process.Name}{(process.IsChild ? " (child)" : "")}";
 
+// The scheme is read where every other reading of an address box happens, so "socks5://" means the
+// same thing on the command line as it does in the window.
 static OutboundKind KindFromUrl(string url)
-{
-    string scheme = url.Split(':')[0].ToLowerInvariant();
-    return scheme switch
-    {
-        "http" or "https" => OutboundKind.HttpProxy,
-        "socks4" or "socks4a" => OutboundKind.Socks4,
-        "socks5" or "socks" => OutboundKind.Socks5,
-        _ => throw new FormatException($"Unsupported proxy scheme '{scheme}'."),
-    };
-}
+    => OutboundAddress.TryReadProxyKind(url, out OutboundKind kind)
+        ? kind
+        : throw new FormatException(
+            $"Unsupported proxy scheme in '{url}'. Use http://, socks4:// or socks5://.");
 
 static bool IsElevated()
 {

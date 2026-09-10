@@ -1,5 +1,6 @@
 using System;
 using System.Net;
+using ProxyDivert.Core.Outbounds.Models;
 using ProxyDivert.Core.Routing.Models;
 
 namespace ProxyDivert.Core.Outbounds.Builders;
@@ -13,18 +14,18 @@ internal static class OutboundUrl
     public static bool HasCredential(Outbound outbound)
         => !string.IsNullOrEmpty(outbound.Username) && !string.IsNullOrEmpty(outbound.Password);
 
-    public static Uri Parse(Outbound outbound, string defaultScheme)
+    /// <summary>
+    /// The proxy's address, already read. The scheme a bare "host:port" is missing comes from the
+    /// outbound's own kind, so there is nothing left for the three builders to agree on.
+    /// </summary>
+    public static Uri Parse(Outbound outbound)
     {
-        if (string.IsNullOrWhiteSpace(outbound.Url))
-            throw new InvalidOperationException($"Outbound '{outbound.Name}' has no URL.");
+        OutboundAddress? address = outbound.Address;
+        if (address is null)
+            throw OutboundAddress.Unreadable(
+                $"Outbound '{outbound.Name}'", outbound.Url, outbound.AddressProblem);
 
-        string raw = outbound.Url!.Trim();
-        // Accept a bare "host:port" — that is how proxy lists are usually pasted.
-        if (!raw.Contains("://", StringComparison.Ordinal)) raw = defaultScheme + "://" + raw;
-
-        if (!Uri.TryCreate(raw, UriKind.Absolute, out Uri? uri))
-            throw new FormatException($"Outbound '{outbound.Name}' has an invalid URL: {outbound.Url}");
-        return uri;
+        return address.Uri!;
     }
 
     // SOCKS sources take an endpoint rather than a URI, so a host name has to be resolved here.

@@ -16,7 +16,7 @@ public sealed class Socks5OutboundBuilder : IOutboundSourceBuilder
 
     public IOutboundInstance Build(Outbound outbound, OutboundBuildContext context)
     {
-        Uri uri = OutboundUrl.Parse(outbound, "socks5");
+        Uri uri = OutboundUrl.Parse(outbound);
         IPEndPoint endPoint = OutboundUrl.ResolveEndPoint(uri);
 
         Socks5ProxySource source = OutboundUrl.HasCredential(outbound)

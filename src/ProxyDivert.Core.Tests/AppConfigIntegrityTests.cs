@@ -247,8 +247,8 @@ public class AppConfigIntegrityTests
 
         config.Normalize();
 
-        Assert.Single(config.Outbounds.Where(o => o.Id == shared));
-        Assert.Equal("new", config.Outbounds.Single(o => o.Id == shared).Name);
+        Outbound survivor = Assert.Single(config.Outbounds, o => o.Id == shared);
+        Assert.Equal("new", survivor.Name);
     }
 
     // Two outbounds with the same id used to take the engine down on the way up: the resolver built
