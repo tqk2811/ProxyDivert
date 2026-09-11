@@ -5,6 +5,7 @@ using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Processes.Enums;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Routing.Models.Conditions;
 using ProxyDivert.Core.Vpn.Enums;
 using TqkLibrary.WinDivert.Redirect.Enums;
 
@@ -183,7 +184,35 @@ public sealed class AppConfig
             if (!outboundIds.Contains(policy.OutboundId)) policy.OutboundId = Outbound.BlockId;
 
         DropMissingPolicyReferences();
+
+        foreach (ProcessRule rule in ProcessRules)
+            DropHolesInConditions(rule.Condition);
+
         return this;
+    }
+
+    /// <summary>
+    /// Takes the nulls out of a condition tree, and gives a group with no list an empty one.
+    /// </summary>
+    /// <remarks>
+    /// Both are valid JSON that the editor never writes. The engine reads a null as a row with
+    /// nothing in it, and always has; but the filter window copies the tree before showing it, and
+    /// the copy walked straight into the hole — so the one window that could have put the file
+    /// right was the one that would not open.
+    ///
+    /// Not stopped at <see cref="ProcessCondition.MaxDepth"/> the way evaluation is: a hole below
+    /// that line would still stop the copy. The recursion is bounded anyway, by the serializer's own
+    /// limit on how deeply a file may nest.
+    /// </remarks>
+    private static void DropHolesInConditions(ProcessCondition? condition)
+    {
+        if (condition is not ConditionGroup group) return;
+
+        group.Children ??= new List<ProcessCondition>();
+        group.Children.RemoveAll(child => child is null);
+
+        foreach (ProcessCondition child in group.Children)
+            DropHolesInConditions(child);
     }
 
     /// <summary>

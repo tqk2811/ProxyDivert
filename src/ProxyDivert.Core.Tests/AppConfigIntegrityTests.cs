@@ -5,6 +5,7 @@ using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Routing;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Routing.Models.Conditions;
 using ProxyDivert.Core.Vpn.Enums;
 using Xunit;
 
@@ -308,5 +309,83 @@ public class AppConfigIntegrityTests
 
         Assert.DoesNotContain(gone, snapshot.ProcessRules[0].PolicyIds);
         Assert.Contains(gone, config.ProcessRules[0].PolicyIds);
+    }
+
+    // ==== a condition tree edited by hand ====
+
+    // "null" in a list of children is valid JSON and nothing the editor writes. The engine has always
+    // read it as an empty row, but opening the filter copies the tree first, and the copy walked
+    // straight into it — so the one window where the file could be put right was the one that
+    // would not open.
+    [Fact]
+    public void ANullInAConditionTree_IsDroppedWhenTheFileIsRead()
+    {
+        string directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ProxyDivertTests", Guid.NewGuid().ToString("N"));
+        string path = System.IO.Path.Combine(directory, "config.json");
+        try
+        {
+            AppConfig config = AppConfig.CreateDefault();
+            config.ProcessRules.Add(new ProcessRule
+            {
+                Id = Guid.NewGuid(),
+                Name = "java",
+                PolicyIds = { config.Policies[0].Id },
+                Condition = new ConditionGroup
+                {
+                    Children =
+                    {
+                        new ProcessNameCondition { Pattern = "java" },
+                        new ConditionGroup { Children = { new CommandLineCondition { Pattern = "minecraft" } } },
+                    },
+                },
+            });
+            new ConfigStore(path).Save(config);
+
+            // Both levels: the root group and the one inside it.
+            string json = System.IO.File.ReadAllText(path);
+            int edits = 0;
+            json = System.Text.RegularExpressions.Regex.Replace(
+                json, @"""Children"": \[", match => { edits++; return match.Value + " null,"; });
+            Assert.Equal(2, edits);
+            System.IO.File.WriteAllText(path, json);
+
+            ProcessRule loaded = Assert.Single(new ConfigStore(path).Load().ProcessRules);
+
+            var root = Assert.IsType<ConditionGroup>(loaded.Condition);
+            Assert.DoesNotContain(null, root.Children);
+            var inner = Assert.IsType<ConditionGroup>(root.Children[1]);
+            Assert.DoesNotContain(null, inner.Children);
+
+            // What the user actually runs into: the editor opens on it.
+            var editor = new ProxyDivert.Wpf.ViewModels.ProcessFilterViewModel(loaded, Array.Empty<RoutingPolicy>());
+            Assert.Equal(2, editor.Root.Children.Count);
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    // The other hole the same file can have: "Children": null. The evaluator walks the list as
+    // readily as the copy does, so this one threw from inside the engine's process scan as well,
+    // not only from the window.
+    [Fact]
+    public void AGroupWithNoListOfChildren_GetsAnEmptyOne()
+    {
+        AppConfig config = AppConfig.CreateDefault();
+        var hollow = new ConditionGroup { Children = null! };
+        config.ProcessRules.Add(new ProcessRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "hollow",
+            PolicyIds = { config.Policies[0].Id },
+            Condition = new ConditionGroup { Children = { new ProcessNameCondition { Pattern = "java" }, hollow } },
+        });
+
+        config.Normalize();
+
+        Assert.NotNull(hollow.Children);
+        Assert.Empty(hollow.Children);
+        Assert.True(ProxyDivert.Core.Processes.ProcessRuleMatcher.IsMatch(config.ProcessRules[0], "java", null));
     }
 }
