@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.Configuration.Enums;
 using ProxyDivert.Core.Configuration.Models;
+using ProxyDivert.Core.Engine.Extensions;
+using ProxyDivert.Core.Engine.Interfaces;
 using ProxyDivert.Core.Engine.Models;
 using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Outbounds.Extensions;
@@ -134,7 +136,10 @@ public sealed class RedirectEngine : IDisposable
             // reads through.
             await ReconcileOutboundsAsync(config).ConfigureAwait(false);
 
-            EngineRun run = BuildRun(config);
+            // Read once: the redirector's options and the tracker's start below must describe the
+            // same mode, and a run is built for one configuration.
+            IProcessDetectionStrategy detection = config.ProcessDetection.Strategy();
+            EngineRun run = BuildRun(config, detection);
             try
             {
                 lock (_stateLock)
@@ -150,9 +155,7 @@ public sealed class RedirectEngine : IDisposable
                 run.Redirector.Start();
 
                 // Only now: attaching a pid calls into the redirector, which refuses before Start.
-                run.Tracker.Start(
-                    config.ProcessRules,
-                    attachFromProcessEvents: config.ProcessDetection == ProcessDetectionMode.ProcessEvents);
+                detection.StartTracker(run.Tracker, config.ProcessRules);
 
                 // The processes already running went onto the queue rather than into the driver.
                 // Waiting for them here is what keeps "redirection is on" true the moment Start
@@ -187,7 +190,7 @@ public sealed class RedirectEngine : IDisposable
     // Builds the run's parts in the one order they can be built in: the redirector needs the
     // options, which name the handlers; everything else needs the redirector. Nothing here starts
     // pumping, so a failure leaves only ordinary objects to drop.
-    private EngineRun BuildRun(AppConfig config)
+    private EngineRun BuildRun(AppConfig config, IProcessDetectionStrategy detection)
     {
         var cts = new CancellationTokenSource();
 
@@ -213,13 +216,12 @@ public sealed class RedirectEngine : IDisposable
             TcpConnectionHandler = HandleTcpAsync,
             UdpDatagramHandler = HandleUdpDatagram,
             ShouldRedirectUdp = ShouldRedirectUdpFlow,
-            // Socket-sniffing mode: the redirector listens to every process on the machine and
-            // asks this about each pid it has not seen. Left null in process-event mode, where
-            // the tracker names the pids instead.
-            ShouldTrackProcess = config.ProcessDetection == ProcessDetectionMode.NetworkSniff
-                ? ShouldRedirectProcess
-                : null,
         };
+        // Whether the redirector watches the whole machine and asks about each pid it meets, or is
+        // handed the pids by the tracker. The judge is the engine's rather than the tracker's own
+        // method so that a pid asked about after Stop is answered "cannot tell" rather than by a
+        // tracker whose run is gone.
+        detection.ConfigureRedirect(options, ShouldRedirectProcess);
 
         IProcessRedirector redirector = _redirectorFactory.Create(options);
         var pids = new TrackedPidQueue(redirector, _loggerFactory.CreateLogger<TrackedPidQueue>());

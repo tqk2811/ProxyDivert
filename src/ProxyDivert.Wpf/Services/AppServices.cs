@@ -8,10 +8,10 @@ using ProxyDivert.Core.Configuration;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.DependencyInjection;
 using ProxyDivert.Core.Engine;
+using ProxyDivert.Core.Engine.Extensions;
 using ProxyDivert.Core.Logging;
 using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Processes;
-using ProxyDivert.Core.Processes.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn;
 
@@ -156,8 +156,7 @@ public sealed class AppServices : IAsyncDisposable
         // free while it is stopped (it only records the choice), and doing it here means the table
         // is already configured whenever the engine does start it.
         Processes = _provider.GetRequiredService<ProcessInventory>();
-        Processes.UseEventSource(
-            Config.ProcessDetection == ProcessDetectionMode.ProcessEvents ? Config.ProcessEventSource : null);
+        Config.ProcessDetection.Strategy().ConfigureInventory(Processes, Config.ProcessEventSource);
 
         // Checked every minute rather than scheduled for the exact turn of the hour: SetFilePath
         // is a no-op when the path has not changed, so the cost of asking is nothing and there is
