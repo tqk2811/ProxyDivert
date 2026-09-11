@@ -34,8 +34,8 @@ public static class ConditionTextBuilder
 
                 string text = Loc.F(
                     "Str.Cond.LeafFormat",
-                    LocalizationManager.EnumText(SubjectOf(leaf)),
-                    LocalizationManager.EnumText(MatcherOf(leaf)),
+                    SubjectText(leaf.Subject),
+                    LocalizationManager.EnumText(leaf.MatcherValue),
                     leaf.Pattern.Trim());
 
                 return leaf.Negate ? Loc.F("Str.Cond.NotFormat", text) : text;
@@ -66,13 +66,16 @@ public static class ConditionTextBuilder
         }
     }
 
-    private static ConditionSubject SubjectOf(LeafCondition leaf)
-        => leaf is CommandLineCondition ? ConditionSubject.CommandLine : ConditionSubject.ProcessName;
+    // A subject is an object rather than an enum value, so its text cannot go through EnumText; it is
+    // looked up by the subject's name instead, under keys of its own. Both of these are also what the
+    // editor row shows, through ConditionSubjectTextConverter, so a row and the sentence cannot
+    // disagree about what a subject is called.
 
-    private static object MatcherOf(LeafCondition leaf) => leaf switch
-    {
-        CommandLineCondition arguments => arguments.Matcher,
-        ProcessNameCondition process => process.Matcher,
-        _ => string.Empty,
-    };
+    /// <summary>What the subject combo box and the sentence call a subject.</summary>
+    public static string SubjectText(ConditionSubject subject)
+        => LocalizationManager.Get($"Str.Cond.Subject.{subject.Name}");
+
+    /// <summary>The grey hint in an empty value box, which depends on what the row looks at.</summary>
+    public static string PatternHint(ConditionSubject subject)
+        => LocalizationManager.Get($"Str.Cond.Hint.{subject.Name}");
 }

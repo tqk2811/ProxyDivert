@@ -83,7 +83,6 @@ public class WpfResourceSmokeTests
                 typeof(ProxyDivert.Core.Routing.Enums.HostMatcherType),
                 typeof(ProxyDivert.Core.Routing.Enums.ProcessMatcherType),
                 typeof(ProxyDivert.Core.Routing.Enums.ArgumentMatcherType),
-                typeof(ProxyDivert.Core.Routing.Enums.ConditionSubject),
                 typeof(ProxyDivert.Core.Routing.Enums.ConditionOperator),
                 typeof(ProxyDivert.Core.Routing.Enums.OutboundKind),
                 typeof(ProxyDivert.Core.Routing.Enums.Ipv6Support),
@@ -99,6 +98,20 @@ public class WpfResourceSmokeTests
                     foreach (object value in Enum.GetValues(type))
                     {
                         string key = $"Enum.{type.Name}.{value}";
+                        Assert.True(
+                            application.TryFindResource(key) is string,
+                            $"{key} is missing from the {language} strings.");
+                    }
+                }
+
+                // The subject of a condition row used to be one of the enums above. It is an
+                // object now, named in the window through keys of its own — and a new kind of
+                // condition needs both of them, or the row reads as its C# name with no hint.
+                foreach (ProxyDivert.Core.Routing.Models.Conditions.ConditionSubject subject in
+                         ProxyDivert.Core.Routing.Models.Conditions.ConditionSubject.All)
+                {
+                    foreach (string key in new[] { $"Str.Cond.Subject.{subject.Name}", $"Str.Cond.Hint.{subject.Name}" })
+                    {
                         Assert.True(
                             application.TryFindResource(key) is string,
                             $"{key} is missing from the {language} strings.");

@@ -17,3 +17,21 @@ public sealed class ConditionSummaryConverter : IMultiValueConverter
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
         => throw new NotSupportedException("Display text only.");
 }
+
+// Text for a condition row's subject: its name in the combo box, or — with the parameter "Hint" —
+// the hint in the value box next to it. A subject is an object, not an enum value, so EnumText
+// cannot name it. Same second binding as above, for the same reason.
+public sealed class ConditionSubjectTextConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values.Length == 0 || values[0] is not ConditionSubject subject) return string.Empty;
+
+        return parameter as string == "Hint"
+            ? ConditionTextBuilder.PatternHint(subject)
+            : ConditionTextBuilder.SubjectText(subject);
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException("Display text only.");
+}

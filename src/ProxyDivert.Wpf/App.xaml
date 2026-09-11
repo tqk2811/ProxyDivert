@@ -28,6 +28,7 @@
             <conv:EnumLocalizeConverter x:Key="EnumText"/>
             <conv:AppLanguageDisplayConverter x:Key="AppLanguageText"/>
             <conv:ConditionSummaryConverter x:Key="ConditionSummary"/>
+            <conv:ConditionSubjectTextConverter x:Key="ConditionSubjectText"/>
             <conv:PolicyNamesConverter x:Key="PolicyNames"/>
             <conv:SameObjectConverter x:Key="SameObject"/>
             <conv:PixelWidthConverter x:Key="PixelWidth"/>

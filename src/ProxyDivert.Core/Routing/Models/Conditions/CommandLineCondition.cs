@@ -12,10 +12,14 @@ namespace ProxyDivert.Core.Routing.Models.Conditions;
 /// </remarks>
 public sealed class CommandLineCondition : LeafCondition
 {
+    public CommandLineCondition()
+        : base(ConditionSubject.CommandLine)
+    {
+    }
+
     public ArgumentMatcherType Matcher { get; set; } = ArgumentMatcherType.Contains;
 
-    public override ProcessCondition Clone()
-        => new CommandLineCondition { Negate = Negate, Matcher = Matcher, Pattern = Pattern };
+    private protected override object BoxedMatcher => Matcher;
 
     // A condition about the command line has said the process alone is not enough, so a command
     // line that cannot be read is not a "no" — it is "cannot tell", and the filter stays off.

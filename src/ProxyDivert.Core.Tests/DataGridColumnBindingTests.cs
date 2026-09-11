@@ -507,6 +507,73 @@ public class DataGridColumnBindingTests
         Assert.True(policyTicked, "The filter editor does not show the policy it applies as a ticked row.");
     }
 
+    // The subject combo lists objects now, not enum values, so neither its text nor the hint in the
+    // value box can come from EnumText or from a trigger on an enum name any more. Both are looked
+    // up by the subject's name through a converter — a binding that is only wrong at run time,
+    // where it shows a C# name in the combo and nothing at all in the box.
+    [Fact]
+    public void Each_condition_row_names_its_subject_and_hints_for_it()
+    {
+        var shown = new List<(string Subject, string Hint, string ExpectedSubject, string ExpectedHint)>();
+        string hintAfterSwitch = string.Empty;
+        string expectedAfterSwitch = string.Empty;
+
+        RunOnStaThread(() =>
+        {
+            EnsureApplication();
+
+            var model = new ProxyDivert.Wpf.ViewModels.ProcessFilterViewModel(
+                SampleFilter(), Array.Empty<ProxyDivert.Core.Routing.Models.RoutingPolicy>());
+            var window = new ProcessFilterWindow(model) { Width = 1000, Height = 800 };
+            window.Show();
+            window.UpdateLayout();
+
+            foreach (TextBox box in FindVisuals<TextBox>(window))
+            {
+                if (box.DataContext is not ProxyDivert.Wpf.ViewModels.Conditions.ConditionLeafViewModel row) continue;
+
+                ComboBox subjectPicker = FindVisuals<ComboBox>(window).First(combo =>
+                    ReferenceEquals(combo.DataContext, row) && ReferenceEquals(combo.ItemsSource, row.Subjects));
+
+                string subjectText = string.Join(
+                    " ", FindVisuals<TextBlock>(subjectPicker).Select(block => block.Text));
+
+                shown.Add((
+                    subjectText,
+                    box.Tag as string ?? string.Empty,
+                    ProxyDivert.Wpf.Helpers.ConditionTextBuilder.SubjectText(row.Subject!),
+                    ProxyDivert.Wpf.Helpers.ConditionTextBuilder.PatternHint(row.Subject!)));
+            }
+
+            // Switching a row's subject has to move the hint with it; the old trigger did that by
+            // itself, the converter only does it if the binding is on the right property.
+            TextBox first = FindVisuals<TextBox>(window)
+                .First(box => box.DataContext is ProxyDivert.Wpf.ViewModels.Conditions.ConditionLeafViewModel);
+            var firstRow = (ProxyDivert.Wpf.ViewModels.Conditions.ConditionLeafViewModel)first.DataContext;
+            firstRow.Subject = ConditionSubject.CommandLine;
+            window.UpdateLayout();
+            hintAfterSwitch = first.Tag as string ?? string.Empty;
+            expectedAfterSwitch = ProxyDivert.Wpf.Helpers.ConditionTextBuilder.PatternHint(ConditionSubject.CommandLine);
+
+            // The switch is an edit, and closing an edited filter asks whether to save it — a
+            // modal box nobody is there to answer, which hangs the whole run.
+            model.IsDirty = false;
+            window.Close();
+        });
+
+        Assert.Equal(3, shown.Count);
+        foreach ((string subject, string hint, string expectedSubject, string expectedHint) in shown)
+        {
+            Assert.Contains(expectedSubject, subject);
+            Assert.Equal(expectedHint, hint);
+        }
+
+        // The sample has both subjects in it, so a converter that always answered with one of them
+        // would still pass the loop above for some rows and fail it for others.
+        Assert.Equal(2, shown.Select(row => row.ExpectedHint).Distinct().Count());
+        Assert.Equal(expectedAfterSwitch, hintAfterSwitch);
+    }
+
     // java.exe AND (minecraft OR forge) — one bracket inside another, which is the shape the whole
     // editor exists for.
     private static ProxyDivert.Core.Routing.Models.ProcessRule SampleFilter()

@@ -117,8 +117,7 @@ public abstract partial class ConditionNodeViewModel : ObservableObject, IDragRo
     public static ConditionNodeViewModel FromModel(ProcessCondition condition) => condition switch
     {
         ConditionGroup group => new ConditionGroupViewModel(group),
-        ProcessNameCondition name => new ConditionLeafViewModel(name),
-        CommandLineCondition arguments => new ConditionLeafViewModel(arguments),
+        LeafCondition leaf => new ConditionLeafViewModel(leaf),
         _ => throw new ArgumentOutOfRangeException(
             nameof(condition), condition?.GetType(), "Unknown condition type"),
     };

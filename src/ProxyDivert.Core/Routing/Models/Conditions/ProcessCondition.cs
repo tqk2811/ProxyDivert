@@ -9,10 +9,12 @@ namespace ProxyDivert.Core.Routing.Models.Conditions;
 /// The derived types are listed here rather than discovered, because that list IS the file format:
 /// the discriminator strings below are written into the user's config and can never be renamed.
 /// Adding a new kind of condition later — parent process, account, window title — is one more
-/// class and one more line here.
+/// class, one more line here, and one more entry in <see cref="ConditionSubject"/> so the editor
+/// can offer it.
 ///
-/// Each node answers for itself. The evaluator used to be a separate class with a switch over
-/// these types, and so did three other places, which is how "one more class" became six edits.
+/// Each node answers for itself, and a leaf says what it looks at through its subject. The
+/// evaluator used to be a separate class with a switch over these types, and so did the editor
+/// and the sentence describing a filter, which is how "one more class" became six edits.
 /// </remarks>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(ConditionGroup), "group")]

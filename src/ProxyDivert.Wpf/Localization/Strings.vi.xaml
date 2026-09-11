@@ -37,8 +37,6 @@
     <sys:String x:Key="Str.Process.Rules">Luật tiến trình</sys:String>
     <sys:String x:Key="Str.Process.RuleOrderHint">Xét từ trên xuống: tiến trình khớp bộ lọc nào trước thì theo bộ lọc đó. Kéo tay cầm ở đầu dòng để sắp lại.</sys:String>
     <sys:String x:Key="Str.Process.Applied">Tiến trình đang áp dụng</sys:String>
-    <sys:String x:Key="Str.Process.TargetHint">chrome.exe</sys:String>
-    <sys:String x:Key="Str.Process.ArgumentHint">để trống là bỏ qua</sys:String>
     <sys:String x:Key="Str.Process.Conditions">Điều kiện</sys:String>
     <sys:String x:Key="Str.Process.Edit">Sửa…</sys:String>
     <sys:String x:Key="Str.Process.FilterTitle">Bộ lọc tiến trình</sys:String>
@@ -220,8 +218,10 @@ Hại: thêm một dịch vụ và một chặng COM nên trễ hơn, và sự k
     <sys:String x:Key="Enum.ArgumentMatcherType.StartsWith">Bắt đầu bằng</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.EndsWith">Kết thúc bằng</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Regex">Regex</sys:String>
-    <sys:String x:Key="Enum.ConditionSubject.ProcessName">Tiến trình</sys:String>
-    <sys:String x:Key="Enum.ConditionSubject.CommandLine">Argument</sys:String>
+    <sys:String x:Key="Str.Cond.Subject.ProcessName">Tiến trình</sys:String>
+    <sys:String x:Key="Str.Cond.Subject.CommandLine">Argument</sys:String>
+    <sys:String x:Key="Str.Cond.Hint.ProcessName">chrome.exe</sys:String>
+    <sys:String x:Key="Str.Cond.Hint.CommandLine">để trống là bỏ qua</sys:String>
     <sys:String x:Key="Enum.ConditionOperator.All">Khớp TẤT CẢ</sys:String>
     <sys:String x:Key="Enum.ConditionOperator.Any">Khớp BẤT KỲ</sys:String>
 

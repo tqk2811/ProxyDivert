@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:b="clr-namespace:ProxyDivert.Wpf.Bindings"
         xmlns:cvm="clr-namespace:ProxyDivert.Wpf.ViewModels.Conditions"
+        xmlns:loc="clr-namespace:ProxyDivert.Wpf.Localization"
         Title="{DynamicResource Str.Process.FilterTitle}"
         Height="660" Width="1180" MinHeight="480" MinWidth="960"
         WindowStartupLocation="CenterOwner"
@@ -131,10 +132,24 @@
                             Command="{Binding ToggleNegateCommand}"
                             ToolTip="{DynamicResource Str.Cond.NotHint}"/>
 
+                    <!-- A subject is an object rather than an enum value, so it has a template of
+                         its own; the second binding re-runs the lookup when the language changes. -->
                     <ComboBox Grid.Column="2" Margin="0,0,6,0"
                               ItemsSource="{Binding Subjects}"
-                              SelectedItem="{Binding Subject}"
-                              ItemTemplate="{StaticResource EnumItemTemplate}"/>
+                              SelectedItem="{Binding Subject}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock>
+                                    <TextBlock.Text>
+                                        <MultiBinding Converter="{StaticResource ConditionSubjectText}" Mode="OneWay">
+                                            <Binding/>
+                                            <Binding Path="Version" Source="{x:Static loc:LocalizationScope.Instance}"/>
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
 
                     <ComboBox Grid.Column="3" Margin="0,0,6,0"
                               ItemsSource="{Binding Matchers}"
@@ -146,16 +161,15 @@
                     <TextBox Grid.Column="4" Margin="0,0,6,0"
                              Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
                              b:FocusBehavior.FocusWhen="{Binding IsNew, Mode=TwoWay}">
-                        <TextBox.Style>
-                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-                                <Setter Property="Tag" Value="{DynamicResource Str.Process.TargetHint}"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Subject}" Value="CommandLine">
-                                        <Setter Property="Tag" Value="{DynamicResource Str.Process.ArgumentHint}"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBox.Style>
+                        <!-- The hint follows the subject: a file name for one, "leave empty" for
+                             another. Looked up by the subject's name, so a new kind of condition
+                             brings its hint along with its strings. -->
+                        <TextBox.Tag>
+                            <MultiBinding Converter="{StaticResource ConditionSubjectText}" ConverterParameter="Hint" Mode="OneWay">
+                                <Binding Path="Subject"/>
+                                <Binding Path="Version" Source="{x:Static loc:LocalizationScope.Instance}"/>
+                            </MultiBinding>
+                        </TextBox.Tag>
                         <TextBox.InputBindings>
                             <KeyBinding Key="Return" Command="{Binding Parent.AddConditionCommand}"/>
                         </TextBox.InputBindings>

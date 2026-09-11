@@ -37,8 +37,6 @@
     <sys:String x:Key="Str.Process.Rules">Process rules</sys:String>
     <sys:String x:Key="Str.Process.RuleOrderHint">Tried from the top down: a process is caught by the first filter that matches it. Drag a row by its grip to rearrange them.</sys:String>
     <sys:String x:Key="Str.Process.Applied">Processes being redirected</sys:String>
-    <sys:String x:Key="Str.Process.TargetHint">chrome.exe</sys:String>
-    <sys:String x:Key="Str.Process.ArgumentHint">leave empty to ignore</sys:String>
     <sys:String x:Key="Str.Process.Conditions">Conditions</sys:String>
     <sys:String x:Key="Str.Process.Edit">Edit…</sys:String>
     <sys:String x:Key="Str.Process.FilterTitle">Process filter</sys:String>
@@ -220,8 +218,10 @@ Downside: an extra service and a COM hop add latency, and the events of one watc
     <sys:String x:Key="Enum.ArgumentMatcherType.StartsWith">Starts with</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.EndsWith">Ends with</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Regex">Regex</sys:String>
-    <sys:String x:Key="Enum.ConditionSubject.ProcessName">Process</sys:String>
-    <sys:String x:Key="Enum.ConditionSubject.CommandLine">Argument</sys:String>
+    <sys:String x:Key="Str.Cond.Subject.ProcessName">Process</sys:String>
+    <sys:String x:Key="Str.Cond.Subject.CommandLine">Argument</sys:String>
+    <sys:String x:Key="Str.Cond.Hint.ProcessName">chrome.exe</sys:String>
+    <sys:String x:Key="Str.Cond.Hint.CommandLine">leave empty to ignore</sys:String>
     <sys:String x:Key="Enum.ConditionOperator.All">Match ALL of</sys:String>
     <sys:String x:Key="Enum.ConditionOperator.Any">Match ANY of</sys:String>
 

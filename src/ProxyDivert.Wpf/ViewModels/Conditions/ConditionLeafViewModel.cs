@@ -1,6 +1,5 @@
-using System;
+using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
-using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models.Conditions;
 
 namespace ProxyDivert.Wpf.ViewModels.Conditions;
@@ -8,19 +7,13 @@ namespace ProxyDivert.Wpf.ViewModels.Conditions;
 /// <summary>One condition row: what to look at, how to compare it, and what to compare it with.</summary>
 /// <remarks>
 /// The subject combo is what merges the two fixed slots the old filter had. It also decides the
-/// contents of the comparison combo next to it, because the two lists are genuinely different: a
-/// command line is not a path, so "full path" has no meaning there and "contains" is the sensible
-/// default rather than "is exactly".
+/// contents of the comparison combo next to it; both lists, and the class a row becomes on Save,
+/// come from the <see cref="ConditionSubject"/>, so this row works for a kind of condition it has
+/// never heard of.
 /// </remarks>
 public sealed partial class ConditionLeafViewModel : ConditionNodeViewModel
 {
-    private static readonly Array ProcessMatchers = Enum.GetValues(typeof(ProcessMatcherType));
-    private static readonly Array ArgumentMatchers = Enum.GetValues(typeof(ArgumentMatcherType));
-
-    public Array Subjects { get; } = Enum.GetValues(typeof(ConditionSubject));
-
-    [ObservableProperty]
-    private ConditionSubject _subject;
+    public IReadOnlyList<ConditionSubject> Subjects => ConditionSubject.All;
 
     [ObservableProperty]
     private string _pattern = string.Empty;
@@ -38,33 +31,41 @@ public sealed partial class ConditionLeafViewModel : ConditionNodeViewModel
     {
     }
 
-    public ConditionLeafViewModel(ProcessNameCondition model)
+    public ConditionLeafViewModel(LeafCondition model)
     {
         Negate = model.Negate;
-        Subject = ConditionSubject.ProcessName;
-        _matcher = model.Matcher;
+        _subject = model.Subject;
+        _matcher = model.MatcherValue;
         Pattern = model.Pattern;
     }
 
-    public ConditionLeafViewModel(CommandLineCondition model)
+    private ConditionSubject _subject = ConditionSubject.All[0];
+
+    /// <summary>What this row looks at. Changing it resets the comparison to that subject's default.</summary>
+    /// <remarks>Nulls are refused for the same reason as on <see cref="Matcher"/>.</remarks>
+    public ConditionSubject? Subject
     {
-        Negate = model.Negate;
-        Subject = ConditionSubject.CommandLine;
-        _matcher = model.Matcher;
-        Pattern = model.Pattern;
+        get => _subject;
+        set
+        {
+            if (value is null || !SetProperty(ref _subject, value)) return;
+
+            OnPropertyChanged(nameof(Matchers));
+            Matcher = value.DefaultMatcher;
+        }
     }
 
     /// <summary>The comparisons offered for the current subject.</summary>
-    public Array Matchers => Subject == ConditionSubject.CommandLine ? ArgumentMatchers : ProcessMatchers;
+    public IReadOnlyList<object> Matchers => _subject.Matchers;
 
-    private object _matcher = ProcessMatcherType.ExeName;
+    private object _matcher = ConditionSubject.All[0].DefaultMatcher;
 
-    /// <summary>The chosen comparison: a ProcessMatcherType or an ArgumentMatcherType.</summary>
+    /// <summary>The chosen comparison, as a value of whichever enum the subject compares with.</summary>
     /// <remarks>
     /// Nulls are refused rather than stored. Swapping the subject swaps the whole list out from
     /// under the combo box, and a ComboBox whose SelectedItem is no longer in its ItemsSource
     /// writes null back through the binding on its way past — accepting that would blank the row
-    /// for a moment and, worse, leave it blank if the assignment below ever stopped happening.
+    /// for a moment and, worse, leave it blank if the assignment above ever stopped happening.
     /// </remarks>
     public object? Matcher
     {
@@ -76,25 +77,5 @@ public sealed partial class ConditionLeafViewModel : ConditionNodeViewModel
         }
     }
 
-    partial void OnSubjectChanged(ConditionSubject value)
-    {
-        OnPropertyChanged(nameof(Matchers));
-        Matcher = value == ConditionSubject.CommandLine
-            ? ArgumentMatcherType.Contains
-            : ProcessMatcherType.ExeName;
-    }
-
-    public override ProcessCondition ToModel() => Subject == ConditionSubject.CommandLine
-        ? new CommandLineCondition
-        {
-            Negate = Negate,
-            Matcher = _matcher is ArgumentMatcherType argument ? argument : ArgumentMatcherType.Contains,
-            Pattern = Pattern ?? string.Empty,
-        }
-        : new ProcessNameCondition
-        {
-            Negate = Negate,
-            Matcher = _matcher is ProcessMatcherType process ? process : ProcessMatcherType.ExeName,
-            Pattern = Pattern ?? string.Empty,
-        };
+    public override ProcessCondition ToModel() => _subject.Create(_matcher, Pattern, Negate);
 }

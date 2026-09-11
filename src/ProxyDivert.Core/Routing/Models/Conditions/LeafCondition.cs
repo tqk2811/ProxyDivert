@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 using ProxyDivert.Core.Routing.Enums;
 
 namespace ProxyDivert.Core.Routing.Models.Conditions;
@@ -7,12 +8,43 @@ namespace ProxyDivert.Core.Routing.Models.Conditions;
 /// <remarks>
 /// The facet is the derived type — file name and path, or command line, and whatever gets added
 /// later. That is the combo box on the left of every row in the editor: it picks which of these a
-/// row is, and the comparison list next to it follows from that choice.
+/// row is, and the comparison list next to it follows from that choice. <see cref="Subject"/> is
+/// how anything outside this file asks which one a row is, instead of testing its type.
 /// </remarks>
 public abstract class LeafCondition : ProcessCondition
 {
     /// <summary>What to compare against. Empty means the condition is not filled in yet.</summary>
     public string Pattern { get; set; } = string.Empty;
+
+    private protected LeafCondition(ConditionSubject subject)
+    {
+        Subject = subject;
+    }
+
+    // Neither of the two below is virtual, and that is on purpose. The serializer writes every
+    // public property it finds on the derived type, and an [JsonIgnore] on an abstract property
+    // here does not reach the override — "Subject" ended up in the file, a whole object of it in
+    // every leaf. What varies per type is behind private members instead, which it never reads.
+
+    /// <summary>What this row looks at. Not saved: the type of the node already says it.</summary>
+    [JsonIgnore]
+    public ConditionSubject Subject { get; }
+
+    /// <summary>
+    /// The derived type's own Matcher, boxed — for code that shows or copies any row without
+    /// knowing which kind it is. Not saved: the derived type writes it under its own name.
+    /// </summary>
+    [JsonIgnore]
+    public object MatcherValue => BoxedMatcher;
+
+    private protected abstract object BoxedMatcher { get; }
+
+    /// <summary>A copy made the same way the editor makes a row.</summary>
+    /// <remarks>
+    /// A matcher and a pattern are the whole of every leaf so far. One that grows a field of its
+    /// own has to override this, or the copy the editor works on will quietly lose it.
+    /// </remarks>
+    public override ProcessCondition Clone() => Subject.Create(MatcherValue, Pattern, Negate);
 
     // An empty value box is not a condition yet, whatever kind of row it sits in. It must not
     // drag its group down to "no" while the user is still typing, nor lift it to "yes".
