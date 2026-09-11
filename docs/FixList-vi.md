@@ -33,15 +33,6 @@ Các file đang được sửa cho tính năng tray icon / auto start (`AppConfi
 - **Đã sửa**: commit "fix(ui): refresh the shared lists when the tab changes" — `MainViewModel` gọi `Reload()` của ba tab khi đổi tab ([MainViewModel.cs:247-255](../src/ProxyDivert.Wpf/ViewModels/MainViewModel.cs#L247-L255), [ProcessesViewModel.cs:74-88](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L74-L88), [RulesViewModel.cs:60-73](../src/ProxyDivert.Wpf/ViewModels/RulesViewModel.cs#L60-L73), [OutboundsViewModel.cs:60-74](../src/ProxyDivert.Wpf/ViewModels/OutboundsViewModel.cs#L60-L74)), giữ selection khi nạp lại. Phần *đúng đắn* (tham chiếu treo khi xoá policy/outbound) đã do E5.1 bịt.
 - **Còn hở (kiểm 2026-09-11)**: chưa chạy thử trên UI thật và không test nào chạm `Reload()`; fallback `Policies[0]` ở [ProcessFilterViewModel.cs:103-108](../src/ProxyDivert.Wpf/ViewModels/ProcessFilterViewModel.cs#L103-L108) vẫn còn, chỉ an toàn nhờ danh sách đã nạp lại; `Reload()` dựng lại toàn bộ row VM mỗi lần đổi tab, hàng nào sau này giữ state riêng (không proxy xuống model) sẽ mất state. Còn lại: chạy thử UI (thêm policy ở Rules → editor filter thấy ngay; xoá policy đang được filter dùng) và một test cho `Reload()` giữ selection.
 
-### A11. `LaunchSuspended` resume trước khi luật mới tới engine — Cao (còn hở)
-
-- [ ] **Vị trí**: [ProcessesViewModel.cs:268-274](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L268-L274), [AppServices.cs:173-195](../src/ProxyDivert.Wpf/Services/AppServices.cs#L173-L195)
-- **Vấn đề**: `Add(rule)` gọi `SaveAndApply()` là hàm **enqueue** lên worker rồi trả Task không ai await. Ngay dòng sau `ForceProcessScan()` khớp với config cũ rồi `suspended.Resume()`.
-- **Vì sao**: đúng [rò rỉ SYN](Glossary-vi.md#L37) mà tính năng launch-suspended sinh ra để bịt; tiến trình chạy mà không được redirect tới lần scan sau.
-- **Cách sửa**: đổi command thành `async Task`, `await _services.SaveAndApply()` (hoặc `WhenIdleAsync()`) trước `ForceProcessScan()` + `Resume()`.
-- **Đã sửa**: commit "fix(processes): wait for the new filter before resuming a suspended launch" — `Add()` trả Task của `SaveAndApply`, `await` xong mới `ForceProcessScanAsync` + `Resume` ([ProcessesViewModel.cs:375-380](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L375-L380), [AppServices.cs:198-217](../src/ProxyDivert.Wpf/Services/AppServices.cs#L198-L217)).
-- **Còn hở (kiểm 2026-09-11)**: `SaveAndApply` bắt mọi exception trong worker và chỉ log ([AppServices.cs:205-216](../src/ProxyDivert.Wpf/Services/AppServices.cs#L205-L216)) nên Task luôn hoàn thành "thành công" — `ApplyConfigAsync` hỏng thì tiến trình vẫn được Resume khi chưa có luật: đúng [rò rỉ SYN](Glossary-vi.md#L37) cũ, chỉ khác đường đi. Cách sửa: `SaveAndApply` trả kết quả (lỗi ra ngoài hoặc `bool`), luồng launch-suspended thấy lỗi thì báo và **không** Resume (hoặc Kill tiến trình đang treo). Chưa có test.
-
 ### A16. Nhóm mức Thấp (ProxyDivert)
 
 - [ ] Regex của user trong luật định tuyến không có trần thời gian: nay ở [HostPredicate.cs:81-100](../src/ProxyDivert.Core/Routing/Compiled/HostPredicate.cs#L81-L100). **Đã quyết định KHÔNG đặt `matchTimeout`** (E5.3: timeout làm luật âm thầm ngừng áp dụng khi máy bận — bài học của `RegexBudget`, mục A17 cũ). Rủi ro còn lại: một pattern backtracking thảm hoạ treo luồng định tuyến vô hạn, chưa có gì bù — chọn một trong: `RegexOptions.NonBacktracking`, giới hạn độ dài/độ phức tạp pattern lúc lưu, hoặc cảnh báo ở tab Rules; **không** phải thêm timeout.
@@ -220,7 +211,7 @@ Còn **7/13** mục (kiểm 2026-09-11; 6 mục đã sửa trong `fix/wave2` đ�
 
 Đánh giá chung: kiến trúc tầng đúng như `Plan-vi.md` (Core không tham chiếu WPF; kiểu của VpnClient chỉ xuất hiện trong `Vpn/Client`; 5 project WinDivert không có chu trình; [ba tầng cấu hình](Glossary-vi.md#L300)). OOP mới dừng ở "interface + factory": phần đa hình cho các trục mở rộng đã dự định (loại điều kiện, giao thức VPN, mode phát hiện, v4/v6, tcp/udp) vẫn là `switch` rải nhiều file; sở hữu vòng đời không nằm trong kiểu; bốn [God class](Glossary-vi.md#L420) ôm phần khó nhất và cũng là phần không có test. Mức: `Must` = đã gây lỗi thật hoặc chặn việc mở rộng đã ghi trong plan; `Should` = giảm trùng lặp / cho phép test; `Nice` = sạch hơn, không đổi hành vi.
 
-**Trạng thái 2026-09-11**: đã xong và đã xoá khỏi danh sách E1.1, E1.2, E2.1, E2.5, E3.1, E4.1, E4.2, E5.1, E5.2, E5.3, E7.1, E8.1 (đối chiếu code, test xanh); quyết định đã chốt trong các refactor đó ghi ở E11. Câu "vẫn là `switch` rải nhiều file" ở trên giờ chỉ còn đúng với giao thức VPN, mode phát hiện, v4/v6, tcp/udp.
+**Trạng thái 2026-09-11**: đã xong và đã xoá khỏi danh sách E1.1, E1.2, E2.1, E2.5, E3.1, E4.1, E4.2, E5.1, E5.2, E5.3, E7.1, E8.1 (đối chiếu code, test xanh), rồi E2.6 + E3.3 (bước 8, cùng ngày); quyết định đã chốt trong các refactor đó ghi ở E11. Câu "vẫn là `switch` rải nhiều file" ở trên giờ chỉ còn đúng với giao thức VPN, v4/v6, tcp/udp.
 
 ### E1. Vòng đời và sở hữu
 
@@ -247,11 +238,6 @@ Còn **7/13** mục (kiểm 2026-09-11; 6 mục đã sửa trong `fix/wave2` đ�
 - [ ] **Vị trí**: build pipeline v4/v6 lặp gần y hệt [ProcessRedirector.cs:231-264](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/ProcessRedirector.cs#L231-L264) vs [:268-288](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/ProcessRedirector.cs#L268-L288); quyết định IPv6 fallback [:155-163](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/ProcessRedirector.cs#L155-L163), [:179-188](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/ProcessRedirector.cs#L179-L188); tham số queue driver [:333-353](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/ProcessRedirector.cs#L333-L353).
 - **Cách sửa**: `NetworkPipelineFactory.Create(AddressFamily, RelayEndpoints, features)` gọi 2 lần; `Ipv6Policy.Resolve(requested, osSupportsIpv6, relayHasV6)` thuần, test được; `NetworkHandleOptions` truyền vào handle factory. Ba hàm `Start*Pump` biến mất.
 
-#### E2.6 `AppServices` chứa chính sách miền, CLI phải chép lại — Should (app)
-
-- [ ] **Vị trí**: [AppServices.cs:29](../src/ProxyDivert.Wpf/Services/AppServices.cs#L29): container, load config, chính sách file log [:92-105](../src/ProxyDivert.Wpf/Services/AppServices.cs#L92-L105), hàng đợi [:259-268](../src/ProxyDivert.Wpf/Services/AppServices.cs#L259-L268), bật engine = `ConnectRoutedVpns` + save + `Start` [:204-213](../src/ProxyDivert.Wpf/Services/AppServices.cs#L204-L213), map detection mode [:133-134](../src/ProxyDivert.Wpf/Services/AppServices.cs#L133-L134). CLI chép [Program.cs:189-192](../src/ProxyDivert.Cli/Program.cs#L189-L192), [Program.cs:210](../src/ProxyDivert.Cli/Program.cs#L210); WPF `Vpn.Sync` lúc khởi động còn CLI không.
-- **Cách sửa**: `ProxyDivert.Core/Hosting/ProxyDivertSession : IAsyncDisposable` gom `ProcessInventory` start + chọn event source theo config, `VpnConnectionKeeper.Sync`, `StartAsync/StopAsync/ApplyAsync(config)` với hàng đợi tuần tự bên trong. `AppServices` còn `ConfigStore`, `Config` đang sửa, log path. `Program.cs` dùng cùng session. Cùng lúc chuyển `LaunchSuspended` ([ProcessesViewModel.cs:229-285](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L229-L285)) thành `SuspendedLaunchService` trong Core (CLI hiện làm cùng việc bằng `AttachProcessId`).
-
 ### E3. Đa hình thay cho `switch`
 
 Bảng phán quyết (giữ nguyên: `UdpMode`, `HostMatcherType`, `ProcessMatcherType`, `ArgumentMatcherType`, `ProcessEventSourceKind`, `DnsMode`, `Ipv6Support` vì mỗi enum chỉ switch một chỗ, đầy đủ nhánh, có `default: throw`).
@@ -260,11 +246,6 @@ Bảng phán quyết (giữ nguyên: `UdpMode`, `HostMatcherType`, `ProcessMatch
 
 - [ ] **Vị trí**: [VpnClientProxySource.cs:181-221](../src/ProxyDivert.Core/Vpn/Client/VpnClientProxySource.cs#L181-L221) (switch dial, `Required()` kiểm lúc dial thay vì lúc đọc), [VpnProfileReader.cs:83-94](../src/ProxyDivert.Core/Vpn/VpnProfileReader.cs#L83-L94), [VpnProfileReader.cs:262-279](../src/ProxyDivert.Core/Vpn/VpnProfileReader.cs#L262-L279), [VpnProfileReader.cs:310-332](../src/ProxyDivert.Core/Vpn/VpnProfileReader.cs#L310-L332), [VpnProfile.cs:11-14](../src/ProxyDivert.Core/Vpn/Models/VpnProfile.cs#L11-L14) (union-bag tự nhận), [OutboundSignature.cs:43-49](../src/ProxyDivert.Core/Outbounds/OutboundSignature.cs#L43-L49).
 - **Cách sửa**: `abstract class VpnProfile { Protocol; CarriesUdp; Signature(); Task<VpnTunnel> DialAsync(VpnTunnelOptions, ct) }` với `WireGuardFileProfile { Engine = WireProxy|InProcess }`, `OpenVpnFileProfile`, `SstpProfile`, `L2tpIpsecProfile`, `Ikev2Profile`, `SoftEtherProfile`; ctor bắt buộc tham số nên validate lúc `Read`. `VpnProfileReader.Read` chỉ chọn subclass; `RunsOnWireProxy(protocol, url)` giữ static (không đụng đĩa). `VpnClientProxySource` nhận `Func<CancellationToken, Task<VpnTunnel>>` = seam test. Cùng lúc giải quyết C6.
-
-#### E3.3 `ProcessDetectionMode`: một mode = 3 nút vặn ở 3 nơi — Should (app)
-
-- [ ] **Vị trí**: [RedirectEngine.cs:208-210](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L208-L210), [RedirectEngine.cs:158](../src/ProxyDivert.Core/Engine/RedirectEngine.cs#L158), [AppServices.cs:136-137](../src/ProxyDivert.Wpf/Services/AppServices.cs#L136-L137), [Program.cs:190-191](../src/ProxyDivert.Cli/Program.cs#L190-L191), `SettingsViewModel.ApplyEventSource`.
-- **Cách sửa**: `IProcessDetectionStrategy` với `ProcessEventDetection`/`SocketSniffDetection`: `ConfigureInventory(inventory, config)`, `ConfigureRedirect(RedirectOptions, tracker)`, `AttachFromEvents`. Xem [hai cách phát hiện](Glossary-vi.md#L357).
 
 #### E3.4 v4/v6: cặp field nhân đôi và cờ `isIpv6` xuyên 20 file — Should (WinDivert)
 
@@ -319,6 +300,7 @@ Bảng phán quyết (giữ nguyên: `UdpMode`, `HostMatcherType`, `ProcessMatch
 - [ ] `Environment.TickCount`/`UtcNow` rải rác trong WinDivert ([SocketTracker.cs:402-413](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Flow/SocketTracker.cs#L402-L413), [ReverseDnsTable.cs:37](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.SecureDns/ReverseDnsTable.cs#L37), [ConnectionStatistics.cs:14-31](../libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/Models/ConnectionStatistics.cs#L14-L31)) và cùng mẫu `TickCount + Volatile + CompareExchange` ở app ([ProcessInventory.cs:195-198](../src/ProxyDivert.Core/Processes/ProcessInventory.cs#L195-L198)): grace 30s / retention 30 phút không test được. `IClock` (net8 `TimeProvider`) + `RateGate(IClock, TimeSpan)` dùng chung.
 - [ ] `VpnConnectionKeeper.ConnectRoutedVpns` gán `outbound.KeepConnected = true` lên object của caller ([VpnConnectionKeeper.cs:163](../src/ProxyDivert.Core/Vpn/VpnConnectionKeeper.cs#L163)) trong khi WPF truyền `Config` sống; đã trả danh sách id nên bỏ dòng gán, `AppServices` flip trước khi clone.
   - (kiểm 2026-09-11) nay ở [VpnConnectionKeeper.cs:191](../src/ProxyDivert.Core/Vpn/VpnConnectionKeeper.cs#L191), vẫn gán.
+  - (bước 8, E2.6) người gọi duy nhất nay là [ProxyDivertSession.cs:137](../src/ProxyDivert.Core/Hosting/ProxyDivertSession.cs#L137), cho cả WPF lẫn CLI; gán lên config của người gọi là **cố ý** (snapshot phải mang cờ, tab Outbounds phải thấy tunnel đã bật). Còn lại chỉ là chỗ gán: keeper trả danh sách, session tự gán.
 - [ ] `AppConfig` trộn tuỳ chọn UI (`Language`, `Theme`) với cấu hình engine (file đang sửa, chỉ ghi nhận): hướng `UiPreferences` do Wpf định nghĩa, Core lưu mờ.
 
 ### E6. Tái dùng và trùng lặp
@@ -368,7 +350,7 @@ Bảng phán quyết (giữ nguyên: `UdpMode`, `HostMatcherType`, `ProcessMatch
 
 ### E7. Mô hình luồng như một thiết kế
 
-Ba phong cách cùng tồn tại và đều được ghi ở đầu class (điểm tốt): lock (`RedirectEngine._stateLock`, `VpnConnectionKeeper._lock`, `ProcessInventory._reconcileLock`), hàng đợi (`AppServices.Enqueue`, `AppLoggerProvider`), lock-free (`ConcurrentDictionary`, swap `_resolver`).
+Ba phong cách cùng tồn tại và đều được ghi ở đầu class (điểm tốt): lock (`RedirectEngine._stateLock`, `VpnConnectionKeeper._lock`, `ProcessInventory._reconcileLock`), hàng đợi (`ProxyDivertSession.Enqueue` — trước ở `AppServices`, `AppLoggerProvider`), lock-free (`ConcurrentDictionary`, swap `_resolver`).
 
 #### E7.2 Sự kiện `ISocketTracker` bắn từ 3 ngữ cảnh thread mà interface không nói — Should (WinDivert)
 
@@ -380,6 +362,7 @@ Ba phong cách cùng tồn tại và đều được ghi ở đầu class (đi�
 #### E8.2 Nhóm Nice (MVVM)
 
 - [ ] 6 VM nhận `AppServices` bê tông, 41 chỗ gọi thẳng `Engine/Config/Vpn`; `CanToggleVpn` chạy `OutboundUsage.RoutedOutboundIds` mỗi lần WPF hỏi CanExecute ([OutboundsViewModel.cs:99-111](../src/ProxyDivert.Wpf/ViewModels/OutboundsViewModel.cs#L99-L111)). Sau E2.6: VM nhận `IProxyDivertSession` + `IConfigEditor`, cache theo config version.
+  - (bước 8) E2.6 đã có `ProxyDivertSession` là **class**, chưa có interface; `AppServices` vẫn là mặt tiền VM gọi (`Engine`/`Vpn` chuyển tiếp sang session, `StartEngineAsync`/`SaveAndApply`/... là lớp bọc một dòng). Việc còn lại của gạch này không đổi: rút interface khi có test VM cần thay nó.
 - [ ] VM tạo Window ([ProcessesViewModel.cs:195-207](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L195-L207)). `IDialogService.EditFilter(vm) : bool` để test `AddRule/EditRule`.
 
 ### E9. Khả năng test
@@ -407,14 +390,14 @@ Ba phong cách cùng tồn tại và đều được ghi ở đầu class (đi�
 - Resolver bất biến thay nguyên khối + `ConfigStore.Clone` ba tầng; reconcile theo chữ ký thay `InvalidateAll` (ý tưởng đúng, chỉ cần một chủ).
 - Hợp đồng `IKeptTunnel` (nay là `IManagedProxySource` trong lib, E4.1) (`IsRunning` tức thời vs `WaitUntilDownAsync` hết cứu) đúng, chỉ sai chỗ đặt; `VpnStatus` bất biến; `LiveTcpConnection` chỉ sở hữu CTS của nó (sở hữu ghi trong kiểu).
 - `ConditionResult` bốn trạng thái + `ProcessCondition` đa hình + `JsonPolymorphic`: nền đúng, `Evaluate` ảo đã thêm ở E3.1.
-- `AppLoggerProvider` hàng đợi bị chặn + đếm dòng rớt; `AppServices.Enqueue`; `CoalescedDispatcherAction`; `LocalizationScope.Version` + `LocalizedBinding`.
+- `AppLoggerProvider` hàng đợi bị chặn + đếm dòng rớt; hàng đợi tuần tự của `ProxyDivertSession` (trước là `AppServices.Enqueue`); `CoalescedDispatcherAction`; `LocalizationScope.Version` + `LocalizedBinding`.
 - WinDivert: seam driver `IWinDivertHandle`/factory với hợp đồng thread rõ; `PacketContext` chỉ mang gói tin (đã cắt phụ thuộc ngược NatTable); `PacketPipelineBuilder` kiểu ASP.NET; `NatTable.Upsert` trả `isNew`; `IpHlpApi` predicate-over-pids; Inspection với `IHostNameParser` strategy list + `PeekableStream`; fail-safe IPv6; `TryAdd` trong DI.
 - Proxy: `PreReadStream` + `DefaultProxyServerFactory` sniff byte đầu cho 3 giao thức một listener; hook hai tầng mang `tunnelId`; `IUdpAssociateSource` là API datagram; Reverse `IControlChannel` + `FrameCodec` một wire format; `WireProxyProcessRunner.Exited` không bắn khi Dispose; `DefaultPersistentKeepalive` có lý do ghi rõ.
 - Chú thích "vì sao" ở đầu class và tại mỗi quyết định khó là tài sản; refactor phải giữ nguyên các đoạn này.
 
 ### E11. Quyết định đã chốt trong các refactor đã xong (đừng làm lại)
 
-Rút từ E1.1/E1.2/E2.1/E2.5/E3.1/E4.1/E4.2/E5.1/E5.2/E5.3/E7.1/E8.1 (đã xoá khỏi danh sách 2026-09-11; nội dung đầy đủ trong `git log -p -- docs/FixList-vi.md` và commit tương ứng).
+Rút từ E1.1/E1.2/E2.1/E2.5/E3.1/E4.1/E4.2/E5.1/E5.2/E5.3/E7.1/E8.1/E2.6/E3.3 (đã xoá khỏi danh sách 2026-09-11; nội dung đầy đủ trong `git log -p -- docs/FixList-vi.md` và commit tương ứng).
 
 - **Vòng đời outbound (E1.1/E2.5)**: `OutboundRegistry` là chủ duy nhất của instance; `SignatureOf` là cửa duy nhất tính chữ ký (không rải xuống builder); `OutboundSourceFactory` stateless, chỉ chọn builder theo `Kind` (6 builder, có `BlockOutboundBuilder`); keeper tự quyết tập VPN cần giữ (`SyncAsync`), không nghe `added/removed` của registry; không có `OutboundCapabilities`.
 - **Dispose (E1.2)**: chuỗi [IAsyncDisposable](Glossary-vi.md#L436) từ lib Proxy tới app. Cầu sync **cố ý** còn lại: `Dispose()` trên singleton DI `RedirectEngine`/`ProcessInventory`/`VpnConnectionKeeper`/`OutboundRegistry` (`ServiceProvider.Dispose` ném nếu chỉ có `DisposeAsync`) và `App.OnExit` chặn đúng một lần. Cầu **không** cố ý: `EtwProcessEventSource` (A16).
@@ -423,6 +406,8 @@ Rút từ E1.1/E1.2/E2.1/E2.5/E3.1/E4.1/E4.2/E5.1/E5.2/E5.3/E7.1/E8.1 (đã xoá
 - **Khả năng outbound (E4.1/E4.2)**: `IManagedProxySource` ở lib (`WireGuardProxySource` + `SshNetProxySource` implement; `OpenSshProxySource` cố ý không); `IUdpCapable`/`IBindCapable`/`IAddressFamilyPolicy` thay cờ; resolver hỏi `Outbound.SupportsUdp` từ config chứ **không** hỏi instance (câu trả lời không được đổi theo việc instance đã dựng hay chưa), chốt bằng theory duyệt mọi `Kind`; công tắc IPv6 chỉ còn Direct + VPN in-process. Còn hở có chủ ý: `Ipv6Support=Disabled` chỉ chặn IPv6 literal.
 - **Cấu hình (E5.1/E5.2/E8.1)**: `AppConfig.Normalize` là chốt toàn vẹn (Load, Clone bản sao, CLI); không bảo vệ setter theo `IsBuiltIn`; `OutboundAddress` chỉ nói ô nhập LÀ gì, không chạm đĩa; 4 row VM ghi thẳng xuống model — không `Commit()/Validate()`, không `Rows.Sync`; A10 giữ `ReloadAll`, không `ObservableCollection` dùng chung.
 - **Điều kiện (E3.1)**: `ProcessCondition.Evaluate` + `ConditionSubject` là class [descriptor](Glossary-vi.md#L563); `Subject`/`MatcherValue` không virtual (`[JsonIgnore]` trên abstract không tới override); thêm một loại điều kiện = 3 chỗ code + 2 key chuỗi × 2 ngôn ngữ (`WpfResourceSmokeTests` bắt).
+- **Mode phát hiện (E3.3)**: [strategy](Glossary-vi.md#L424) `IProcessDetectionStrategy` (`ConfigureInventory`/`StartTracker`/`ConfigureRedirect`) với `ProcessEventDetection`/`SocketSniffDetection` ở `Core/Engine`, **không** ở `Processes` (để `Processes` không phụ thuộc `RedirectOptions`); enum `ProcessDetectionMode` vẫn là thứ lưu file, `ProcessDetectionMode.Strategy()` là switch duy nhất. Engine đưa cho redirector **judge của chính nó** (đọc `_run`), không đưa thẳng `tracker.ShouldRedirect` — pid hỏi sau Stop phải nhận "chưa biết", không phải câu trả lời của tracker đã chết.
+- **Host (E2.6)**: `Core/Hosting/ProxyDivertSession` đăng ký DI, giữ hàng đợi tuần tự + bật bảng process một lần + thứ tự start (bật cờ VPN trên config **của người gọi** → snapshot → bảng process → driver → dial); ghi file qua `ConfigStore?` **tuỳ chọn** (WPF đăng ký store, CLI không ⇒ không ghi gì). Session **không** dispose engine/bảng/keeper (của container), chỉ Stop; `Dispose()` sync là cầu cho container như các singleton khác. Đổi mode phát hiện từ tab Settings (`UseDetectionAsync`) cũng **qua hàng đợi** — tránh đua với lần đổi y hệt ở đầu mỗi start. `ApplyAsync`/`SetVpnConnectedAsync` log rồi **ném lại** (A11), người gọi bỏ qua Task được. Chưa có `IProxyDivertSession`: `AppServices` còn là [composition root](Glossary-vi.md#L587) kiêm mặt tiền cho VM (E8.2). `SuspendedLaunchService` cùng chỗ: launch đóng băng → adopt → Resume; adopt hỏng ⇒ không Resume ⇒ `Dispose` terminate.
 
 ---
 
@@ -430,13 +415,12 @@ Rút từ E1.1/E1.2/E2.1/E2.5/E3.1/E4.1/E4.2/E5.1/E5.2/E5.3/E7.1/E8.1 (đã xoá
 
 Nguyên tắc: bug Cao trước vì sửa nhanh và độc lập; refactor thiết kế đi theo cụm phụ thuộc, mỗi bước bọc code cũ trước rồi mới xoá, test xanh mới sang bước sau. Bug trong submodule commit trong submodule trước, rồi cập nhật app.
 
-**Đợt 1 (bug Cao) và Đợt 2 (bug Vừa) đã xong**, trừ những mục còn đứng ở phần A–D: A8 (nửa WinDivert), A10/A11 (còn hở), B3 (nửa UDP), B5, C3 (nửa app, theo E6.2), D6 (7 mục), D5/D7, cùng các mục mới phát hiện khi đối chiếu 2026-09-11: A21–A23, B16–B17, C9–C11.
+**Đợt 1 (bug Cao) và Đợt 2 (bug Vừa) đã xong**, trừ những mục còn đứng ở phần A–D: A8 (nửa WinDivert), A10 (còn hở), B3 (nửa UDP), B5, C3 (nửa app, theo E6.2), D6 (7 mục), D5/D7, cùng các mục mới phát hiện khi đối chiếu 2026-09-11: A21–A23, B16–B17, C9–C11.
 
-**Đợt 3 — refactor thiết kế, theo cụm phụ thuộc** (bước 1–7 đã xong: E1.2 → E1.1+E2.5 → E4.1+E4.2 → E2.1 → E5.3+E7.1 → E5.1+E8.1+E5.2 → E3.1; xem E11)
+**Đợt 3 — refactor thiết kế, theo cụm phụ thuộc** (bước 1–8 đã xong: E1.2 → E1.1+E2.5 → E4.1+E4.2 → E2.1 → E5.3+E7.1 → E5.1+E8.1+E5.2 → E3.1 → E3.3+E2.6; xem E11)
 
 | Thứ tự | Việc | Vì sao đứng đây |
 |---|---|---|
-| 8 | E2.6 `ProxyDivertSession` dùng chung WPF/CLI; E3.3 detection strategy | Sau khi engine gọn mới đáng gom host |
 | 9 | E3.2 `VpnProfile` subclass; E6.1 WireGuard reader về WireProxyCli; E6.2 DNS client về VpnClient | Cụm VPN, mỗi việc một commit trong submodule tương ứng |
 | 10 | E4.6 cây exception Proxy; E6.5 `UpstreamTcpTunnel`; E6.6 `ChildProcess`; E6.7 `StreamRelay` | Lib Proxy nội bộ, không đụng app ngoài đổi catch |
 

@@ -367,7 +367,7 @@ Nguồn nào không khởi động được thì tự lùi sang nguồn kia, r�
 
 **Connection có sẵn**: lớp SOCKET chỉ nói khi có thao tác socket, nên kết nối mở từ trước khi handle tồn tại sẽ im lặng mãi mãi. Hai chỗ bù: (1) ngay khi một pid được xét là "của ta", `AcceptPid` gọi `PrePopulateForPid` đọc bảng kernel để nạp các flow sẵn có của nó; (2) lúc `ProcessRuleTracker.Start`, **cả hai mode** đều chạy `MatchEverything()` một lượt để nhận các tiến trình đang chạy — nếu chỉ chờ socket mới thì chương trình đã kết nối từ trước và cứ dùng kết nối cũ sẽ không bao giờ bị chuyển hướng.
 
-Đánh đổi: cách 1 attach sớm hơn (ngay khi tiến trình sinh ra, trước cả kết nối đầu) nhưng phụ thuộc sự kiện tới kịp; cách 2 xét đúng lúc mở kết nối và chỉ tốn 1 handle thay vì mỗi pid một handle, nhưng lớp SOCKET chỉ nghe được chứ không giữ được nên SYN vẫn có thể ra trước quyết định — lúc đó `TryReconcileFromKernel` tra bảng kernel để bắt lại.
+Đánh đổi: cách 1 attach sớm hơn (ngay khi tiến trình sinh ra, trước cả kết nối đầu) nhưng phụ thuộc sự kiện tới kịp; cách 2 xét đúng lúc mở kết nối và chỉ tốn 1 handle thay vì mỗi pid một handle, nhưng lớp SOCKET chỉ nghe được chứ không giữ được nên SYN vẫn có thể ra trước quyết định — lúc đó `TryReconcileFromKernel` tra bảng kernel để bắt lại. Trong code mỗi cách là một lớp `IProcessDetectionStrategy` (`ProcessEventDetection`, `SocketSniffDetection`, lấy qua `ProcessDetectionMode.Strategy()`), giữ đủ cả ba chỗ một mode phải chỉnh: bảng process nghe nguồn sự kiện nào, tracker có attach theo sự kiện khởi động không, và redirector có được giao `ShouldTrackProcess` không.
 
 **Bẫy đã sửa cùng đợt**: `AttachChild` tạo tiến trình con với `includeChildren = false`, nên **cháu không bao giờ được nhận** — cây con dừng đúng một tầng, dù `AdoptChildren` tự mô tả là đi hết cây. Con nay kế thừa `IncludeChildren` của cha.
 
@@ -423,7 +423,7 @@ Một lớp gánh nhiều mối quan tâm không liên quan (vòng đời, đị
 
 ## Strategy (mẫu chiến lược) thay cho switch
 
-Khi một enum (`OutboundKind`, `VpnProtocol`, `ProcessDetectionMode`, address family v4/v6, tcp/udp) bị `switch`/`if` ở nhiều file, thêm một giá trị mới nghĩa là phải sửa tất cả các chỗ đó và dễ sót. Mẫu chiến lược đưa mỗi giá trị thành một lớp implement chung một interface (`IOutboundSourceBuilder`, `IVpnProtocolDescriptor`, `IProcessDetectionStrategy`, `ITransportFlowPolicy`), chọn một lần qua registry/dictionary, phần còn lại của code chỉ gọi interface. Chỉ đáng làm khi switch xuất hiện ở từ 2 nơi trở lên hoặc chủ dự án đã dự định mở rộng; một switch duy nhất, đầy đủ nhánh, có `default: throw` thì giữ nguyên.
+Khi một enum (`OutboundKind`, `VpnProtocol`, `ProcessDetectionMode`, address family v4/v6, tcp/udp) bị `switch`/`if` ở nhiều file, thêm một giá trị mới nghĩa là phải sửa tất cả các chỗ đó và dễ sót. Mẫu chiến lược đưa mỗi giá trị thành một lớp implement chung một interface (`IOutboundSourceBuilder`, `IVpnProtocolDescriptor`, `IProcessDetectionStrategy`, `ITransportFlowPolicy`), chọn một lần qua registry/dictionary, phần còn lại của code chỉ gọi interface. Chỉ đáng làm khi switch xuất hiện ở từ 2 nơi trở lên hoặc chủ dự án đã dự định mở rộng; một switch duy nhất, đầy đủ nhánh, có `default: throw` thì giữ nguyên. Đã làm trong repo: `IOutboundSourceBuilder` (chọn theo `OutboundKind`) và `IProcessDetectionStrategy` (chọn theo `ProcessDetectionMode` — enum vẫn là thứ ghi vào file cấu hình, còn switch duy nhất trên nó là hàm biến nó thành strategy).
 
 ## Aggregate (gốc tập hợp) cho cấu hình
 
@@ -583,3 +583,7 @@ Kiểu tấn công (hoặc client hỏng) mở kết nối rồi gửi request *
 ## Back-pressure (áp lực ngược) và cửa sổ nhận TCP
 
 Cơ chế để bên nhận chậm **kìm** bên gửi nhanh. Trong TCP đó là **cửa sổ nhận** (receive window): bên nhận quảng cáo còn bao nhiêu byte chỗ trống, bên gửi không được vượt quá. Một stack tự viết mà luôn quảng cáo hằng số (ví dụ 65535) dù hàng đợi nhận không ai đọc thì server cứ đẩy, bộ nhớ phình theo tốc độ server thay vì tốc độ tiến trình đọc — không có back-pressure. Cách đúng: cửa sổ = chỗ trống thật, gửi window update khi hàng đợi vơi.
+
+## Composition root (gốc lắp ráp)
+
+Chỗ **duy nhất** trong ứng dụng dựng cả đồ thị đối tượng: đăng ký dịch vụ vào container, lấy ra vài đối tượng sống lâu, rồi giao cho phần còn lại. Mọi lớp khác chỉ nhận phụ thuộc qua constructor, không tự `new` cộng sự và không tự đi hỏi container. Mỗi host có gốc riêng: cửa sổ là `AppServices`, bản console là phần đầu `Program.cs`; phần đăng ký dùng chung là `AddProxyDivert`. Gốc lắp ráp chỉ nên **lắp**, không nên chứa chính sách miền (thứ tự bật engine, cái gì phải đi qua hàng đợi): chính sách đặt ở gốc thì host thứ hai phải chép lại, và bản chép sẽ lệch. Vì thế những thứ đó nằm trong `ProxyDivertSession` (Core), cả hai host cùng gọi.
