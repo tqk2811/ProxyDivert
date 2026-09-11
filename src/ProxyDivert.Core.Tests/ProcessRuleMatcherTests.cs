@@ -140,7 +140,6 @@ public class ProcessRuleMatcherTests
     public void An_empty_argument_pattern_is_not_a_condition(string? pattern)
     {
         Assert.True(ProcessRuleMatcher.IsMatch(WithArgument(ArgumentMatcherType.Contains, pattern), "java", null, null));
-        Assert.False(ProcessRuleMatcher.NeedsCommandLine(WithArgument(ArgumentMatcherType.Contains, pattern)));
     }
 
     [Theory]
@@ -187,8 +186,6 @@ public class ProcessRuleMatcherTests
     {
         Assert.False(ProcessRuleMatcher.IsMatch(
             WithArgument(ArgumentMatcherType.Contains, "minecraft"), "java", null, commandLine: null));
-        Assert.True(ProcessRuleMatcher.NeedsCommandLine(
-            WithArgument(ArgumentMatcherType.Contains, "minecraft")));
     }
 
     // Both halves are one condition: the process must pass the name test as well.
@@ -200,26 +197,6 @@ public class ProcessRuleMatcherTests
         Assert.True(ProcessRuleMatcher.IsMatch(rule, "java", null, "java.exe -Dminecraft"));
         Assert.False(ProcessRuleMatcher.IsMatch(rule, "python", null, "python.exe -Dminecraft"));
         Assert.False(ProcessRuleMatcher.IsMatch(rule, "java", null, "java.exe -Declipse"));
-    }
-
-    // A disabled rule needs nothing looked up for it.
-    [Fact]
-    public void A_disabled_rule_does_not_make_the_engine_read_command_lines()
-    {
-        ProcessRule rule = WithArgument(ArgumentMatcherType.Contains, "minecraft");
-        rule.IsEnabled = false;
-
-        Assert.False(ProcessRuleMatcher.NeedsCommandLine(rule));
-    }
-
-    [Fact]
-    public void A_condition_nested_in_a_group_still_makes_the_engine_read_command_lines()
-    {
-        ProcessRule rule = Rule(
-            Process("java"),
-            Group(ConditionOperator.Any, Arguments("minecraft"), Arguments("forge")));
-
-        Assert.True(ProcessRuleMatcher.NeedsCommandLine(rule));
     }
 
     // ==== brackets ====
@@ -295,7 +272,6 @@ public class ProcessRuleMatcherTests
         ProcessRule rule = Rule(Process("java"), Arguments(string.Empty));
 
         Assert.True(ProcessRuleMatcher.IsMatch(rule, "java", null, "java.exe -Declipse"));
-        Assert.False(ProcessRuleMatcher.NeedsCommandLine(rule));
     }
 
     // An empty group is vacuously true in logic, and a filter that matches everything is how the
@@ -313,7 +289,6 @@ public class ProcessRuleMatcherTests
         var rule = new ProcessRule { Id = Guid.NewGuid(), Name = "empty" };
 
         Assert.False(ProcessRuleMatcher.IsMatch(rule, "chrome", @"C:\chrome.exe"));
-        Assert.False(ProcessRuleMatcher.NeedsCommandLine(rule));
     }
 
     // Nothing the editor builds gets this deep; a hand-edited config file can. Recursion has to

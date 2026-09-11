@@ -34,29 +34,6 @@ public static class ProcessRuleMatcher
     // file, and the recursion has to stop somewhere short of the stack.
     public const int MaxDepth = 16;
 
-    /// <summary>True when the filter needs a command line before it can decide.</summary>
-    public static bool NeedsCommandLine(ProcessRule rule)
-        => rule is not null && rule.IsEnabled && AsksAboutCommandLine(rule.Condition, 0);
-
-    private static bool AsksAboutCommandLine(ProcessCondition? condition, int depth)
-    {
-        if (condition is null || depth > MaxDepth) return false;
-
-        switch (condition)
-        {
-            case CommandLineCondition leaf:
-                return !string.IsNullOrWhiteSpace(leaf.Pattern);
-
-            case ConditionGroup group:
-                foreach (ProcessCondition child in group.Children)
-                    if (AsksAboutCommandLine(child, depth + 1)) return true;
-                return false;
-
-            default:
-                return false;
-        }
-    }
-
     public static bool IsMatch(ProcessRule rule, string processName, string? executablePath, string? commandLine = null)
     {
         if (rule is null) throw new ArgumentNullException(nameof(rule));
