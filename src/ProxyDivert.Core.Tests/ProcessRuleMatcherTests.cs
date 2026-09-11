@@ -298,7 +298,7 @@ public class ProcessRuleMatcherTests
     {
         var innermost = new ConditionGroup { Children = { Process("chrome") } };
         ConditionGroup current = innermost;
-        for (int i = 0; i < ProcessRuleMatcher.MaxDepth + 2; i++)
+        for (int i = 0; i < ProcessCondition.MaxDepth + 2; i++)
             current = new ConditionGroup { Children = { current } };
 
         var rule = new ProcessRule
@@ -312,23 +312,48 @@ public class ProcessRuleMatcherTests
         Assert.False(ProcessRuleMatcher.IsMatch(rule, "chrome", null));
     }
 
+    // The other side of the same line: the limit is where walking stops, not one short of it. The
+    // count used to be an argument passed down the recursion and is now kept by the context, so
+    // this pins the boundary where it was.
+    [Theory]
+    [InlineData(ProcessCondition.MaxDepth, ConditionResult.Match)]
+    [InlineData(ProcessCondition.MaxDepth + 1, ConditionResult.Unknown)]
+    public void The_depth_limit_counts_the_way_it_always_did(int leafDepth, ConditionResult expected)
+    {
+        ProcessCondition current = Process("chrome");
+        for (int i = 0; i < leafDepth; i++)
+            current = new ConditionGroup { Children = { current } };
+
+        Assert.Equal(expected, current.Evaluate(new ConditionContext("chrome", null, null)));
+    }
+
+    // Nothing the editor writes, but a hand-edited file can say "null" in a list of children. The
+    // evaluator has always read that as a row with nothing in it.
     [Fact]
-    public void Evaluate_reports_each_answer_apart_so_a_row_can_be_coloured()
+    public void A_null_in_a_group_is_left_out_like_an_empty_row()
+    {
+        var group = new ConditionGroup { Children = { null!, Process("java") } };
+
+        Assert.Equal(ConditionResult.Match, group.Evaluate(new ConditionContext("java", null, null)));
+    }
+
+    [Fact]
+    public void Each_condition_reports_its_own_answer_in_four_states()
     {
         Assert.Equal(
             ConditionResult.Match,
-            ProcessRuleMatcher.Evaluate(Process("java"), "java", null, null));
+            Process("java").Evaluate(new ConditionContext("java", null, null)));
 
         Assert.Equal(
             ConditionResult.NoMatch,
-            ProcessRuleMatcher.Evaluate(Process("python"), "java", null, null));
+            Process("python").Evaluate(new ConditionContext("java", null, null)));
 
         Assert.Equal(
             ConditionResult.Unknown,
-            ProcessRuleMatcher.Evaluate(Arguments("minecraft"), "java", null, null));
+            Arguments("minecraft").Evaluate(new ConditionContext("java", null, null)));
 
         Assert.Equal(
             ConditionResult.Ignored,
-            ProcessRuleMatcher.Evaluate(Arguments(string.Empty), "java", null, "java.exe"));
+            Arguments(string.Empty).Evaluate(new ConditionContext("java", null, "java.exe")));
     }
 }
