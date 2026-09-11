@@ -9,12 +9,13 @@
     <UserControl.Resources>
         <b:BindingProxy x:Key="Vm" Data="{Binding}"/>
 
-        <!-- Only a VPN has a tunnel to connect, so on every other row the button is simply not
-             there: a greyed one would only raise the question of what it would have done. -->
+        <!-- Only a VPN tunnel or an SSH session has something to connect, so on every other row the
+             button is simply not there: a greyed one would only raise the question of what it would
+             have done. The row asks the keeper which rows those are rather than naming kinds here. -->
         <Style x:Key="VpnConnectButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Visibility" Value="Collapsed"/>
             <Style.Triggers>
-                <DataTrigger Binding="{Binding Kind}" Value="{x:Static enums:OutboundKind.Vpn}">
+                <DataTrigger Binding="{Binding CanHoldTunnel}" Value="True">
                     <Setter Property="Visibility" Value="Visible"/>
                 </DataTrigger>
             </Style.Triggers>
@@ -81,6 +82,19 @@
                 <DataTrigger Binding="{Binding HasAddressProblem}" Value="True">
                     <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}"/>
                     <Setter Property="ToolTip" Value="{Binding AddressProblem}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The same for an SSH row's key file: a path that is not there is said on its own cell. -->
+        <Style x:Key="PrivateKeyCell" TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HasPrivateKeyProblem}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}"/>
+                    <Setter Property="ToolTip" Value="{Binding PrivateKeyProblem}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -178,6 +192,12 @@
                                         Binding="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Password}"
                                         Binding="{Binding Password, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
+                    <!-- SSH only: the private key to log in with. When it is set the password box
+                         beside it is the key's passphrase. Empty on every other row, like the
+                         pre-shared key next to it. -->
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.PrivateKey}"
+                                        Binding="{Binding PrivateKeyPath, UpdateSourceTrigger=PropertyChanged}"
+                                        CellStyle="{StaticResource PrivateKeyCell}" Width="160"/>
                     <!-- Only L2TP/IPsec and IKEv2 use this, but a column costs less than a second
                          editor, and it stays empty for everything else. -->
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.PreSharedKey}"

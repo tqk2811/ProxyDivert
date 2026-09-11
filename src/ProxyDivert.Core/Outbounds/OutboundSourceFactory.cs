@@ -53,6 +53,7 @@ public sealed class OutboundSourceFactory
         yield return new Socks4OutboundBuilder();
         yield return new Socks5OutboundBuilder();
         yield return new VpnOutboundBuilder();
+        yield return new SshOutboundBuilder();
     }
 
     /// <summary>

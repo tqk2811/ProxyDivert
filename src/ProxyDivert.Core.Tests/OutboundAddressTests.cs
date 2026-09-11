@@ -98,6 +98,40 @@ public class OutboundAddressTests
         Assert.Null(Refuse(kind, "anything at all"));
     }
 
+    // ==== an SSH server ====
+
+    // "user@host" is how a server is written everywhere else, and the port is 22 nearly always —
+    // so unlike SOCKS, a missing port is filled in rather than refused.
+    [Theory]
+    [InlineData("ssh://user@ssh.example.com:22", 22)]
+    [InlineData("ssh://ssh.example.com:2222", 2222)]
+    [InlineData("user@ssh.example.com", 22)]
+    [InlineData("ssh.example.com", 22)]
+    public void AnSshServer_ReadsWithOrWithoutSchemeUserAndPort(string url, int port)
+    {
+        OutboundAddress address = Read(OutboundKind.Ssh, url);
+
+        Assert.Equal(OutboundAddressKind.ProxyEndpoint, address.Kind);
+        Assert.Equal("ssh", address.Uri!.Scheme);
+        Assert.Equal("ssh.example.com", address.Host);
+        Assert.Equal(port, address.Port);
+    }
+
+    [Fact]
+    public void TheUserTypedInFrontOfTheServer_IsKeptInTheAddress()
+    {
+        Assert.Equal("user", Read(OutboundKind.Ssh, "user@ssh.example.com").Uri!.UserInfo);
+    }
+
+    [Fact]
+    public void AnEmptySshBox_SaysWhatAnSshAddressLooksLike()
+    {
+        string? error = Refuse(OutboundKind.Ssh, "");
+
+        Assert.NotNull(error);
+        Assert.Contains("ssh://", error!, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ==== a VPN ====
 
     [Fact]
@@ -227,6 +261,7 @@ public class OutboundAddressTests
     [InlineData("socks4a://127.0.0.1:1080", OutboundKind.Socks4)]
     [InlineData("socks://127.0.0.1:1080", OutboundKind.Socks5)]
     [InlineData("socks5://127.0.0.1:1080", OutboundKind.Socks5)]
+    [InlineData("ssh://user@127.0.0.1:22", OutboundKind.Ssh)]
     public void TheSchemeSaysWhichProxyItIs(string url, OutboundKind expected)
     {
         Assert.True(OutboundAddress.TryReadProxyKind(url, out OutboundKind kind));

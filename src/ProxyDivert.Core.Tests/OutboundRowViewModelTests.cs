@@ -56,6 +56,68 @@ public class OutboundRowViewModelTests
         Assert.Equal("work", row.Model.Name);
     }
 
+    // ==== the Connect button, for a row with a session to hold ====
+
+    // The row does not keep its own list of kinds with a session: it asks the keeper, which asks the
+    // builders. What is pinned here is that the question is asked afresh when the kind changes.
+    [Fact]
+    public void TurningARowIntoSsh_PutsTheConnectButtonOnIt()
+    {
+        var row = new OutboundRowViewModel(
+            new Outbound { Id = Guid.NewGuid(), Name = "jump", Kind = OutboundKind.Socks5, Url = "socks5://127.0.0.1:1080" },
+            watermarks: null,
+            canHoldTunnel: o => o.Kind is OutboundKind.Vpn or OutboundKind.Ssh);
+        Assert.False(row.CanHoldTunnel);
+        List<string> changed = Watch(row);
+
+        row.Kind = OutboundKind.Ssh;
+
+        Assert.True(row.CanHoldTunnel);
+        Assert.Contains(nameof(OutboundRowViewModel.CanHoldTunnel), changed);
+    }
+
+    [Fact]
+    public void ARowWithNobodyToAsk_OffersNoConnectButton()
+    {
+        var row = new OutboundRowViewModel(
+            new Outbound { Id = Guid.NewGuid(), Name = "jump", Kind = OutboundKind.Ssh, Url = "me@ssh.example.com" });
+
+        Assert.False(row.CanHoldTunnel);
+    }
+
+    // ==== an SSH key file that is not there ====
+
+    [Fact]
+    public void AnSshKeyFileThatIsNotThere_IsSaidOnItsCell()
+    {
+        string missing = Path.Combine(Path.GetTempPath(), "pd-" + Guid.NewGuid().ToString("N"), "id_ed25519");
+        var row = new OutboundRowViewModel(
+            new Outbound { Id = Guid.NewGuid(), Name = "jump", Kind = OutboundKind.Ssh, Url = "me@ssh.example.com" });
+        List<string> changed = Watch(row);
+
+        row.PrivateKeyPath = missing;
+
+        Assert.True(row.HasPrivateKeyProblem);
+        Assert.Contains(missing, row.PrivateKeyProblem);
+        Assert.Contains(nameof(OutboundRowViewModel.HasPrivateKeyProblem), changed);
+        Assert.Equal(missing, row.Model.PrivateKeyPath);
+    }
+
+    // A key path left on a row that has since become a proxy means nothing there, so it is not a
+    // problem to report either.
+    [Fact]
+    public void AKeyPathOnARowThatIsNotSsh_IsNotAProblem()
+    {
+        var row = new OutboundRowViewModel(
+            new Outbound
+            {
+                Id = Guid.NewGuid(), Name = "work", Kind = OutboundKind.Socks5, Url = "socks5://127.0.0.1:1080",
+                PrivateKeyPath = @"Z:\nowhere\id_ed25519",
+            });
+
+        Assert.False(row.HasPrivateKeyProblem);
+    }
+
     // ==== Direct and Block ====
 
     [Fact]

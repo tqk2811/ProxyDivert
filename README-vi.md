@@ -147,7 +147,7 @@ Bước 1 không dùng được trong mấy trường hợp, lúc đó phải ch
   thì dùng "Chạy ở trạng thái tạm dừng".
 - UDP chỉ qua proxy được với **SOCKS5**, và chỉ qua VPN được khi VPN đó chạy trong chính tiến trình
   này (tức là mọi loại trừ file `.conf` WireGuard chạy bằng wireproxy — xem mục dưới). Đường ra khác
-  thì UDP bị chặn chứ không rò ra ngoài. QUIC (UDP/443) chặn mặc định để trình duyệt lùi về TCP.
+  — kể cả SSH — thì UDP bị chặn chứ không rò ra ngoài. QUIC (UDP/443) chặn mặc định để trình duyệt lùi về TCP.
 - Game có anti-cheat kernel có thể coi việc chuyển hướng gói tin là can thiệp.
 - **SoftEther** cần đúng khối [watermark](docs/Glossary-vi.md#L121) thật mới nói chuyện được với máy
   chủ thật; khối đó là dữ liệu GPL nên repo này không kèm — thiếu nó máy chủ trả HTTP 403. Bấm
@@ -253,6 +253,43 @@ lại, và sửa chính file cấu hình cũng tính là sửa.
 Ngoại lệ: file `.conf` do bạn tự viết (đã có sẵn `[Socks5]`) được giao cho wireproxy nguyên trạng,
 nên `PersistentKeepalive` trong đó là việc của bạn.
 
+## Đường ra SSH
+
+Chọn loại đường ra **Ssh**. Tool giữ **một** phiên SSH tới máy chủ, và mỗi kết nối được chuyển hướng
+là một channel [direct-tcpip](docs/Glossary-vi.md#L587) trên phiên đó — giống `ssh -D` nhưng không
+cần listener SOCKS cục bộ ở giữa. Tên miền đích được gửi sang máy chủ và phân giải ở đó, nên tra tên
+không đi qua DNS của máy này. Máy chủ không cần gì đặc biệt: `sshd` bình thường với
+`AllowTcpForwarding` (mặc định đã bật). Chạy ngay trong tiến trình này (SSH.NET), không cần cài
+`ssh.exe`.
+
+| Ô | Điền gì |
+|---|---|
+| URL | `ssh://user@host:22`, hoặc chỉ `user@host` — không ghi cổng thì là 22 |
+| Tài khoản | tên đăng nhập; thắng tên viết trong URL |
+| Mật khẩu | mật khẩu — hoặc, khi có file khoá, là passphrase của khoá (vẫn được thử làm mật khẩu) |
+| File khoá | private key: OpenSSH, PuTTY `.ppk` hoặc PEM (RSA, ECDSA, Ed25519) |
+
+**Host key được tin ở lần đầu** ([TOFU](docs/Glossary-vi.md#L591)). Lần đầu nối tới một máy chủ,
+host key của nó được ghi vào `%LOCALAPPDATA%\ProxyDivert\known_hosts` — đúng định dạng của OpenSSH
+nên đọc và sửa tay được — và từ đó chỉ khoá này được chấp nhận. Máy chủ đưa khoá khác thì bị từ chối,
+thông báo lỗi nêu rõ file và dòng: xoá dòng đó nếu máy chủ thật sự vừa cài lại, còn nếu không giải
+thích được vì sao khoá đổi thì đừng xoá.
+
+Phiên được giữ như đường hầm VPN: nút **Kết nối** trên dòng, chấm xanh/vàng, giữ chạy khi có bộ lọc
+định tuyến qua và tự dựng lại khi rớt.
+
+Giới hạn:
+
+- **Chỉ TCP.** SSH không có channel nào chở datagram, nên UDP định tuyến vào đường ra SSH bị chặn
+  (kể cả QUIC — trình duyệt tự lùi về TCP).
+- Mọi tunnel dùng chung một kết nối TCP tới máy chủ, nên mất một gói là tất cả khựng lại một chút.
+- Mỗi tunnel đang mở giữ một luồng: SSH.NET chuyển tiếp bằng một vòng lặp chặn cho mỗi kết nối. Tool
+  giữ chỗ các luồng đó khi tunnel mở để phần còn lại của ứng dụng không bao giờ bị thiếu luồng, nhưng
+  trình duyệt mở một trăm kết nối là tốn một trăm luồng.
+- Đã thử với `sshd` OpenSSH 9.5 có sẵn của Windows trên chính máy này, bằng khoá Ed25519 có và không
+  có passphrase (xem `LiveSshOutboundTests`). Chưa thử đăng nhập bằng mật khẩu và máy chủ Linux ở xa.
+  Chưa hỗ trợ keyboard-interactive và ssh-agent.
+
 ## Công cụ dòng lệnh (`ProxyDivert.Cli`)
 
 Bản console để thử engine mà không cần giao diện: mọi thứ truyền bằng argument, không đọc file cấu hình.
@@ -280,4 +317,10 @@ ProxyDivert.Cli --selfhost 18080 --pid 2372 --rule "*" --outbound-ipv6 Disabled
 ```
 ProxyDivert.Cli --vpn sstp://219.100.37.1:443 --vpn-user vpn --vpn-pass vpn --pid 2372 --rule "*"
 ProxyDivert.Cli --vpn D:\vpn\wg0.conf --vpn-protocol WireGuard --pid 2372 --rule "*"
+```
+
+Máy chủ SSH đưa vào `--proxy`, thông tin đăng nhập truyền bằng cờ:
+
+```
+ProxyDivert.Cli --proxy ssh://me@ssh.example.com --ssh-key C:\Users\me\.ssh\id_ed25519 --pid 2372 --rule "*"
 ```

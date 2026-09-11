@@ -8,6 +8,7 @@ using ProxyDivert.Core.Logging;
 using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Outbounds.Builders;
 using ProxyDivert.Core.Processes;
+using ProxyDivert.Core.Ssh;
 using ProxyDivert.Core.Vpn;
 using TqkLibrary.WinDivert.ProcessControl.DependencyInjection;
 using TqkLibrary.WinDivert.Redirect.DependencyInjection;
@@ -64,6 +65,17 @@ public static class ProxyDivertServiceCollectionExtensions
         // asks its own instance where the file is, which is a look at two folders and no state.
         services.TryAddSingleton(sp => new SoftEtherWatermarkStore(
             loggerFactory: sp.GetService<ILoggerFactory>()));
+
+        // The SSH servers already met and their keys. A singleton with the container's logger so that
+        // "trusting this key from now on" lands in the application's log — it is the one moment the
+        // trust is decided, and the line to look for if it ever needs questioning.
+        services.TryAddSingleton(sp => new SshKnownHostsStore(loggerFactory: sp.GetService<ILoggerFactory>()));
+
+        // Registered ahead of the loop below so that it is this instance, holding the store above,
+        // that claims the SSH kind; the loop's own SshOutboundBuilder is then a duplicate
+        // implementation type and TryAddEnumerable skips it.
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IOutboundSourceBuilder, SshOutboundBuilder>(
+            sp => new SshOutboundBuilder(sp.GetRequiredService<SshKnownHostsStore>())));
 
         // One builder per kind of way out. A new kind is a new class registered here, and nothing
         // else in the application changes.

@@ -230,6 +230,30 @@ tầng dựng trên nó.
 6. Bỏ `net462` (WinDivert cần Win10+ nên .NET Framework vô nghĩa); còn `net6.0-windows;net8.0-windows`.
    Riêng Demo chỉ `net8.0-windows` vì TqkLibrary.Proxy kéo Microsoft.Extensions.* 10.x không hỗ trợ net6.0.
 
+### Giai đoạn 3. Đường ra SSH — ĐÃ XONG 2026-09-11 (nhánh `feat/ssh-outbound-sshnet`)
+
+**Khảo sát.** Submodule có sẵn ba bản SSH, ProxyDivert chưa dùng bản nào:
+
+| | SshNet (SSH.NET) | SshCli (ssh.exe) | Driver SSH-tun (VpnClient) |
+|---|---|---|---|
+| Cách chở | [direct-tcpip](Glossary-vi.md#L587), một phiên dùng chung | `ssh -W`, mỗi kết nối một ssh.exe (Windows không có [ControlMaster](Glossary-vi.md#L599)), +500 ms | gói IP qua [SSH tun](Glossary-vi.md#L595), [TCP-over-TCP](Glossary-vi.md#L603) |
+| UDP | không | không | có |
+| Máy chủ cần | sshd thường | sshd thường | root + `PermitTunnel` + NAT |
+| Giữ phiên | `IManagedProxySource` | không có phiên | tự reconnect, nhưng không rekey, không trả lời keepalive |
+
+**User chốt**: chỉ SshNet; host key [TOFU](Glossary-vi.md#L591) trong file riêng của app; cột Key file mới, ô Password kiêm passphrase.
+
+Đã làm (submodule Proxy trước, rồi repo cha):
+
+1. SSH.NET 2025.1.0 → **2026.0.0** (NU1903; bản mới vá thêm hai lỗi server độc hại chạm được qua phiên thường).
+2. SshNet: luôn kiểm host key — fingerprint ghim, rồi `ISshHostKeyVerifier`, rồi từ chối trừ khi bật `AcceptAnyHostKey`; từ chối thì ném `SshNetHostKeyRejectedException` nêu fingerprint và lý do. Cổng loopback của `ForwardedPortLocal` (buộc phải dùng vì `ChannelDirectTcpip` là internal) chỉ nhận đúng socket của tunnel. Khoá danh sách forwarded port. Bỏ ngoặc IPv6.
+3. `OutboundKind.Ssh`, `Outbound.PrivateKeyPath`, ô URL nhận `ssh://user@host:port`/`user@host` (cổng mặc định 22), signature gồm file khoá.
+4. `SshOutboundBuilder` (`BuildsManagedSource = true` ⇒ keeper và router không phải sửa) + `Ssh/SshKnownHostsStore` (định dạng known_hosts của OpenSSH, `%LOCALAPPDATA%\ProxyDivert\known_hosts`).
+5. Tab Đường ra: SSH trong combo, cột File khoá có cảnh báo tại ô, nút Connect hỏi `CanKeep` của keeper thay vì liệt kê kind. CLI: `--proxy ssh://… --ssh-key/--ssh-pass`.
+6. **Chạy thật** với `sshd.exe` OpenSSH 9.5 của Windows, chạy quyền user trên `127.0.0.1:22222` với cấu hình tạm: `LiveSshOutboundTests` 6/6 với key Ed25519 có và không passphrase. Lần chạy đó tìm ra [thread pool starvation](Glossary-vi.md#L607): SSH.NET chạy vòng đọc chặn của mỗi tunnel trên luồng pool suốt đời tunnel, 40 tunnel cùng lúc (min 32) là timeout. Sửa bằng `BlockedThreadReservation` (min worker +1 cho mỗi tunnel đang sống).
+
+Chưa làm / chưa kiểm: đăng nhập bằng mật khẩu, máy chủ Linux ở xa (fix bỏ ngoặc IPv6 là cho glibc — getaddrinfo của Windows nhận `[::1]` nên test không phân biệt được), chạy qua WinDivert với trình duyệt thật (cần quyền Admin), keyboard-interactive/ssh-agent, SSH-tun làm `VpnProtocol.Ssh` khi cần UDP.
+
 ## 5. Rủi ro và điểm cần quyết định
 
 - **Direct qua relay hay pass-through**: giai đoạn 1 mọi kết nối qua relay (đơn giản, đếm được byte). Nếu cần hiệu năng cao cho game/stream thì thêm luật pass-through theo IP ở tầng gói sau.

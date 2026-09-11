@@ -80,18 +80,19 @@
     <sys:String x:Key="Str.Outbound.Url">URL</sys:String>
     <sys:String x:Key="Str.Outbound.Username">Username</sys:String>
     <sys:String x:Key="Str.Outbound.Password">Password</sys:String>
+    <sys:String x:Key="Str.Outbound.PrivateKey">Key file</sys:String>
     <sys:String x:Key="Str.Outbound.PreSharedKey">Pre-shared key</sys:String>
     <sys:String x:Key="Str.Outbound.VpnProtocol">VPN protocol</sys:String>
     <sys:String x:Key="Str.Outbound.Ipv6">IPv6</sys:String>
     <sys:String x:Key="Str.Outbound.TestOk">Connection succeeded.</sys:String>
     <sys:String x:Key="Str.Outbound.TestFailed">Connection failed:</sys:String>
-    <sys:String x:Key="Str.Outbound.Hint">Direct and Block always exist. For a VPN the URL box is either a configuration file (.ovpn, .conf, .vpn) or the server itself, as in sstp://vpn.example.com:443 — see the README. A .conf runs on wireproxy and carries no UDP; every other VPN runs in this process and does.</sys:String>
+    <sys:String x:Key="Str.Outbound.Hint">Direct and Block always exist. For a VPN the URL box is either a configuration file (.ovpn, .conf, .vpn) or the server itself, as in sstp://vpn.example.com:443 — see the README. A .conf runs on wireproxy and carries no UDP; every other VPN runs in this process and does. For SSH the URL box is the server, as in ssh://user@host:22; with a key file the password box is its passphrase. SSH carries no UDP.</sys:String>
 
-    <sys:String x:Key="Str.Vpn.Header">VPN tunnel</sys:String>
+    <sys:String x:Key="Str.Vpn.Header">Tunnel</sys:String>
     <sys:String x:Key="Str.Vpn.Connection">Connection</sys:String>
     <sys:String x:Key="Str.Vpn.Connect">Connect</sys:String>
     <sys:String x:Key="Str.Vpn.Disconnect">Disconnect</sys:String>
-    <sys:String x:Key="Str.Vpn.ConnectHint">Connects and disconnects this VPN on its own, whether or not WinDivert is on. Switching WinDivert on connects the VPNs a filter routes through, and switching it off leaves every tunnel up; a tunnel a live filter routes through cannot be disconnected here.</sys:String>
+    <sys:String x:Key="Str.Vpn.ConnectHint">Connects and disconnects this VPN or SSH session on its own, whether or not WinDivert is on. Switching WinDivert on connects the tunnels a filter routes through, and switching it off leaves every tunnel up; a tunnel a live filter routes through cannot be disconnected here.</sys:String>
     <sys:String x:Key="Str.Vpn.Connecting">connecting</sys:String>
     <sys:String x:Key="Str.Vpn.Connected">connected</sys:String>
     <sys:String x:Key="Str.Vpn.Reconnecting">reconnecting</sys:String>
@@ -231,6 +232,7 @@ Downside: an extra service and a COM hop add latency, and the events of one watc
     <sys:String x:Key="Enum.OutboundKind.Socks4">SOCKS4</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Socks5">SOCKS5</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Vpn">VPN</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.Ssh">SSH</sys:String>
 
     <sys:String x:Key="Enum.Ipv6Support.Auto">Auto</sys:String>
     <sys:String x:Key="Enum.Ipv6Support.Enabled">Enabled</sys:String>

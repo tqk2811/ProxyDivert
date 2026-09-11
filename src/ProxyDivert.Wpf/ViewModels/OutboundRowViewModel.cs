@@ -30,15 +30,23 @@ namespace ProxyDivert.Wpf.ViewModels;
 public sealed partial class OutboundRowViewModel : ObservableObject
 {
     private readonly SoftEtherWatermarkStore? _watermarks;
+    private readonly Func<Outbound, bool>? _canHoldTunnel;
 
     /// <param name="watermarks">
     /// Where the SoftEther watermark blob is, so a row that needs one can say so and offer to fetch
     /// it. Null leaves that offer off the row entirely, which is what a test binding a grid wants.
     /// </param>
-    public OutboundRowViewModel(Outbound model, SoftEtherWatermarkStore? watermarks = null)
+    /// <param name="canHoldTunnel">
+    /// Whether an outbound is something the keeper can hold open — the keeper's own answer, handed
+    /// in so the row does not keep a second list of kinds that drifts from the builders'. Null
+    /// leaves the Connect button off every row.
+    /// </param>
+    public OutboundRowViewModel(
+        Outbound model, SoftEtherWatermarkStore? watermarks = null, Func<Outbound, bool>? canHoldTunnel = null)
     {
         Model = model ?? throw new ArgumentNullException(nameof(model));
         _watermarks = watermarks;
+        _canHoldTunnel = canHoldTunnel;
     }
 
     /// <summary>The outbound itself, for the commands that work on the configuration.</summary>
@@ -55,6 +63,12 @@ public sealed partial class OutboundRowViewModel : ObservableObject
     public bool IsEditable => !Model.IsBuiltIn;
 
     public bool IsVpn => Model.Kind == OutboundKind.Vpn;
+
+    /// <summary>
+    /// Whether this row has a session to connect and disconnect — a VPN tunnel or an SSH session.
+    /// Decides whether the Connect button is on the row at all.
+    /// </summary>
+    public bool CanHoldTunnel => !IsBuiltIn && _canHoldTunnel?.Invoke(Model) == true;
 
     // ==== the cells ====
 
@@ -83,7 +97,9 @@ public sealed partial class OutboundRowViewModel : ObservableObject
         {
             if (!Write(Model.Kind, value, v => Model.Kind = v)) return;
             OnPropertyChanged(nameof(IsVpn));
+            OnPropertyChanged(nameof(CanHoldTunnel));
             AddressChanged();
+            PrivateKeyChanged();
         }
     }
 
@@ -106,6 +122,15 @@ public sealed partial class OutboundRowViewModel : ObservableObject
     {
         get => Model.Password;
         set => Write(Model.Password, value, v => Model.Password = v);
+    }
+
+    public string? PrivateKeyPath
+    {
+        get => Model.PrivateKeyPath;
+        set
+        {
+            if (Write(Model.PrivateKeyPath, value, v => Model.PrivateKeyPath = v)) PrivateKeyChanged();
+        }
     }
 
     public string? PreSharedKey
@@ -161,6 +186,24 @@ public sealed partial class OutboundRowViewModel : ObservableObject
     public bool HasAddressProblem => AddressProblem != null;
 
     /// <summary>
+    /// Why this SSH row's key file cannot be used, or null when it can or the row has none. Asked
+    /// here for the same reason as <see cref="AddressProblem"/>: it reads the disk, and a key path
+    /// with a typo is better said on the cell than by a session that fails to log in.
+    /// </summary>
+    public string? PrivateKeyProblem
+    {
+        get
+        {
+            if (Model.Kind != OutboundKind.Ssh || string.IsNullOrWhiteSpace(Model.PrivateKeyPath)) return null;
+
+            string path = OutboundAddress.Expand(Model.PrivateKeyPath);
+            return File.Exists(path) ? null : $"points at a key file that is not there: {path}";
+        }
+    }
+
+    public bool HasPrivateKeyProblem => PrivateKeyProblem != null;
+
+    /// <summary>
     /// Whether this row is a SoftEther outbound with no watermark blob on the machine — the one
     /// thing a VPN row can be missing that is neither typed in a box nor fixable by typing.
     /// </summary>
@@ -210,6 +253,12 @@ public sealed partial class OutboundRowViewModel : ObservableObject
         OnPropertyChanged(nameof(AddressProblem));
         OnPropertyChanged(nameof(HasAddressProblem));
         OnPropertyChanged(nameof(NeedsWatermark));
+    }
+
+    private void PrivateKeyChanged()
+    {
+        OnPropertyChanged(nameof(PrivateKeyProblem));
+        OnPropertyChanged(nameof(HasPrivateKeyProblem));
     }
 
     /// <summary>

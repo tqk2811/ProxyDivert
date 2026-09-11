@@ -115,6 +115,9 @@ else
         Kind = KindFromUrl(url),
         Url = url,
         Ipv6Support = options.OutboundIpv6,
+        // Only an ssh:// outbound reads these, and CliOptions refuses them next to anything else.
+        Password = options.SshPass,
+        PrivateKeyPath = options.SshKey,
     };
     Console.WriteLine($"Upstream proxy: {url}");
 }
@@ -295,7 +298,7 @@ static OutboundKind KindFromUrl(string url)
     => OutboundAddress.TryReadProxyKind(url, out OutboundKind kind)
         ? kind
         : throw new FormatException(
-            $"Unsupported proxy scheme in '{url}'. Use http://, socks4:// or socks5://.");
+            $"Unsupported proxy scheme in '{url}'. Use http://, socks4://, socks5:// or ssh://.");
 
 static bool IsElevated()
 {
