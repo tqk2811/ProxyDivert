@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using ProxyDivert.Core.Outbounds.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Vpn.Enums;
 using TqkLibrary.WinDivert.Redirect.Enums;
@@ -16,8 +17,14 @@ public sealed class CliOptions
     // itself — which is what makes it a usable end-to-end test of the proxy path.
     public int SelfHostPort { get; private set; }
 
-    // Route through an existing proxy instead ("socks5://127.0.0.1:1080").
+    // Route through an existing proxy instead ("socks5://127.0.0.1:1080"), or an SSH server
+    // ("ssh://user@host:22").
     public string? ProxyUrl { get; private set; }
+
+    // How to log in to an ssh:// server: a password, a private key file, or both — with a key the
+    // password is its passphrase, the same as on the Outbounds tab.
+    public string? SshPass { get; private set; }
+    public string? SshKey { get; private set; }
 
     // Route through a VPN tunnel. The argument is what the Outbounds tab would take: a
     // configuration file (.ovpn, .conf, .vpn) or the server itself ("sstp://vpn.example.com:443").
@@ -78,6 +85,8 @@ public sealed class CliOptions
             {
                 case "--selfhost": options.SelfHostPort = ParsePort(Next(arg)!); break;
                 case "--proxy": options.ProxyUrl = Next(arg); break;
+                case "--ssh-pass": options.SshPass = Next(arg); break;
+                case "--ssh-key": options.SshKey = Next(arg); break;
                 case "--vpn": options.VpnConfig = Next(arg); break;
                 case "--wireproxy": options.WireProxyPath = Next(arg); break;
                 case "--vpn-user": options.VpnUser = Next(arg); break;
@@ -108,6 +117,11 @@ public sealed class CliOptions
             throw new FormatException("Give --selfhost <port>, --proxy <url> or --vpn <config|url>.");
         if (ways > 1)
             throw new FormatException("--selfhost, --proxy and --vpn are mutually exclusive.");
+        // Said here rather than ignored: a key passed next to an http:// proxy is a command line
+        // that does not do what its author thinks, and silently dropping the key hides that.
+        if ((options.SshPass != null || options.SshKey != null)
+            && !(OutboundAddress.TryReadProxyKind(options.ProxyUrl, out OutboundKind kind) && kind == OutboundKind.Ssh))
+            throw new FormatException("--ssh-pass and --ssh-key go with --proxy ssh://user@host.");
         if (options.LaunchExe == null && options.Pids.Count == 0 && options.ProcessPattern == null)
             throw new FormatException("Give --launch <exe>, --pid <id> or --process <name> — otherwise nothing is redirected.");
 
@@ -128,7 +142,12 @@ public sealed class CliOptions
 
         Outbound (pick one):
           --selfhost <port>     host an HTTP proxy in this process and route through it
-          --proxy <url>         use an existing proxy (http://, socks4://, socks5://)
+          --proxy <url>         use an existing proxy (http://, socks4://, socks5://), or an
+                                SSH server (ssh://user@host[:port], TCP only)
+          --ssh-pass <pass>     SSH password, or the key's passphrase with --ssh-key
+          --ssh-key <file>      SSH private key (OpenSSH, PuTTY or PEM); a new server's host
+                                key is trusted on first use and kept in
+                                %LOCALAPPDATA%\ProxyDivert\known_hosts
           --vpn <config|url>    route through a VPN: a .ovpn/.conf/.vpn file, or a server such
                                 as sstp://host:443, l2tp://host, ikev2://host,
                                 softether://host:443/HUB
