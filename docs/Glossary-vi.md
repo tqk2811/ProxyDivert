@@ -603,3 +603,7 @@ Tuỳ chọn của OpenSSH cho nhiều lệnh `ssh` dùng chung **một** phiên
 ## TCP-over-TCP
 
 Chở một kết nối TCP bên trong một kết nối TCP khác (VPN chạy trên SSH/TLS). Cả hai tầng cùng tự truyền lại khi mất gói: tầng ngoài đã bảo đảm không mất gì, nhưng trễ do tầng ngoài truyền lại làm bộ đếm giờ của tầng trong hết hạn và nó cũng truyền lại, cửa sổ tắc nghẽn của tầng trong co lại — mạng càng xấu thì thông lượng càng tụt mạnh ("TCP meltdown"). Trên đường truyền tốt thì gần như không thấy.
+
+## Thread pool starvation (cạn luồng của thread pool)
+
+.NET chạy mọi `await`, callback socket, timer… trên một **thread pool** dùng chung. Pool giữ sẵn tối thiểu `MinThreads` luồng (mặc định = số lõi CPU); khi mọi luồng đều bận, nó chỉ thêm luồng mới **khoảng nửa giây một cái**. Nếu có code **chặn** một luồng pool thật lâu (vòng `socket.Receive` đồng bộ, `.Result`, `Thread.Sleep`), vài chục chỗ như vậy là đủ chiếm hết pool: mọi việc khác trong tiến trình — kể cả việc không liên quan — đứng chờ, timeout, trông như treo. Gặp ở đường ra SSH: SSH.NET chạy vòng đọc chặn của mỗi tunnel trên luồng pool suốt đời tunnel, 40 tunnel cùng lúc với min 32 luồng thì "Timed out connecting to ssh local forwarder"; nâng `ThreadPool.SetMinThreads` thì xong trong 200 ms. Cách chữa gốc là đừng chặn luồng pool; khi phần chặn nằm trong thư viện bên ngoài thì nâng min theo đúng số luồng bị giữ (`BlockedThreadReservation`).

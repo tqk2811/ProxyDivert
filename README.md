@@ -155,7 +155,7 @@ Step 1 is unavailable in a few cases, and step 2's guess is what remains:
   suspended" if you want nothing to escape.
 - UDP goes through a proxy only with **SOCKS5**, and through a VPN only when that VPN runs inside
   this process (everything except a WireGuard `.conf` on wireproxy — see below). Every other
-  outbound blocks UDP rather than leaking it. QUIC (UDP/443) is blocked by default so browsers fall
+  outbound — SSH included — blocks UDP rather than leaking it. QUIC (UDP/443) is blocked by default so browsers fall
   back to TCP.
 - Games with a kernel anti-cheat may treat packet redirection as interference.
 - **SoftEther** needs the genuine watermark blob to reach a real server, which is GPL data this
@@ -266,6 +266,43 @@ actually changed are rebuilt, and editing the configuration file itself counts a
 One exception: a `.conf` you wrote yourself (one that already has `[Socks5]`) is handed to wireproxy
 untouched, so the `PersistentKeepalive` in it is your business.
 
+## The SSH outbound
+
+Pick the **Ssh** outbound kind. One SSH session to the server is held open and every redirected
+connection becomes a [direct-tcpip](docs/Glossary-vi.md#L587) channel on it — what `ssh -D` gives
+you, without a local SOCKS listener in between. The destination's name is sent to the server and
+resolved there, so name lookups never touch this machine's DNS. The server needs nothing special: a
+stock `sshd` with `AllowTcpForwarding` (the default). It runs inside this process (SSH.NET), so there
+is no `ssh.exe` to install.
+
+| Box | What goes in it |
+|---|---|
+| URL | `ssh://user@host:22`, or just `user@host` — the port defaults to 22 |
+| Username | the login name; wins over a user written in the URL |
+| Password | the password — or, when a key file is set, the key's passphrase (it is still offered as a password as well) |
+| Key file | a private key: OpenSSH, PuTTY `.ppk` or PEM (RSA, ECDSA, Ed25519) |
+
+**Host keys are trusted on first use** ([TOFU](docs/Glossary-vi.md#L591)). The first time a server
+is reached, its host key is written to `%LOCALAPPDATA%\ProxyDivert\known_hosts` — OpenSSH's own
+format, so you can read and edit it — and from then on only that key is accepted. A server that
+shows a different key is refused, and the error names the file and the line: delete that line if the
+server really was reinstalled, and do not if you cannot say why it changed.
+
+The session is held like a VPN tunnel: **Connect** on the row, the green/amber dot, kept up while a
+filter routes through it and re-established when it drops.
+
+Limits:
+
+- **TCP only.** SSH has no channel for datagrams, so UDP routed to an SSH outbound is blocked
+  (QUIC included — browsers fall back to TCP).
+- Every tunnel shares one TCP connection to the server, so a lost packet briefly stalls all of them.
+- Each open tunnel holds a thread: SSH.NET forwards with a blocking loop per connection. The tool
+  reserves those threads as tunnels open so the rest of the application is never starved of them,
+  but a browser with a hundred connections open costs a hundred threads.
+- Tried against Windows' own OpenSSH 9.5 `sshd` on this machine, with an Ed25519 key with and without
+  a passphrase (see `LiveSshOutboundTests`). Password logins and a remote Linux server have not been
+  tried yet. Keyboard-interactive and ssh-agent are not supported.
+
 ## Command line (`ProxyDivert.Cli`)
 
 A console build for exercising the engine without the window: everything is passed as arguments, and
@@ -295,4 +332,10 @@ way to try a VPN outbound without touching the saved configuration:
 ```
 ProxyDivert.Cli --vpn sstp://219.100.37.1:443 --vpn-user vpn --vpn-pass vpn --pid 2372 --rule "*"
 ProxyDivert.Cli --vpn D:\vpn\wg0.conf --vpn-protocol WireGuard --pid 2372 --rule "*"
+```
+
+An SSH server goes in `--proxy`, with the login as flags:
+
+```
+ProxyDivert.Cli --proxy ssh://me@ssh.example.com --ssh-key C:\Users\me\.ssh\id_ed25519 --pid 2372 --rule "*"
 ```
