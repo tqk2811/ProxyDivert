@@ -188,7 +188,7 @@ Lưới ở tab Tiến trình vì thế còn: bật/tắt, tên, câu tóm tắt
 
 Cấu trúc đệ quy thay cho hai ô cố định của v2. Nút gốc trừu tượng `ProcessCondition` mang cờ `Negate`; `ConditionGroup` có `Operator` (`All`/`Any`) và danh sách con; các lá (`ProcessNameCondition`, `CommandLineCondition`) mang kiểu so khớp và giá trị. Lưu bằng `[JsonPolymorphic]` với khoá phân biệt `kind` — chuỗi `group`/`process`/`commandLine` là **định dạng file**, không đổi tên được.
 
-Toán tử nằm ở nhóm chứ không nằm giữa hai dòng: đó là lý do giao diện không phải một ô gõ biểu thức trá hình, vì không có toán tử nào để đặt giữa hai dòng thì cũng không có độ ưu tiên nào để nhầm. Thêm loại đối tượng mới (tiến trình cha, tài khoản, tiêu đề cửa sổ) = thêm một lớp lá và một dòng `[JsonDerivedType]`.
+Toán tử nằm ở nhóm chứ không nằm giữa hai dòng: đó là lý do giao diện không phải một ô gõ biểu thức trá hình, vì không có toán tử nào để đặt giữa hai dòng thì cũng không có độ ưu tiên nào để nhầm. Thêm loại đối tượng mới (tiến trình cha, tài khoản, tiêu đề cửa sổ) = thêm một lớp lá (tự trả lời qua `Compare`), một dòng `[JsonDerivedType]`, và một mục trong [`ConditionSubject`](#L563) để editor đưa được nó vào combo — không còn `switch` nào khác phải sửa.
 
 Migration v2→v3 ở `ConfigStore.Migrate`: hai ô cũ thành một nhóm `All` gồm lá tiến trình, cộng lá argument nếu ô argument có điền. Ô argument rỗng KHÔNG sinh ra dòng nào — nó vốn không được xét, và một bộ lọc chưa ai đụng tới thì không nên mở ra trông như đang sửa dở.
 
@@ -201,7 +201,7 @@ Migration v2→v3 ở `ConfigStore.Migrate`: hai ô cũ thành một nhóm `All`
 * Nhóm gộp theo kiểu Kleene: `All` gặp một `NoMatch` là chốt không; còn lại hễ có `Unknown` thì cả nhóm `Unknown`. `Any` gặp một `Match` là chốt có, kể cả khi bên cạnh có `Unknown`.
 * Ở gốc, chỉ `Match` mới là áp dụng bộ lọc. `Ignored` (chưa điền gì) và `Unknown` đều là không áp dụng — cùng hướng an toàn mà bản hai ô đã chọn.
 
-Độ sâu cây bị chặn ở `ProcessRuleMatcher.MaxDepth` (16) khi nạp: giao diện không dựng nổi cây sâu vậy, nhưng file config sửa tay thì có, và đệ quy phải dừng trước khi stack dừng. Quá sâu trả `Unknown`, không phải `Match`.
+Độ sâu cây bị chặn ở `ProcessCondition.MaxDepth` (16) khi đánh giá (bộ đếm nằm trong `ConditionContext`): giao diện không dựng nổi cây sâu vậy, nhưng file config sửa tay thì có, và đệ quy phải dừng trước khi stack dừng. Quá sâu trả `Unknown`, không phải `Match`.
 
 ## DNF (dạng chuẩn tuyển, disjunctive normal form)
 
@@ -559,3 +559,7 @@ Máy chủ SoftEther không phục vụ trực tiếp một mạng, mà chia th�
 IPsec gốc chở dữ liệu bằng **ESP — một giao thức IP riêng (proto 50)**, không có số cổng, nên router NAT ở nhà không biết đường trả gói về. NAT-T (RFC 3948) bọc ESP vào **UDP/4500** để NAT xử lý được như mọi luồng UDP khác. Hai đầu phát hiện có NAT hay không bằng NAT-D trong pha 1 (Main Mode), rồi mới quyết định "trôi" sang 4500.
 
 Driver L2TP/IPsec ở đây mặc định chạy `ForcedNatT`: khai NAT-D **giả** để máy chủ luôn kết luận là có NAT và luôn trôi sang UDP/4500, gửi từ một **cổng nguồn ngẫu nhiên**. Hệ quả thực tế: không cần quyền admin, không cần chiếm UDP/500 nên **không đụng dịch vụ IKEEXT/RasMan của Windows** (VPN L2TP có sẵn của Windows vẫn dùng bình thường). Chế độ còn lại `HonestFirst` mới bind cổng 500 thật và có thể chở ESP native proto-50 — cần raw socket và quyền cao hơn, hiện ProxyDivert không gọi tới.
+
+## Descriptor (đối tượng mô tả một loại)
+
+Một object đứng thay cho một **loại** (chứ không phải một thể hiện), mang mọi thứ mà code bên ngoài cần biết về loại đó: tên để tra chữ hiển thị, danh sách lựa chọn đi kèm, giá trị mặc định, và cách dựng ra một thể hiện. Nó thay cho kiểu "một enum + một `switch` ở mỗi nơi cần đổi enum sang class": với enum, thêm một loại là đi sửa từng `switch`, và quên một chỗ thì vẫn build được rồi ném lỗi lúc chạy; với descriptor, các nơi đó chỉ **hỏi** descriptor nên không có gì để quên. Trong ProxyDivert: `ConditionSubject` — ô combo đầu tiên của mỗi dòng điều kiện (tiến trình / argument); nó quyết định danh sách so khớp của ô thứ hai, class mà dòng thành ra khi lưu, và `Clone` của lá. Khác với [capability interface](#L452) (hỏi một thể hiện xem nó *làm được gì*) — descriptor trả lời *nó là loại gì* mà không cần có thể hiện nào.
