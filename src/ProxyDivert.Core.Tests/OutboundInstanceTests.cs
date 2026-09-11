@@ -106,10 +106,17 @@ public class OutboundInstanceTests
     [InlineData(OutboundKind.Socks5, "socks5://127.0.0.1:1080")]
     // An in-process tunnel: its own IP stack, so it really does carry datagrams.
     [InlineData(OutboundKind.Vpn, "sstp://vpn.example.com")]
+    // A session whose only forwarding channel is a stream: neither side may claim datagrams.
+    [InlineData(OutboundKind.Ssh, "ssh://me@ssh.example.com")]
     public async Task WhetherAnOutboundCarriesUdp_ReadsTheSameOffTheModelAndOffTheBuiltInstance(
         OutboundKind kind, string? url)
     {
-        var outbound = new Outbound { Id = Guid.NewGuid(), Name = "way out", Kind = kind, Url = url };
+        var outbound = new Outbound
+        {
+            Id = Guid.NewGuid(), Name = "way out", Kind = kind, Url = url,
+            // Only SSH insists on something to log in with before it will build.
+            Password = kind == OutboundKind.Ssh ? "secret" : null,
+        };
 
         OutboundSourceFactory factory = OutboundSourceFactory.CreateDefault();
         IOutboundInstance instance = factory.Create(outbound, loggerFactory: null, wireProxyPath: null);
