@@ -563,3 +563,15 @@ Driver L2TP/IPsec ở đây mặc định chạy `ForcedNatT`: khai NAT-D **gi�
 ## Descriptor (đối tượng mô tả một loại)
 
 Một object đứng thay cho một **loại** (chứ không phải một thể hiện), mang mọi thứ mà code bên ngoài cần biết về loại đó: tên để tra chữ hiển thị, danh sách lựa chọn đi kèm, giá trị mặc định, và cách dựng ra một thể hiện. Nó thay cho kiểu "một enum + một `switch` ở mỗi nơi cần đổi enum sang class": với enum, thêm một loại là đi sửa từng `switch`, và quên một chỗ thì vẫn build được rồi ném lỗi lúc chạy; với descriptor, các nơi đó chỉ **hỏi** descriptor nên không có gì để quên. Trong ProxyDivert: `ConditionSubject` — ô combo đầu tiên của mỗi dòng điều kiện (tiến trình / argument); nó quyết định danh sách so khớp của ô thứ hai, class mà dòng thành ra khi lưu, và `Clone` của lá. Khác với [capability interface](#L452) (hỏi một thể hiện xem nó *làm được gì*) — descriptor trả lời *nó là loại gì* mà không cần có thể hiện nào.
+
+## Marker interface (interface đánh dấu)
+
+Interface **rỗng**, không có member nào, chỉ để gắn nhãn cho một lớp ("lớp này là HTTP", "lớp này là SSH") rồi bên gọi kiểm bằng `is`. Nó chỉ có giá trị khi thật sự có ai đó kiểm nhãn; không ai kiểm thì nó là nhãn chết — khai báo cũng được, quên khai cũng chẳng sao, nên dần dần sai lệch mà không lỗi nào báo. Trong TqkLibrary.Proxy: `IHttpProxy`, `ISocks4Proxy`, `ISocks5Proxy`, `ISsh`, `IVpn` — tính tới 11/09/2026 không chỗ nào trong thư viện lẫn ProxyDivert kiểm chúng. Khác với [capability interface](#L452): capability interface có member và bên gọi thật sự dùng nó để quyết định.
+
+## ISP (Interface Segregation Principle)
+
+Nguyên tắc chữ "I" trong SOLID: không bắt một bên phụ thuộc vào những hàm nó không dùng — interface to thì tách thành vài interface nhỏ theo vai trò. Cái lợi chỉ đến khi **bên tiêu thụ đổi sang nhận interface nhỏ** (vd một lớp chỉ cần kiểm user thì nhận `IProxyAuthenticator` thay vì cả `IProxyServerHandler`). Nếu chỉ tách rồi cho interface to kế thừa lại tất cả mà không bên nào đổi chữ ký, thì hành vi y nguyên và chỉ có thêm file.
+
+## Commit tương đương patch (`git cherry`)
+
+Hai commit khác hash nhưng mang **cùng một thay đổi** — thường vì commit đó đã được cherry-pick hoặc rebase sang nhánh khác. `git cherry -v <nhánh-đích> <nhánh-nguồn>` so từng commit của nhánh nguồn theo nội dung patch: dấu `-` là nhánh đích đã có thay đổi tương đương, dấu `+` là chưa có. Dùng để biết một nhánh cũ còn gì *thật sự* chưa vào, thay vì nhìn `git log a..b` rồi tưởng mọi commit đều mới.
