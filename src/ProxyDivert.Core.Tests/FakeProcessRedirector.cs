@@ -60,7 +60,13 @@ internal sealed class FakeProcessRedirector : IProcessRedirector
     /// </summary>
     public Action<uint>? BeforePidCall { get; set; }
 
-    public void Start() { }
+    /// <summary>Thrown by <see cref="Start"/> — the driver refusing, as it does without elevation.</summary>
+    public Exception? StartFailure { get; set; }
+
+    public void Start()
+    {
+        if (StartFailure is not null) throw StartFailure;
+    }
 
     public void AddTrackedProcessId(uint pid)
     {

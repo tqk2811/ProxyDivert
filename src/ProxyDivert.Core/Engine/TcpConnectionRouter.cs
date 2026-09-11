@@ -228,7 +228,7 @@ internal sealed class TcpConnectionRouter
     /// A way out that someone else keeps up — a VPN with KeepConnected on, supervised by
     /// <c>VpnConnectionKeeper</c> — may be down for the first seconds of a run, because the tunnel
     /// is dialled only after the driver's handles are open (see the remarks on
-    /// AppServices.StartEngineAsync). A connection that arrives in that window is HELD, and this is
+    /// ProxyDivertSession.StartAsync). A connection that arrives in that window is HELD, and this is
     /// the deliberate choice among three:
     /// <list type="bullet">
     /// <item>send it out direct — never: the user asked for this traffic to be tunnelled, and the

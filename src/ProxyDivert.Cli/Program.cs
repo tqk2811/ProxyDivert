@@ -8,14 +8,12 @@ using System.Threading.Tasks;
 using ProxyDivert.Cli;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Engine;
-using ProxyDivert.Core.Engine.Extensions;
 using ProxyDivert.Core.Engine.Models;
+using ProxyDivert.Core.Hosting;
 using ProxyDivert.Core.Outbounds.Models;
-using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Processes.Enums;
 using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing.Enums;
-using ProxyDivert.Core.Vpn;
 using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Routing.Models.Conditions;
@@ -191,13 +189,11 @@ await using ServiceProvider services = new ServiceCollection()
     .AddProxyDivert(config.DiagnosticLogPath, options.Verbose ? LogLevel.Debug : LogLevel.Information)
     .BuildServiceProvider();
 
-// The process table has to be collecting before the engine reads it — the engine matches filters
-// against the table rather than going to the operating system itself.
-await using ProcessInventory processes = services.GetRequiredService<ProcessInventory>();
-config.ProcessDetection.Strategy().ConfigureInventory(processes, config.ProcessEventSource);
-processes.Start();
-
-RedirectEngine engine = services.GetRequiredService<RedirectEngine>();
+// The same session the window drives, so a start here goes in the same order: tunnels switched on,
+// process table collecting, driver open, tunnels dialled. No store is registered, so it writes no
+// file — this configuration came from the arguments and ends with them.
+ProxyDivertSession session = services.GetRequiredService<ProxyDivertSession>();
+RedirectEngine engine = session.Engine;
 
 engine.ProcessAttached += p => Console.WriteLine($"  [proc +] {Describe(p)}");
 engine.ProcessDetached += p => Console.WriteLine($"  [proc -] {Describe(p)}");
@@ -209,16 +205,13 @@ engine.Connections.Closed += c =>
     Console.WriteLine($"  [close] pid={c.ProcessId,-6} {c.Host ?? c.Destination.Address.ToString(),-40} " +
                       $"   up={c.BytesUp} down={c.BytesDown}{(c.Error is null ? "" : "  ERROR: " + c.Error)}");
 
-// Which tunnels this run routes through is decided here, before the engine is handed the
-// configuration — the router reads "is this outbound kept up" off the outbound itself. The window
-// keeps its tunnels across runs; a command-line run switches on whatever its own configuration
-// routes through a VPN and lets the container drop them when it exits.
-VpnConnectionKeeper vpn = services.GetRequiredService<VpnConnectionKeeper>();
-vpn.SwitchOnRoutedVpns(config);
-
+// A command-line run switches on whatever its own configuration routes through a VPN and lets the
+// container drop the tunnels when it exits; the window keeps its tunnels across runs. Returns with
+// the tunnels still coming up — connections a rule routes through one of them are held until it is,
+// not sent out direct. See ProxyDivertSession.StartAsync.
 try
 {
-    await engine.StartAsync(config);
+    await session.StartAsync(config);
 }
 catch (Exception ex)
 {
@@ -226,12 +219,6 @@ catch (Exception ex)
     Console.Error.WriteLine("Check that WinDivert.dll and WinDivert64.sys sit next to this exe.");
     return 1;
 }
-
-// Dialled only now that the driver is open, and in the background. A handshake that overlaps the
-// moment WinDivert takes its machine-wide handle stalls until the driver's 90-second dial timeout —
-// see the remarks on AppServices.StartEngineAsync. Connections a rule routes through a tunnel that
-// is still coming up are refused, not sent out direct.
-await vpn.SyncAsync(config.Outbounds, config.WireProxyPath);
 
 // Verbose means "show me what the engine is doing" — the same lines the trace file gets.
 if (options.Verbose)
@@ -245,7 +232,7 @@ try
 {
     foreach (uint pid in options.Pids)
     {
-        ProcessSnapshot? info = processes.Get(pid);
+        ProcessSnapshot? info = session.Processes.Get(pid);
         if (info is null)
         {
             Console.Error.WriteLine($"No process with id {pid}.");
@@ -286,7 +273,7 @@ finally
     Console.WriteLine();
     Console.WriteLine("Stopping…");
     launched?.Dispose();
-    await engine.StopAsync();
+    await session.StopAsync();
     selfHosted?.Dispose();
 }
 

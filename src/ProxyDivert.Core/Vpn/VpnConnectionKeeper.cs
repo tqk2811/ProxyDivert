@@ -174,7 +174,7 @@ public sealed class VpnConnectionKeeper : IDisposable, IAsyncDisposable
     /// snapshot the engine runs on is taken, or the router would be handed outbounds that still
     /// read "not kept" and would fall back to dialling one itself; the dialling itself has to
     /// happen AFTER the driver's handles are open — see <see cref="SyncAsync"/> and the remarks on
-    /// AppServices.StartEngineAsync.
+    /// ProxyDivertSession.StartAsync.
     /// </para>
     /// </remarks>
     public IReadOnlyCollection<Guid> SwitchOnRoutedVpns(AppConfig config)

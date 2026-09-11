@@ -4,7 +4,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using ProxyDivert.Core.Configuration.Enums;
-using ProxyDivert.Core.Engine.Extensions;
 using ProxyDivert.Core.Processes.Enums;
 using TqkLibrary.WinDivert.Redirect.Enums;
 using ProxyDivert.Wpf.Localization;
@@ -144,9 +143,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     // What the table follows is the mode's to decide — sniffing follows no events at all, whatever
-    // source is picked here.
-    private void ApplyEventSource()
-        => _detection.Strategy().ConfigureInventory(_services.Processes, _eventSource);
+    // source is picked here. Through the session's queue, like the same swap on the way into a start.
+    private void ApplyEventSource() => _services.Session.UseDetectionAsync(_services.Config);
 
     [ObservableProperty]
     private DnsMode _dnsMode;

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.Engine;
+using ProxyDivert.Core.Hosting;
 using ProxyDivert.Core.Logging;
 using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Outbounds.Builders;
@@ -87,8 +88,11 @@ public static class ProxyDivertServiceCollectionExtensions
         services.TryAddSingleton<VpnConnectionKeeper>();
 
         // ConfigStore is deliberately absent: a host has to read its configuration BEFORE building
-        // this container, because the configuration is what says where the trace file goes.
+        // this container, because the configuration is what says where the trace file goes. A host
+        // with a file registers the store it already has, and the session writes through it; one
+        // without — the command line — registers nothing, and the session writes nowhere.
         services.TryAddSingleton<RedirectEngine>();
+        services.TryAddSingleton<ProxyDivertSession>();
         return services;
     }
 }

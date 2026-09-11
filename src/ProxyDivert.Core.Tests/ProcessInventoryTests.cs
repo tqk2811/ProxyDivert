@@ -190,7 +190,7 @@ public class ProcessInventoryTests
     public void A_process_that_starts_while_the_machine_is_being_listed_is_not_retired_as_exited()
     {
         var machine = new FakeProcessMachine().Start(100, "chrome.exe");
-        var source = new FakeEventSource();
+        var source = new FakeProcessEventSource();
         using var inventory = new ProcessInventory(
             NullLogger<ProcessInventory>.Instance, machine, machine, source);
         var events = new Recorder(inventory);
@@ -227,22 +227,5 @@ public class ProcessInventoryTests
         // table before the listing started and is absent from it has genuinely gone.
         Assert.Null(inventory.Get(200));
         Assert.Equal(new uint[] { 200 }, events.Stopped.Select(p => p.ProcessId).ToArray());
-    }
-
-    // Stands in for ETW or WMI: the test decides when a process event arrives, and the same object
-    // is handed back as the factory so the inventory subscribes to it.
-    private sealed class FakeEventSource : IProcessEventSource, IProcessEventSourceFactory
-    {
-        public string Name => "fake";
-
-        public event Action<ProcessStartedEvent>? Started;
-        public event Action<uint>? Stopped;
-
-        public IProcessEventSource Create(ProcessEventSourceKind kind) => this;
-        public bool TryStart() => true;
-        public void Dispose() { }
-
-        public void RaiseStarted(ProcessStartedEvent started) => Started?.Invoke(started);
-        public void RaiseStopped(uint processId) => Stopped?.Invoke(processId);
     }
 }
