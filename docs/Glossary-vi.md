@@ -575,3 +575,11 @@ Nguyên tắc chữ "I" trong SOLID: không bắt một bên phụ thuộc vào 
 ## Commit tương đương patch (`git cherry`)
 
 Hai commit khác hash nhưng mang **cùng một thay đổi** — thường vì commit đó đã được cherry-pick hoặc rebase sang nhánh khác. `git cherry -v <nhánh-đích> <nhánh-nguồn>` so từng commit của nhánh nguồn theo nội dung patch: dấu `-` là nhánh đích đã có thay đổi tương đương, dấu `+` là chưa có. Dùng để biết một nhánh cũ còn gì *thật sự* chưa vào, thay vì nhìn `git log a..b` rồi tưởng mọi commit đều mới.
+
+## Slowloris (giữ kết nối bằng cách gửi nhỏ giọt)
+
+Kiểu tấn công (hoặc client hỏng) mở kết nối rồi gửi request **không bao giờ hoàn chỉnh** — vài byte, không có CRLF kết thúc dòng — và im lặng. Server nào đợi "đọc hết dòng đầu" mà không có timeout riêng cho giai đoạn đó sẽ giữ một slot (socket, task, buffer) cho mỗi kết nối như vậy cho tới khi cạn. `ReceiveTimeout` của socket không áp cho `ReadAsync`, nên phải tự đặt hạn cho giai đoạn nhận diện giao thức. Xem D6 trong [FixList-vi.md](FixList-vi.md).
+
+## Back-pressure (áp lực ngược) và cửa sổ nhận TCP
+
+Cơ chế để bên nhận chậm **kìm** bên gửi nhanh. Trong TCP đó là **cửa sổ nhận** (receive window): bên nhận quảng cáo còn bao nhiêu byte chỗ trống, bên gửi không được vượt quá. Một stack tự viết mà luôn quảng cáo hằng số (ví dụ 65535) dù hàng đợi nhận không ai đọc thì server cứ đẩy, bộ nhớ phình theo tốc độ server thay vì tốc độ tiến trình đọc — không có back-pressure. Cách đúng: cửa sổ = chỗ trống thật, gửi window update khi hàng đợi vơi.
