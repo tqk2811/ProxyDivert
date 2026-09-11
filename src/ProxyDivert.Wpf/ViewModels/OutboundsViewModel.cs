@@ -30,7 +30,7 @@ public sealed partial class OutboundsViewModel : ObservableObject
 
     public Array Kinds { get; } = new[]
     {
-        OutboundKind.HttpProxy, OutboundKind.Socks4, OutboundKind.Socks5, OutboundKind.Vpn,
+        OutboundKind.HttpProxy, OutboundKind.Socks4, OutboundKind.Socks5, OutboundKind.Vpn, OutboundKind.Ssh,
     };
 
     public Array Ipv6Supports { get; } = Enum.GetValues(typeof(Ipv6Support));
@@ -65,7 +65,7 @@ public sealed partial class OutboundsViewModel : ObservableObject
 
         Outbounds.Clear();
         foreach (Outbound outbound in _services.Config.Outbounds)
-            Outbounds.Add(new OutboundRowViewModel(outbound, _services.Watermarks));
+            Outbounds.Add(new OutboundRowViewModel(outbound, _services.Watermarks, _services.Vpn.CanKeep));
 
         Selected = previous is null ? null : Outbounds.FirstOrDefault(r => r.Id == previous);
 
@@ -144,7 +144,7 @@ public sealed partial class OutboundsViewModel : ObservableObject
         };
         _services.Config.Outbounds.Add(outbound);
 
-        var row = new OutboundRowViewModel(outbound, _services.Watermarks);
+        var row = new OutboundRowViewModel(outbound, _services.Watermarks, _services.Vpn.CanKeep);
         Outbounds.Add(row);
         Selected = row;
         _services.SaveAndApply();
