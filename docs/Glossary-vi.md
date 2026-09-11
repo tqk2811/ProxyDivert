@@ -583,3 +583,23 @@ Kiểu tấn công (hoặc client hỏng) mở kết nối rồi gửi request *
 ## Back-pressure (áp lực ngược) và cửa sổ nhận TCP
 
 Cơ chế để bên nhận chậm **kìm** bên gửi nhanh. Trong TCP đó là **cửa sổ nhận** (receive window): bên nhận quảng cáo còn bao nhiêu byte chỗ trống, bên gửi không được vượt quá. Một stack tự viết mà luôn quảng cáo hằng số (ví dụ 65535) dù hàng đợi nhận không ai đọc thì server cứ đẩy, bộ nhớ phình theo tốc độ server thay vì tốc độ tiến trình đọc — không có back-pressure. Cách đúng: cửa sổ = chỗ trống thật, gửi window update khi hàng đợi vơi.
+
+## SSH direct-tcpip (chuyển tiếp cổng qua SSH)
+
+Loại channel SSH (RFC 4254 §7.2) mà client xin server "mở giùm một kết nối TCP tới `host:port`" rồi chở byte hai chiều trong channel đó — chính là cái `ssh -L` và `ssh -W` dùng. Tên đích được gửi dạng **chuỗi** nên server tự phân giải DNS (không rò DNS về máy client); nhiều channel chạy song song trên **một** phiên đã xác thực, nên kết nối thứ hai trở đi không phải bắt tay lại. Chỉ chở TCP: SSH không có channel nào cho UDP. Server phải để `AllowTcpForwarding yes` (mặc định của OpenSSH). Trong SSH.NET 2025.1.0 lớp channel này (`ChannelDirectTcpip`) là **internal** — cách công khai duy nhất là `ForwardedPortLocal`, tức mở một cổng nghe trên loopback rồi tự nối vào nó (chặng loopback thừa, và tiến trình khác trên máy nối được vào cổng đó).
+
+## Host key SSH, known_hosts và TOFU
+
+Mỗi server SSH có một cặp khoá riêng (host key); lúc bắt tay server ký bằng khoá đó để chứng minh "tôi đúng là máy anh định nối". Client phải **so khoá đó với khoá đã biết** — không so thì kẻ đứng giữa (MITM) tự nhận là server, nhận luôn mật khẩu. OpenSSH lưu khoá đã biết trong `~/.ssh/known_hosts`. **TOFU** (trust on first use): lần nối đầu tiên chấp nhận và **ghi lại** fingerprint, các lần sau khoá khác đi thì từ chối — `StrictHostKeyChecking=accept-new` của OpenSSH. "Chấp nhận mọi khoá" mà không ghi lại gì thì không phải TOFU, chỉ là không kiểm.
+
+## SSH tun (`tun@openssh.com`, `PermitTunnel`)
+
+Phần mở rộng của OpenSSH (`ssh -w`) chở **gói IP nguyên con** trong một channel, biến phiên SSH thành một VPN tầng 3 — nên chở được cả UDP, khác với [direct-tcpip](#L587). Cái giá: server phải bật `PermitTunnel`, user đăng nhập phải mở được thiết bị tun (thực tế là **root**), admin phải gán IP cho `tunN` và bật IP forwarding + NAT thì gói mới ra được internet; sshd trên Windows không hỗ trợ. Phía client, gói IP đi vào một [userspace TCP/IP stack](#L73) nên kết nối TCP của ứng dụng chạy [TCP-over-TCP](#L603).
+
+## ControlMaster (ghép kênh phiên OpenSSH)
+
+Tuỳ chọn của OpenSSH cho nhiều lệnh `ssh` dùng chung **một** phiên đã xác thực qua một socket điều khiển (`ControlPath`), để lệnh sau khỏi bắt tay lại. **Win32-OpenSSH (ssh.exe có sẵn trên Windows) không hỗ trợ** — nên trên Windows mỗi lần gọi `ssh -W` là một tiến trình mới, một lần bắt tay + xác thực đầy đủ.
+
+## TCP-over-TCP
+
+Chở một kết nối TCP bên trong một kết nối TCP khác (VPN chạy trên SSH/TLS). Cả hai tầng cùng tự truyền lại khi mất gói: tầng ngoài đã bảo đảm không mất gì, nhưng trễ do tầng ngoài truyền lại làm bộ đếm giờ của tầng trong hết hạn và nó cũng truyền lại, cửa sổ tắc nghẽn của tầng trong co lại — mạng càng xấu thì thông lượng càng tụt mạnh ("TCP meltdown"). Trên đường truyền tốt thì gần như không thấy.
