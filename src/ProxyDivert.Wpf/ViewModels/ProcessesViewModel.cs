@@ -16,8 +16,6 @@ using ProxyDivert.Wpf.Bindings.Enums;
 using ProxyDivert.Wpf.Bindings.Interfaces;
 using ProxyDivert.Wpf.Services;
 using ProxyDivert.Wpf.Views;
-using TqkLibrary.WinDivert.ProcessControl;
-using TqkLibrary.WinDivert.ProcessControl.Interfaces;
 
 namespace ProxyDivert.Wpf.ViewModels;
 
@@ -309,8 +307,9 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
 
     /// <summary>
     /// Adds a filter and starts saving it. The returned task completes once the engine has taken
-    /// the new configuration — which matters to anyone whose next step depends on the rule being
-    /// in force, since <see cref="AppServices.SaveAndApply"/> only queues the work.
+    /// the new configuration, and faults when it could not — which matters to anyone whose next step
+    /// depends on the rule being in force, since <see cref="AppServices.SaveAndApply"/> only queues
+    /// the work.
     /// </summary>
     private Task Add(ProcessRule rule)
     {
@@ -322,8 +321,9 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
         return _services.SaveAndApply();
     }
 
-    // Starts a program suspended, lets the engine attach, then resumes it. This is the only way to
-    // guarantee that not a single connection escapes before the redirect is in place.
+    // Starts a program frozen, gets it under redirection, then lets it run — the only way to be sure
+    // not a single connection escapes before the redirect is in place. The order belongs to the
+    // launch service; what this adds is the filter the program is caught by.
     [RelayCommand]
     private async Task LaunchSuspendedAsync()
     {
@@ -334,60 +334,45 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
         };
         if (dialog.ShowDialog() != true) return;
 
-        ISuspendedProcess? suspended = null;
+        string path = dialog.FileName;
         try
         {
-            suspended = new SuspendedProcessLauncher().Launch(dialog.FileName, args: null);
-
-            // A filter must exist for the engine to adopt it, so create one for this exact program
-            // unless something the user already wrote would have claimed it anyway. Asked of the
-            // matcher rather than of the patterns, because a filter that claims this program by
-            // wildcard or by name is just as good and a second one would be noise.
-            RoutingPolicy? policy = Policies.FirstOrDefault();
-            string name = Path.GetFileNameWithoutExtension(dialog.FileName);
-            Task applied = Task.CompletedTask;
-
-            if (policy != null && !_services.Config.ProcessRules.Any(
-                    r => ProcessRuleMatcher.IsMatch(r, name, dialog.FileName)))
-            {
-                ProcessRule rule = NewRule(
-                    policy,
-                    name,
-                    new ConditionGroup
-                    {
-                        Children =
-                        {
-                            new ProcessNameCondition
-                            {
-                                Matcher = ProcessMatcherType.FullPath,
-                                Pattern = dialog.FileName,
-                            },
-                        },
-                    });
-
-                applied = Add(rule);
-            }
-
-            // Awaited, because SaveAndApply only queues the work. Scanning and resuming without
-            // this matched the process against the configuration as it was a moment ago, and the
-            // program then ran unredirected until the next scan — the very SYN leak this whole
-            // feature exists to close.
-            await applied.ConfigureAwait(true);
-
-            // The watcher sees the suspended process on its next scan; resuming only after that
-            // is what closes the SYN race.
-            await _services.Engine.ForceProcessScanAsync().ConfigureAwait(true);
-            suspended.Resume();
+            await _services.Launcher
+                .LaunchUnderFiltersAsync(path, args: null, () => EnsureFilterFor(path))
+                .ConfigureAwait(true);
             RefreshApplied();
         }
         catch (Exception ex)
         {
+            // Including the save failing: the program has then been ended rather than let run with
+            // its filter nowhere, and this is the only place that can say so.
             MessageBox.Show(ex.Message, "ProxyDivert", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
-        finally
+    }
+
+    // A filter must exist for the engine to adopt the program, so one is created for this exact
+    // program unless something the user already wrote would claim it anyway. Asked of the matcher
+    // rather than of the patterns, because a filter that claims this program by wildcard or by name
+    // is just as good and a second one would be noise.
+    //
+    // Hands back the save, which the launch waits on: SaveAndApply only queues the work, and a scan
+    // run before it lands matches the program against the configuration as it was a moment ago.
+    private Task EnsureFilterFor(string path)
+    {
+        RoutingPolicy? policy = Policies.FirstOrDefault();
+        string name = Path.GetFileNameWithoutExtension(path);
+
+        if (policy is null || _services.Config.ProcessRules.Any(r => ProcessRuleMatcher.IsMatch(r, name, path)))
+            return Task.CompletedTask;
+
+        var condition = new ConditionGroup
         {
-            suspended?.Dispose();
-        }
+            Children =
+            {
+                new ProcessNameCondition { Matcher = ProcessMatcherType.FullPath, Pattern = path },
+            },
+        };
+        return Add(NewRule(policy, name, condition));
     }
 
     // One process the engine is currently redirecting, plus whatever it dragged in with it.

@@ -52,6 +52,9 @@ public sealed class AppServices : IAsyncDisposable
     /// <inheritdoc cref="ProxyDivertSession.Vpn"/>
     public VpnConnectionKeeper Vpn => Session.Vpn;
 
+    /// <inheritdoc cref="SuspendedLaunchService"/>
+    public SuspendedLaunchService Launcher { get; }
+
     /// <summary>
     /// What the Test button on the Outbounds tab asks. It builds a way out of its own rather than
     /// borrowing the running one, so testing a VPN cannot disturb the tunnel that is up.
@@ -125,6 +128,7 @@ public sealed class AppServices : IAsyncDisposable
         // Resolved, nothing started: the session brings the process table, the driver and the
         // tunnels up only when redirection is switched on, so opening the window costs a file read.
         Session = _provider.GetRequiredService<ProxyDivertSession>();
+        Launcher = _provider.GetRequiredService<SuspendedLaunchService>();
         OutboundTester = _provider.GetRequiredService<OutboundTester>();
         Watermarks = _provider.GetRequiredService<SoftEtherWatermarkStore>();
 

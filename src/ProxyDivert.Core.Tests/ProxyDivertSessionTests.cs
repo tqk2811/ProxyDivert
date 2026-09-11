@@ -2,59 +2,23 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using ProxyDivert.Core.Configuration;
 using ProxyDivert.Core.Configuration.Models;
-using ProxyDivert.Core.DependencyInjection;
-using ProxyDivert.Core.Hosting;
-using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Processes.Enums;
-using ProxyDivert.Core.Routing.Enums;
-using ProxyDivert.Core.Routing.Models;
-using ProxyDivert.Core.Routing.Models.Conditions;
-using TqkLibrary.WinDivert.Redirect.Interfaces;
 using Xunit;
+using static ProxyDivert.Core.Tests.SessionHarness;
 
 namespace ProxyDivert.Core.Tests;
 
 // What both hosts now share: a start, an apply and a stop, in the order they go in and on the queue
-// they run on. The container is the real one, wired by AddProxyDivert exactly as the window and the
-// command line wire it, with the driver and the machine's process list swapped for fakes — so the
-// engine that starts here is the whole engine, tracker and pid queue included.
+// they run on. The container is the real one, with the driver and the machine's process list
+// swapped for fakes — see SessionHarness — so the engine that starts here is the whole engine.
 public class ProxyDivertSessionTests
 {
-    private sealed class Harness : IAsyncDisposable
-    {
-        // Something always runs: a listing that comes back empty is read as a failed listing.
-        public FakeProcessMachine Machine { get; } = new FakeProcessMachine().Start(4, "System");
-        public FakeProcessRedirectorFactory Redirectors { get; } = new FakeProcessRedirectorFactory();
-        public ServiceProvider Services { get; }
-        public ProxyDivertSession Session { get; }
-
-        public Harness(ConfigStore? store = null)
-        {
-            // Both registered first: the libraries only add their own when none is there.
-            IServiceCollection services = new ServiceCollection()
-                .AddSingleton<IProcessRedirectorFactory>(Redirectors)
-                .AddSingleton(_ => new ProcessInventory(
-                    NullLogger<ProcessInventory>.Instance, Machine, Machine, new FakeProcessEventSource()));
-            if (store is not null) services.AddSingleton(store);
-
-            Services = services.AddProxyDivert(logFilePath: null).BuildServiceProvider();
-            Session = Services.GetRequiredService<ProxyDivertSession>();
-        }
-
-        /// <summary>The driver the most recent run opened.</summary>
-        public FakeProcessRedirector Redirector => Redirectors.Created[^1];
-
-        public ValueTask DisposeAsync() => Services.DisposeAsync();
-    }
-
     [Fact]
     public async Task Switching_on_claims_what_was_already_running_all_the_way_into_the_driver()
     {
-        await using var harness = new Harness();
+        await using var harness = new SessionHarness();
         harness.Machine.Start(100, "chrome.exe");
 
         await harness.Session.StartAsync(Config());
@@ -70,7 +34,7 @@ public class ProxyDivertSessionTests
     [Fact]
     public async Task Switching_off_and_on_again_reuses_the_process_table()
     {
-        await using var harness = new Harness();
+        await using var harness = new SessionHarness();
         AppConfig config = Config();
 
         await harness.Session.StartAsync(config);
@@ -88,7 +52,7 @@ public class ProxyDivertSessionTests
     [Fact]
     public async Task A_start_the_driver_refused_can_be_tried_again()
     {
-        await using var harness = new Harness();
+        await using var harness = new SessionHarness();
         harness.Redirectors.FailNextStart = new InvalidOperationException("the driver refused");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Session.StartAsync(Config()));
@@ -106,7 +70,7 @@ public class ProxyDivertSessionTests
     [InlineData(ProcessDetectionMode.NetworkSniff)]
     public async Task The_detection_mode_reaches_the_table_and_the_redirector_alike(ProcessDetectionMode mode)
     {
-        await using var harness = new Harness();
+        await using var harness = new SessionHarness();
 
         await harness.Session.StartAsync(Config(mode, ProcessEventSourceKind.Wmi));
 
@@ -121,7 +85,7 @@ public class ProxyDivertSessionTests
     [Fact]
     public async Task A_detection_change_between_runs_reaches_the_table_that_is_still_running()
     {
-        await using var harness = new Harness();
+        await using var harness = new SessionHarness();
         AppConfig config = Config(ProcessDetectionMode.ProcessEvents);
         await harness.Session.StartAsync(config);
         await harness.Session.StopAsync();
@@ -140,7 +104,7 @@ public class ProxyDivertSessionTests
     [Fact]
     public async Task Work_runs_in_the_order_it_was_asked_for()
     {
-        await using var harness = new Harness();
+        await using var harness = new SessionHarness();
         AppConfig config = Config();
 
         Task start = harness.Session.StartAsync(config);
@@ -164,7 +128,7 @@ public class ProxyDivertSessionTests
         Directory.CreateDirectory(blocked);
         try
         {
-            await using var harness = new Harness(new ConfigStore(blocked));
+            await using var harness = new SessionHarness(new ConfigStore(blocked));
 
             await Assert.ThrowsAsync<IOException>(() => harness.Session.ApplyAsync(Config()));
 
@@ -181,7 +145,7 @@ public class ProxyDivertSessionTests
     [Fact]
     public async Task Disposing_the_session_switches_redirection_off_and_refuses_another_start()
     {
-        await using var harness = new Harness();
+        await using var harness = new SessionHarness();
         await harness.Session.StartAsync(Config());
 
         await harness.Session.DisposeAsync();
@@ -189,37 +153,5 @@ public class ProxyDivertSessionTests
         Assert.False(harness.Session.IsRunning);
         // A start queued behind the disposal would open a driver nobody is left to close.
         await Assert.ThrowsAsync<ObjectDisposedException>(() => harness.Session.StartAsync(Config()));
-    }
-
-    private static AppConfig Config(
-        ProcessDetectionMode detection = ProcessDetectionMode.ProcessEvents,
-        ProcessEventSourceKind source = ProcessEventSourceKind.Etw)
-    {
-        Outbound direct = Outbound.CreateDirect();
-        var policy = new RoutingPolicy { Id = Guid.NewGuid(), Name = "test", OutboundId = direct.Id };
-
-        return new AppConfig
-        {
-            Outbounds = { direct, Outbound.CreateBlock() },
-            Policies = { policy },
-            ProcessRules =
-            {
-                new ProcessRule
-                {
-                    Id = Guid.NewGuid(),
-                    Name = "chrome",
-                    Condition = new ConditionGroup
-                    {
-                        Children =
-                        {
-                            new ProcessNameCondition { Matcher = ProcessMatcherType.ExeName, Pattern = "chrome.exe" },
-                        },
-                    },
-                    PolicyIds = { policy.Id },
-                },
-            },
-            ProcessDetection = detection,
-            ProcessEventSource = source,
-        };
     }
 }

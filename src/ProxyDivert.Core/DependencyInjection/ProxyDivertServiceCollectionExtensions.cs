@@ -93,6 +93,7 @@ public static class ProxyDivertServiceCollectionExtensions
         // without — the command line — registers nothing, and the session writes nowhere.
         services.TryAddSingleton<RedirectEngine>();
         services.TryAddSingleton<ProxyDivertSession>();
+        services.TryAddSingleton<SuspendedLaunchService>();
         return services;
     }
 }

@@ -24,9 +24,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.DependencyInjection;
 using ProxyDivert.Core.Logging;
-using TqkLibrary.WinDivert.ProcessControl;
-using TqkLibrary.WinDivert.ProcessControl.Interfaces;
-using TqkLibrary.WinDivert.ProcessControl.Models;
 
 // Console harness for the redirect engine: no window, no config file, everything from arguments.
 // It exists so the engine can be exercised end to end — including against a process that is
@@ -226,8 +223,6 @@ if (options.Verbose)
 
 // ---- what to redirect -------------------------------------------------------------------------
 
-ISuspendedProcessLauncher launcher = services.GetRequiredService<ISuspendedProcessLauncher>();
-ISuspendedProcess? launched = null;
 try
 {
     foreach (uint pid in options.Pids)
@@ -243,12 +238,11 @@ try
 
     if (options.LaunchExe != null)
     {
-        launched = launcher.Launch(options.LaunchExe, options.LaunchArgs);
-        Console.WriteLine($"Launched suspended: pid={launched.Pid} \"{options.LaunchExe}\" {options.LaunchArgs}");
-        // Attach while it is still frozen — that is the whole point of launching suspended.
-        await engine.AttachProcessIdAsync(launched.Pid, policy.Id, includeChildren: true);
-        launched.Resume();
-        Console.WriteLine($"Resumed pid={launched.Pid}");
+        // Attached while still frozen, and resumed only once the driver has it — or ended, not run,
+        // when attaching fails. See SuspendedLaunchService.
+        uint launched = await services.GetRequiredService<SuspendedLaunchService>()
+            .LaunchUnderPolicyAsync(options.LaunchExe, options.LaunchArgs, policy.Id);
+        Console.WriteLine($"Launched suspended, attached, resumed: pid={launched} \"{options.LaunchExe}\" {options.LaunchArgs}");
     }
 
     Console.WriteLine(options.DurationSeconds > 0
@@ -272,7 +266,6 @@ finally
 {
     Console.WriteLine();
     Console.WriteLine("Stopping…");
-    launched?.Dispose();
     await session.StopAsync();
     selfHosted?.Dispose();
 }
