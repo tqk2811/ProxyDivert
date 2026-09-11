@@ -231,6 +231,7 @@ Downside: an extra service and a COM hop add latency, and the events of one watc
     <sys:String x:Key="Enum.OutboundKind.Socks4">SOCKS4</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Socks5">SOCKS5</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Vpn">VPN</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.Ssh">SSH</sys:String>
 
     <sys:String x:Key="Enum.Ipv6Support.Auto">Auto</sys:String>
     <sys:String x:Key="Enum.Ipv6Support.Enabled">Enabled</sys:String>

@@ -269,6 +269,7 @@ public sealed class AppConfig
             outbound.Url = null;
             outbound.Username = null;
             outbound.Password = null;
+            outbound.PrivateKeyPath = null;
             outbound.PreSharedKey = null;
             outbound.VpnProtocol = VpnProtocol.Auto;
             outbound.IsEnabled = true;

@@ -70,7 +70,11 @@ public sealed class OutboundAddress
     /// the absence of one — so their box means nothing and is kept empty.
     /// </remarks>
     public static bool IsWanted(OutboundKind kind)
-        => kind is OutboundKind.HttpProxy or OutboundKind.Socks4 or OutboundKind.Socks5 or OutboundKind.Vpn;
+        => kind is OutboundKind.HttpProxy or OutboundKind.Socks4 or OutboundKind.Socks5 or OutboundKind.Vpn
+            or OutboundKind.Ssh;
+
+    /// <summary>The port an SSH server listens on when the box does not say.</summary>
+    public const int DefaultSshPort = 22;
 
     /// <summary>
     /// Reads the box. False with a reason in <paramref name="error"/> when it cannot be read, and
@@ -96,11 +100,15 @@ public sealed class OutboundAddress
         string text = Expand(url);
         if (text.Length == 0)
         {
-            error = kind == OutboundKind.Vpn
-                ? "has nothing in its address box. Point it at a configuration file, or at a server "
-                  + "such as sstp://vpn.example.com:443."
-                : "has nothing in its address box. Type the proxy's address, such as "
-                  + "socks5://127.0.0.1:1080.";
+            error = kind switch
+            {
+                OutboundKind.Vpn => "has nothing in its address box. Point it at a configuration file, or at a "
+                                    + "server such as sstp://vpn.example.com:443.",
+                OutboundKind.Ssh => "has nothing in its address box. Type the SSH server, such as "
+                                    + "ssh://user@example.com:22.",
+                _ => "has nothing in its address box. Type the proxy's address, such as "
+                     + "socks5://127.0.0.1:1080.",
+            };
             return false;
         }
 
@@ -138,6 +146,9 @@ public sealed class OutboundAddress
             case "socks":
             case "socks5":
                 kind = OutboundKind.Socks5;
+                return true;
+            case "ssh":
+                kind = OutboundKind.Ssh;
                 return true;
             default:
                 return false;
@@ -197,8 +208,10 @@ public sealed class OutboundAddress
 
         // Uri fills in 80 for http and leaves -1 for a scheme it does not know, which is every SOCKS
         // one. A SOCKS proxy with no port cannot be dialled at all, and the connection that finds
-        // that out is one the user is waiting on — so it is said here, at the box.
+        // that out is one the user is waiting on — so it is said here, at the box. SSH is the
+        // exception: its port is 22 nearly everywhere and "user@host" is how a server is written.
         int port = uri.Port > 0 ? uri.Port : 0;
+        if (port == 0 && kind == OutboundKind.Ssh) port = DefaultSshPort;
         if (port == 0)
         {
             error = $"has an address with no port: {text}";
@@ -286,6 +299,7 @@ public sealed class OutboundAddress
     {
         OutboundKind.Socks4 => "socks4",
         OutboundKind.Socks5 => "socks5",
+        OutboundKind.Ssh => "ssh",
         _ => "http",
     };
 

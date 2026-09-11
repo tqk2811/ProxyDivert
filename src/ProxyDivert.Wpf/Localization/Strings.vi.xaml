@@ -231,6 +231,7 @@ Hại: thêm một dịch vụ và một chặng COM nên trễ hơn, và sự k
     <sys:String x:Key="Enum.OutboundKind.Socks4">SOCKS4</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Socks5">SOCKS5</sys:String>
     <sys:String x:Key="Enum.OutboundKind.Vpn">VPN</sys:String>
+    <sys:String x:Key="Enum.OutboundKind.Ssh">SSH</sys:String>
 
     <sys:String x:Key="Enum.Ipv6Support.Auto">Tự động</sys:String>
     <sys:String x:Key="Enum.Ipv6Support.Enabled">Bật</sys:String>

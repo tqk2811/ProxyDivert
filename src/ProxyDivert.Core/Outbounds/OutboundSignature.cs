@@ -49,6 +49,19 @@ public static class OutboundSignature
               .Append('|').Append(StampFile(outbound.Address));
         }
 
+        // The same reasoning for the key an SSH session logs in with: replacing the key file under
+        // the same name is a different login. The host key the session trusted is deliberately NOT
+        // here — it is recorded by the known-hosts store the first time the server is seen, and a
+        // signature that moved when that happened would drop the very session that recorded it.
+        if (outbound.Kind == OutboundKind.Ssh)
+        {
+            string? keyPath = string.IsNullOrWhiteSpace(outbound.PrivateKeyPath)
+                ? null
+                : OutboundAddress.Expand(outbound.PrivateKeyPath);
+            sb.Append('|').Append(keyPath)
+              .Append('|').Append(keyPath is null ? "-" : StampFile(keyPath));
+        }
+
         return sb.ToString();
     }
 
@@ -56,11 +69,13 @@ public static class OutboundSignature
     // the raw box for every VPN, which meant an address-based one — sstp://vpn.example.com — was
     // asked for the last write time of a "file" by that name on every save, and answered "?".
     private static string StampFile(OutboundAddress? address)
+        => address is null || !address.IsFile ? "-" : StampFile(address.Path!);
+
+    private static string StampFile(string path)
     {
-        if (address is null || !address.IsFile) return "-";
         try
         {
-            var info = new FileInfo(address.Path!);
+            var info = new FileInfo(path);
             if (!info.Exists) return "-";
             return info.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture)
                 + ":" + info.Length.ToString(CultureInfo.InvariantCulture);

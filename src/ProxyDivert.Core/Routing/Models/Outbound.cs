@@ -90,6 +90,12 @@ public sealed class Outbound
 
     public string? Password { get; set; }
 
+    // The private key file an SSH outbound logs in with — OpenSSH, PuTTY or PEM, as SSH.NET reads
+    // them. A path rather than the key itself, so the key stays where the user keeps it and out of
+    // the configuration file. When it is set, Password is the key's passphrase (and is still offered
+    // as a login password, for a server that wants either); without it Password is the password.
+    public string? PrivateKeyPath { get; set; }
+
     // The IPsec group pre-shared key, for the L2TP/IPsec and IKEv2 outbounds. It gets a box of its
     // own rather than being tucked into the URL, so it can be edited on its own and hidden on
     // screen — the same treatment as the password beside it.
@@ -124,7 +130,9 @@ public sealed class Outbound
     // first failure rather than asking the user to know.
     public Ipv6Support Ipv6Support { get; set; } = Ipv6Support.Auto;
 
-    // True when this outbound can carry UDP (SOCKS5 UDP ASSOCIATE). Direct carries UDP too.
+    // True when this outbound can carry UDP (SOCKS5 UDP ASSOCIATE). Direct carries UDP too. SSH never
+    // does — its only forwarding channel is a TCP stream — so it falls under the last arm with the
+    // HTTP and SOCKS4 proxies.
     //
     // A VPN depends on which engine runs it. wireproxy's SOCKS5 implementation is TCP-only, so a
     // .conf running on it downgrades "UDP through the outbound" to Block rather than leaking the

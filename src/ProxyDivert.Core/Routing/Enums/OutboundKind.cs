@@ -16,4 +16,8 @@ public enum OutboundKind
 
     // Phase 2 — a VPN tunnel exposed as an IProxySource.
     Vpn = 5,
+
+    // One authenticated SSH session held open, each connection a direct-tcpip channel on it — what
+    // `ssh -D` does, without a local SOCKS listener in between. TCP only: SSH has no channel for UDP.
+    Ssh = 6,
 }
