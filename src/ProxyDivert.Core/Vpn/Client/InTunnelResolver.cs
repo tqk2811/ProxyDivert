@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using ProxyDivert.Core.Vpn.Exceptions;
 using TqkLibrary.VpnClient.Sockets;
 using TqkLibrary.VpnClient.Tunnels;
 
@@ -79,8 +80,10 @@ internal sealed class InTunnelResolver : IDisposable
     {
         byte[] question = BuildQuery(name, type, out ushort id);
 
-        foreach (IPAddress server in Servers())
+        foreach ((IPAddress server, bool isTheVpnsOwn) in Servers())
         {
+            bool answered = false;
+
             // Two goes at the same server: a UDP query lost on a freshly established tunnel is
             // common enough that giving up on it would look like a broken VPN.
             for (int attempt = 0; attempt < 2; attempt++)
@@ -90,6 +93,7 @@ internal sealed class InTunnelResolver : IDisposable
                     byte[]? reply = await AskAsync(server, question, cancellationToken).ConfigureAwait(false);
                     if (reply is null) continue;
 
+                    answered = true;
                     (IPAddress? address, uint ttl) = ReadAnswer(reply, id, type);
                     if (address is null) return null;
 
@@ -105,6 +109,14 @@ internal sealed class InTunnelResolver : IDisposable
                     _logger?.LogDebug(ex, "in-tunnel dns query for {Name} via {Server} failed", name, server);
                 }
             }
+
+            // Silence from the resolver the VPN itself handed out is a verdict on the TUNNEL, not
+            // on the name: that address is reachable from inside any tunnel that works at all.
+            // Walking on to 1.1.1.1 and 8.8.8.8 sends two more doomed queries down the same dead
+            // tunnel and turns a ten-second failure into a thirty-second one, which is what the
+            // user actually waits through on every request after a session dies.
+            if (isTheVpnsOwn && !answered)
+                throw new TunnelNotCarryingTrafficException(server, QueryTimeout + QueryTimeout);
         }
 
         return null;
@@ -130,10 +142,11 @@ internal sealed class InTunnelResolver : IDisposable
         }
     }
 
-    private IEnumerable<IPAddress> Servers()
+    // The flag marks the one server whose silence means something: the resolver the VPN assigned.
+    private IEnumerable<(IPAddress Server, bool IsTheVpnsOwn)> Servers()
     {
-        if (_tunnel.AssignedDns is IPAddress assigned) yield return assigned;
-        foreach (IPAddress fallback in Fallbacks) yield return fallback;
+        if (_tunnel.AssignedDns is IPAddress assigned) yield return (assigned, true);
+        foreach (IPAddress fallback in Fallbacks) yield return (fallback, false);
     }
 
     // --- wire format ---------------------------------------------------------------------------
