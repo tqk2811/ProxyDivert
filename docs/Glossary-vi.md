@@ -611,3 +611,11 @@ Chở một kết nối TCP bên trong một kết nối TCP khác (VPN chạy t
 ## Composition root (gốc lắp ráp)
 
 Chỗ **duy nhất** trong ứng dụng dựng cả đồ thị đối tượng: đăng ký dịch vụ vào container, lấy ra vài đối tượng sống lâu, rồi giao cho phần còn lại. Mọi lớp khác chỉ nhận phụ thuộc qua constructor, không tự `new` cộng sự và không tự đi hỏi container. Mỗi host có gốc riêng: cửa sổ là `AppServices`, bản console là phần đầu `Program.cs`; phần đăng ký dùng chung là `AddProxyDivert`. Gốc lắp ráp chỉ nên **lắp**, không nên chứa chính sách miền (thứ tự bật engine, cái gì phải đi qua hàng đợi): chính sách đặt ở gốc thì host thứ hai phải chép lại, và bản chép sẽ lệch. Vì thế những thứ đó nằm trong `ProxyDivertSession` (Core), cả hai host cùng gọi.
+
+## Mặt phẳng điều khiển / mặt phẳng dữ liệu (control plane / data plane) và cái chết im lặng của tunnel
+
+Một phiên VPN có hai tầng sống độc lập nhau. **Mặt phẳng điều khiển** là phần lo bắt tay, xác thực, giữ nhịp: TLS + bản tin SSTP Echo‑Request/Echo‑Response, khối keep‑alive của SoftEther, gói DPD của IPsec. **Mặt phẳng dữ liệu** là phần thực sự chở gói IP của người dùng qua tunnel.
+
+Máy chủ VPN có thể **bỏ mặt phẳng dữ liệu mà vẫn trả lời mặt phẳng điều khiển** — hết hạn phiên, thu hồi IP đã cấp, dọn bảng NAT — và khi ấy client không thấy socket đóng, không thấy lỗi, không thấy echo trượt: nó vẫn báo *Connected*. Đây là **cái chết im lặng của tunnel**. Giao thức nào có bản tin ngắt tường minh (L2TP gửi CDN, IKE gửi Delete) thì client biết ngay; SSTP và SoftEther thì không, nên chết im.
+
+Hệ quả: mọi thứ đo *đường truyền* — socket còn mở không, echo có hồi đáp không — đều không phát hiện được. Thứ duy nhất kết luận được là **gửi một gói thật xuyên tunnel và đợi trả lời** (ping trong tunnel, hoặc một câu hỏi DNS tới máy chủ DNS mà VPN cấp). Dấu vân tay trên log ProxyDivert: `Could not resolve '<tên>' inside the VPN tunnel` lặp lại đúng 30 giây một lần (3 máy chủ DNS × 2 lượt × 5 giây timeout), trong khi không có một dòng `link lost` hay đổi trạng thái nào của driver.
