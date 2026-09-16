@@ -18,21 +18,22 @@
             </DockPanel>
 
             <DataGrid ItemsSource="{Binding Connections}" AutoGenerateColumns="False"
+                      b:ColumnLayoutBehavior.Layout="{Binding ColumnLayout}"
                       CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Process.Pid}" Binding="{Binding ProcessId}" Width="70"/>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Process}" Binding="{Binding ProcessName}" Width="140"/>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Host}" Binding="{Binding Host}" Width="*"/>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Destination}" Binding="{Binding Destination}" Width="160"/>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Outbound}" Binding="{Binding OutboundName}" Width="120"/>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Reason}" Binding="{Binding RouteReason}" Width="180"/>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Up}"
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Process.Pid}" b:ColumnLayoutBehavior.ColumnKey="pid" Binding="{Binding ProcessId}" Width="70"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Process}" b:ColumnLayoutBehavior.ColumnKey="process" Binding="{Binding ProcessName}" Width="140"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Host}" b:ColumnLayoutBehavior.ColumnKey="host" Binding="{Binding Host}" Width="240"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Destination}" b:ColumnLayoutBehavior.ColumnKey="destination" Binding="{Binding Destination}" Width="160"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Outbound}" b:ColumnLayoutBehavior.ColumnKey="outbound" Binding="{Binding OutboundName}" Width="120"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Reason}" b:ColumnLayoutBehavior.ColumnKey="reason" Binding="{Binding RouteReason}" Width="180"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Up}" b:ColumnLayoutBehavior.ColumnKey="up"
                                         Binding="{Binding BytesUp, Converter={StaticResource ByteSize}}" Width="80"/>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Down}"
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Down}" b:ColumnLayoutBehavior.ColumnKey="down"
                                         Binding="{Binding BytesDown, Converter={StaticResource ByteSize}}" Width="80"/>
                     <!-- Both ends, so a finished connection shows how long it took instead of
                          counting up forever after it closed. -->
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Duration}" Width="80">
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Conn.Duration}" b:ColumnLayoutBehavior.ColumnKey="duration" Width="80">
                         <DataGridTextColumn.Binding>
                             <MultiBinding Converter="{StaticResource Duration}">
                                 <Binding Path="StartedUtc"/>

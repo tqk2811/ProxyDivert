@@ -58,6 +58,7 @@
                      would show one order while the engine matched another, and dragging a row in
                      a sorted grid would drop it somewhere else entirely. -->
                 <DataGrid ItemsSource="{Binding Rules}" SelectedItem="{Binding SelectedRule}"
+                          b:ColumnLayoutBehavior.Layout="{Binding ColumnLayout}"
                           AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
                           CanUserSortColumns="False"
                           RowStyle="{StaticResource RuleRow}"
@@ -72,14 +73,14 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}"
+                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}" b:ColumnLayoutBehavior.ColumnKey="enabled"
                                                 Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
-                        <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Name}" Width="180"
+                        <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Name}" b:ColumnLayoutBehavior.ColumnKey="name" Width="180"
                                             Binding="{Binding Name}"/>
                         <!-- A condition tree does not fit in a cell, so the cell shows what the
                              tree reads as and the button opens it. The sentence is rebuilt when
                              the language changes, which is what the second binding is for. -->
-                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Conditions}" Width="*" MinWidth="320">
+                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Conditions}" b:ColumnLayoutBehavior.ColumnKey="conditions" Width="360" MinWidth="320">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Grid Margin="0,2">
@@ -103,12 +104,12 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.Process.IncludeChildren}"
+                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.Process.IncludeChildren}" b:ColumnLayoutBehavior.ColumnKey="includeChildren"
                                                 Binding="{Binding IncludeChildren, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
                         <!-- The policies this filter applies, in the order their rules are tried.
                              Read-only here and arranged in the editor: the order is the meaning,
                              and a drop-down cannot say it. -->
-                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Policies}" Width="180">
+                        <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Process.Policies}" b:ColumnLayoutBehavior.ColumnKey="policies" Width="180">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock VerticalAlignment="Center" TextWrapping="Wrap">

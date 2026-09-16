@@ -51,9 +51,13 @@ public sealed partial class RulesViewModel : ObservableObject
     [ObservableProperty]
     private string _policyName = string.Empty;
 
+    /// <summary>How wide this tab's columns were left, kept between runs.</summary>
+    public GridLayoutSection ColumnLayout { get; }
+
     public RulesViewModel(AppServices services)
     {
         _services = services;
+        ColumnLayout = services.GridLayout.Section("policyRules");
         Reload();
     }
 

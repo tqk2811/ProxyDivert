@@ -149,20 +149,21 @@
                 </StackPanel>
 
                 <DataGrid ItemsSource="{Binding Rules}" SelectedItem="{Binding SelectedRule}"
+                          b:ColumnLayoutBehavior.Layout="{Binding ColumnLayout}"
                           AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
                     <DataGrid.Columns>
-                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}"
+                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}" b:ColumnLayoutBehavior.ColumnKey="enabled"
                                                 Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
-                        <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.App.Type}"
+                        <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.App.Type}" b:ColumnLayoutBehavior.ColumnKey="type"
                                                 SelectedItemBinding="{Binding Matcher, UpdateSourceTrigger=PropertyChanged}"
                                                 ItemsSource="{Binding Data.Matchers, Source={StaticResource Vm}}"
                                                 ElementStyle="{StaticResource EnumComboColumn}"
                                                 EditingElementStyle="{StaticResource EnumComboColumn}"
                                                 Width="120"/>
-                        <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Pattern}"
+                        <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Pattern}" b:ColumnLayoutBehavior.ColumnKey="pattern"
                                             Binding="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
-                                            CellStyle="{StaticResource PatternCell}" Width="*"/>
-                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.Rules.Not}"
+                                            CellStyle="{StaticResource PatternCell}" Width="260"/>
+                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.Rules.Not}" b:ColumnLayoutBehavior.ColumnKey="not"
                                                 Binding="{Binding IsNot, UpdateSourceTrigger=PropertyChanged}" Width="55"/>
                     </DataGrid.Columns>
                 </DataGrid>

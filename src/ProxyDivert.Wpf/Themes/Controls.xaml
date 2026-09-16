@@ -956,6 +956,11 @@
         <Setter Property="EnableRowVirtualization" Value="True"/>
         <Setter Property="VerticalGridLinesBrush" Value="Transparent"/>
         <Setter Property="RowDetailsVisibilityMode" Value="Collapsed"/>
+        <!-- Không cột nào giãn lấp đầy lưới: mọi cột có bề rộng cố định, thiếu chỗ thì cuộn
+             ngang. Cột "*" trước đây co lại theo cửa sổ, và khi cửa sổ hẹp thì nội dung dài
+             (URL outbound, câu điều kiện của luật) bị cắt mà không có cách nào xem hết. -->
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
     </Style>
 
     <!-- Kéo thả để đổi kích thước cột: Thumb phải có tên PART_*HeaderGripper -->

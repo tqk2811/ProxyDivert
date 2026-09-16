@@ -48,9 +48,13 @@ public sealed partial class OutboundsViewModel : ObservableObject
     [ObservableProperty]
     private bool _isTesting;
 
+    /// <summary>How wide this tab's columns were left, kept between runs.</summary>
+    public GridLayoutSection ColumnLayout { get; }
+
     public OutboundsViewModel(AppServices services)
     {
         _services = services;
+        ColumnLayout = services.GridLayout.Section("outbounds");
         // The keeper supervises tunnels on its own threads and outlives this view model, so the
         // subscription is for the life of the window.
         _services.Vpn.StatusChanged += OnVpnStatusChanged;

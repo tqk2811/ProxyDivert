@@ -62,9 +62,41 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
     [ObservableProperty]
     private double _appliedPathWidth = 320;
 
+    private const string TreePidKey = "pid";
+    private const string TreeNameKey = "name";
+    private const string TreeFilterKey = "filter";
+    private const string TreePathKey = "path";
+
+    // A splitter drag writes the width here on every mouse move; the store keeps the last one and
+    // writes the file once the drag stops.
+    partial void OnAppliedPidWidthChanged(double value) => _treeLayout.Record(TreePidKey, value);
+
+    partial void OnAppliedNameWidthChanged(double value) => _treeLayout.Record(TreeNameKey, value);
+
+    partial void OnAppliedFilterWidthChanged(double value) => _treeLayout.Record(TreeFilterKey, value);
+
+    partial void OnAppliedPathWidthChanged(double value) => _treeLayout.Record(TreePathKey, value);
+
+    /// <summary>How wide this tab's columns were left, kept between runs.</summary>
+    public GridLayoutSection ColumnLayout { get; }
+
+    // The tree below the grid has no columns of its own, so its widths are stored the same way but
+    // by hand: the headings bind to the four numbers above, and each one is written back here.
+    private readonly GridLayoutSection _treeLayout;
+
     public ProcessesViewModel(AppServices services)
     {
         _services = services;
+        ColumnLayout = services.GridLayout.Section("processRules");
+        _treeLayout = services.GridLayout.Section("processTree");
+
+        // Straight into the fields, before anything is bound: these are the widths the user left,
+        // so restoring them is not a change anyone needs to hear about.
+        _appliedPidWidth = _treeLayout.WidthOf(TreePidKey) ?? _appliedPidWidth;
+        _appliedNameWidth = _treeLayout.WidthOf(TreeNameKey) ?? _appliedNameWidth;
+        _appliedFilterWidth = _treeLayout.WidthOf(TreeFilterKey) ?? _appliedFilterWidth;
+        _appliedPathWidth = _treeLayout.WidthOf(TreePathKey) ?? _appliedPathWidth;
+
         Reload();
         RefreshApplied();
     }

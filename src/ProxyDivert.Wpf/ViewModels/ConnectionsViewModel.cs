@@ -32,9 +32,13 @@ public sealed partial class ConnectionsViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private int _activeCount;
 
+    /// <summary>How wide this tab's columns were left, kept between runs.</summary>
+    public GridLayoutSection ColumnLayout { get; }
+
     public ConnectionsViewModel(AppServices services)
     {
         _services = services;
+        ColumnLayout = services.GridLayout.Section("connections");
         _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = RefreshInterval };
         _timer.Tick += (_, _) => Refresh();
         _timer.Start();
