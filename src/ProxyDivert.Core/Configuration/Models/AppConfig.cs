@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.Processes;
 using ProxyDivert.Core.Processes.Enums;
 using ProxyDivert.Core.Routing.Enums;
@@ -35,6 +36,13 @@ public sealed class AppConfig
     // hour ago is still on disk instead of having been truncated by the next start — and it takes
     // precedence over DiagnosticLogPath, which stays for pinning the trace to a fixed place.
     public bool AutoSaveLog { get; set; }
+
+    // How much detail the trace file takes. The log pane always shows everything the application
+    // logs; this is only about the disk, where a busy connection turns Debug into megabytes per
+    // minute. Debug is the default because that is what the file used to get before this setting
+    // existed — Trace adds the per-packet lines, and is for reproducing one bug rather than for
+    // leaving on.
+    public LogLevel FileLogLevel { get; set; } = LogLevel.Debug;
 
     // What happens to the target's IPv6 traffic: Redirect (default) sends it through the relay and
     // the routing rules exactly like IPv4; Block drops it so the application falls back to IPv4;

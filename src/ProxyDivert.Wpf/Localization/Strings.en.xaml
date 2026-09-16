@@ -155,7 +155,14 @@ Upside: no trace session of its own, so it works where ETW cannot start; this is
 Downside: an extra service and a COM hop add latency, and the events of one watcher are handed over strictly in turn — a program opening thirty processes at once queues up, and its later children are redirected later.</sys:String>
     <sys:String x:Key="Str.Settings.AutoSaveLog">Save the log to a file automatically</sys:String>
     <sys:String x:Key="Str.Settings.AutoSaveLogHint">Each run writes its own Logs\yyyyMMdd-HHmmss.log next to the program, starting the moment this is ticked.</sys:String>
-    <sys:String x:Key="Str.Settings.LogPath">Diagnostic log file</sys:String>
+    <sys:String x:Key="Str.Settings.FileLogLevel">Level written to the file</sys:String>
+    <sys:String x:Key="Str.Settings.OpenLogFolder">Open folder</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Trace">Trace (every packet)</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Debug">Debug</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Information">Information</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Warning">Warning</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Error">Error</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Critical">Critical</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Appearance</sys:String>
     <sys:String x:Key="Str.Settings.Language">Language</sys:String>
     <sys:String x:Key="Str.Settings.Theme">Theme</sys:String>

@@ -33,10 +33,17 @@ public static class ProxyDivertServiceCollectionExtensions
     /// How much detail reaches the sinks at all. Debug is the useful default: Trace turns on the
     /// per-packet lines, which are thousands per second on a busy connection.
     /// </param>
+    /// <param name="minimumLevelAccessor">
+    /// The same floor, asked for on every logged line instead of fixed when the container is
+    /// built. A host whose user can turn the per-packet trace on from a settings tab passes this,
+    /// because the alternative is telling them to restart; when it is null the fixed
+    /// <paramref name="minimumLevel"/> is used.
+    /// </param>
     public static IServiceCollection AddProxyDivert(
         this IServiceCollection services,
         string? logFilePath = null,
-        LogLevel minimumLevel = LogLevel.Debug)
+        LogLevel minimumLevel = LogLevel.Debug,
+        Func<LogLevel>? minimumLevelAccessor = null)
     {
         if (services is null) throw new ArgumentNullException(nameof(services));
 
@@ -48,7 +55,19 @@ public static class ProxyDivertServiceCollectionExtensions
         services.TryAddSingleton(provider);
         services.AddLogging(builder =>
         {
-            builder.SetMinimumLevel(minimumLevel);
+            if (minimumLevelAccessor != null)
+            {
+                // The fixed floor has to be out of the way for the filter to be what decides:
+                // SetMinimumLevel is applied first, and anything it drops never reaches a filter.
+                // The delegate runs per line, so a level changed in the UI takes effect at once.
+                builder.SetMinimumLevel(LogLevel.Trace);
+                builder.AddFilter((_, level) => level >= minimumLevelAccessor());
+            }
+            else
+            {
+                builder.SetMinimumLevel(minimumLevel);
+            }
+
             builder.AddProvider(provider);
         });
 
