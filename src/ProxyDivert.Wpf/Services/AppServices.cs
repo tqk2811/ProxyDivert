@@ -36,6 +36,12 @@ public sealed class AppServices : IAsyncDisposable
     public ConfigStore ConfigStore { get; }
 
     /// <summary>
+    /// How wide the user dragged each column of each grid. Its own file, and its own lifetime: see
+    /// <see cref="GridLayoutStore"/> for why it is not in the configuration with the theme.
+    /// </summary>
+    public GridLayoutStore GridLayout { get; } = new GridLayoutStore();
+
+    /// <summary>
     /// The configuration as the window shows it. View models edit this instance freely; nothing
     /// reaches the engine until <see cref="SaveAndApply"/>, which writes the file and hands the
     /// engine a snapshot of its own (<see cref="ConfigStore.Clone"/>). Three layers, then: this
@@ -202,6 +208,8 @@ public sealed class AppServices : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _logRollTimer.Dispose();
+        // Writes a column drag that was still waiting out its debounce when the window closed.
+        GridLayout.Dispose();
         // First the session, which lets queued work finish and switches redirection off; then the
         // container, which disposes the engine, the table and the tunnels in reverse order of making.
         await Session.DisposeAsync().ConfigureAwait(false);

@@ -134,6 +134,7 @@
             </StackPanel>
 
             <DataGrid ItemsSource="{Binding Outbounds}" SelectedItem="{Binding Selected}"
+                      b:ColumnLayoutBehavior.Layout="{Binding ColumnLayout}"
                       AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
                       BeginningEdit="Grid_BeginningEdit">
                 <!-- Direct and Block are in the list so a policy has something to point at, and a
@@ -152,18 +153,18 @@
                     </Style>
                 </DataGrid.CellStyle>
                 <DataGrid.Columns>
-                    <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}"
+                    <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}" b:ColumnLayoutBehavior.ColumnKey="enabled"
                                             Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}"
                                             ElementStyle="{StaticResource RowCheck}"
                                             EditingElementStyle="{StaticResource RowCheck}" Width="60"/>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Name}"
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Name}" b:ColumnLayoutBehavior.ColumnKey="name"
                                         Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="150"/>
                     <!-- A picker everywhere except on the two built-ins, whose kinds are deliberately
                          not in the list — offering "Direct" as something an ordinary row could be
                          turned into would only invite a second Direct that no rule points at. That
                          left their own type cell showing nothing at all, so those rows say what they
                          are in plain text instead. -->
-                    <DataGridTemplateColumn Header="{b:LocalizedBinding Str.App.Type}" Width="110"
+                    <DataGridTemplateColumn Header="{b:LocalizedBinding Str.App.Type}" b:ColumnLayoutBehavior.ColumnKey="type" Width="110"
                                             SortMemberPath="Kind">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
@@ -185,32 +186,32 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Url}"
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Url}" b:ColumnLayoutBehavior.ColumnKey="url"
                                         Binding="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
-                                        CellStyle="{StaticResource AddressCell}" Width="*" MinWidth="240"/>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Username}"
+                                        CellStyle="{StaticResource AddressCell}" Width="280" MinWidth="240"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Username}" b:ColumnLayoutBehavior.ColumnKey="username"
                                         Binding="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Password}"
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.Password}" b:ColumnLayoutBehavior.ColumnKey="password"
                                         Binding="{Binding Password, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
                     <!-- SSH only: the private key to log in with. When it is set the password box
                          beside it is the key's passphrase. Empty on every other row, like the
                          pre-shared key next to it. -->
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.PrivateKey}"
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.PrivateKey}" b:ColumnLayoutBehavior.ColumnKey="privateKey"
                                         Binding="{Binding PrivateKeyPath, UpdateSourceTrigger=PropertyChanged}"
                                         CellStyle="{StaticResource PrivateKeyCell}" Width="160"/>
                     <!-- Only L2TP/IPsec and IKEv2 use this, but a column costs less than a second
                          editor, and it stays empty for everything else. -->
-                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.PreSharedKey}"
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.PreSharedKey}" b:ColumnLayoutBehavior.ColumnKey="preSharedKey"
                                         Binding="{Binding PreSharedKey, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
                     <!-- Auto for every row that is not a VPN, and for nearly every one that is; it
                          is here for the .conf that should run in process rather than on wireproxy. -->
-                    <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.Outbound.VpnProtocol}"
+                    <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.Outbound.VpnProtocol}" b:ColumnLayoutBehavior.ColumnKey="vpnProtocol"
                                             SelectedItemBinding="{Binding VpnProtocol, UpdateSourceTrigger=PropertyChanged}"
                                             ItemsSource="{Binding Data.VpnProtocols, Source={StaticResource Vm}}"
                                             ElementStyle="{StaticResource VpnProtocolPicker}"
                                             EditingElementStyle="{StaticResource VpnProtocolPicker}"
                                             Width="150"/>
-                    <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.Outbound.Ipv6}"
+                    <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.Outbound.Ipv6}" b:ColumnLayoutBehavior.ColumnKey="ipv6"
                                             SelectedItemBinding="{Binding Ipv6Support, UpdateSourceTrigger=PropertyChanged}"
                                             ItemsSource="{Binding Data.Ipv6Supports, Source={StaticResource Vm}}"
                                             ElementStyle="{StaticResource RowPicker}"
@@ -223,7 +224,7 @@
                          only produce connection errors — and switching it off disconnects nothing.
                          The button then refuses to take down a tunnel a live filter is routing
                          through, which is the same rule read the other way round. -->
-                    <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Vpn.Connection}" Width="110"
+                    <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Vpn.Connection}" b:ColumnLayoutBehavior.ColumnKey="connection" Width="110"
                                             IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
@@ -274,7 +275,7 @@
                          cannot set, only watch, which is why it sits at the far end. It used to be
                          a strip under the grid, where it repeated the outbound's name to say which
                          row it belonged to; on the row itself it needs no name. -->
-                    <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Vpn.Header}" Width="160"
+                    <DataGridTemplateColumn Header="{b:LocalizedBinding Str.Vpn.Header}" b:ColumnLayoutBehavior.ColumnKey="vpn" Width="160"
                                             IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
