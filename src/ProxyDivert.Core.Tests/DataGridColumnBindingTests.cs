@@ -117,6 +117,10 @@ public class DataGridColumnBindingTests
         bool builtInRowEnabled = false;
         bool builtInAcceptedEdit = false;
         bool proxyAcceptedEdit = false;
+        bool builtInAntiDpiLive = false;
+        bool vpnAntiDpiLive = true;
+        bool builtInChunkAccepted = false;
+        bool vpnChunkAccepted = true;
 
         RunOnStaThread(() =>
         {
@@ -158,7 +162,12 @@ public class DataGridColumnBindingTests
             DataGridColumn url = grid.Columns
                 .OfType<DataGridTextColumn>()
                 .Single(c => (c.Binding as System.Windows.Data.Binding)?.Path.Path == "Url");
-            DataGridColumn enabled = grid.Columns.OfType<DataGridCheckBoxColumn>().Single();
+            DataGridColumn enabled = grid.Columns.OfType<DataGridCheckBoxColumn>()
+                .Single(c => (c.Binding as System.Windows.Data.Binding)?.Path.Path == "IsEnabled");
+            DataGridColumn antiDpi = grid.Columns.OfType<DataGridCheckBoxColumn>()
+                .Single(c => (c.Binding as System.Windows.Data.Binding)?.Path.Path == "AntiDpi");
+            DataGridColumn antiDpiChunk = grid.Columns.OfType<DataGridTextColumn>()
+                .Single(c => (c.Binding as System.Windows.Data.Binding)?.Path.Path == "AntiDpiChunkSize");
 
             vpnRowLive = PickerIsLive(grid, vpn, vpnProtocol);
             proxyRowLive = PickerIsLive(grid, proxy, vpnProtocol);
@@ -179,6 +188,10 @@ public class DataGridColumnBindingTests
             builtInRowEnabled = RowFor(grid, direct).IsEnabled;
             builtInAcceptedEdit = TryEdit(grid, direct, url);
             proxyAcceptedEdit = TryEdit(grid, proxy, url);
+            builtInAntiDpiLive = FindVisuals<CheckBox>(CellFor(grid, direct, antiDpi)).Single().IsEnabled;
+            vpnAntiDpiLive = FindVisuals<CheckBox>(CellFor(grid, vpn, antiDpi)).Single().IsEnabled;
+            builtInChunkAccepted = TryEdit(grid, direct, antiDpiChunk);
+            vpnChunkAccepted = TryEdit(grid, vpn, antiDpiChunk);
 
             window.Close();
         });
@@ -195,6 +208,10 @@ public class DataGridColumnBindingTests
         Assert.True(builtInRowEnabled, "The built-in rows are disabled outright, which greys out the whole tab.");
         Assert.False(builtInAcceptedEdit, "Direct's URL can be typed into, and a rule pointing at it would break.");
         Assert.True(proxyAcceptedEdit, "No row can be edited at all — the refusal is not limited to the built-ins.");
+        Assert.True(builtInAntiDpiLive, "Direct cannot turn anti-DPI on, though it is the row where it matters most.");
+        Assert.False(vpnAntiDpiLive, "A VPN row offers anti-DPI, which its encrypted tunnel makes meaningless.");
+        Assert.True(builtInChunkAccepted, "Direct refuses an edit of its anti-DPI byte count.");
+        Assert.False(vpnChunkAccepted, "A VPN row accepts an anti-DPI byte count.");
     }
 
     // The offer to fetch the SoftEther watermark is a XAML trigger on a property, which is exactly

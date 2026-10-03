@@ -130,6 +130,33 @@ public sealed class Outbound
     // first failure rather than asking the user to know.
     public Ipv6Support Ipv6Support { get; set; } = Ipv6Support.Auto;
 
+    /// <summary>
+    /// Hides the destination name from a DPI box on the way out: the name in a proxy's CONNECT
+    /// request and the SNI of the TLS ClientHello go out <see cref="AntiDpiChunkSize"/> bytes at a
+    /// time, the ClientHello re-framed into several TLS records around the name. Only Direct and
+    /// the plain proxies have a name on the wire to hide — see <see cref="SupportsAntiDpi"/>.
+    /// </summary>
+    public bool AntiDpi { get; set; }
+
+    /// <summary>How many bytes of the name go out per piece when <see cref="AntiDpi"/> is on.</summary>
+    public int AntiDpiChunkSize { get; set; } = DefaultAntiDpiChunkSize;
+
+    public const int DefaultAntiDpiChunkSize = 2;
+
+    // A VPN and SSH carry the connection encrypted, so a DPI box on the path sees no name to hide;
+    // Block sends nothing at all.
+    [JsonIgnore]
+    public bool SupportsAntiDpi => Kind is OutboundKind.Direct or OutboundKind.HttpProxy
+        or OutboundKind.Socks4 or OutboundKind.Socks5;
+
+    /// <summary>
+    /// The chunk size the outbound's source is to be given: 0 (leave the connection alone) when
+    /// the switch is off or this kind has nothing to hide, and never below 1 when it is on, so a
+    /// hand-edited 0 in the config cannot turn the switch off behind the user's back.
+    /// </summary>
+    [JsonIgnore]
+    public int EffectiveAntiDpiChunkSize => AntiDpi && SupportsAntiDpi ? Math.Max(1, AntiDpiChunkSize) : 0;
+
     // True when this outbound can carry UDP (SOCKS5 UDP ASSOCIATE). Direct carries UDP too. SSH never
     // does — its only forwarding channel is a TCP stream — so it falls under the last arm with the
     // HTTP and SOCKS4 proxies.

@@ -98,6 +98,7 @@ public sealed partial class OutboundRowViewModel : ObservableObject
             if (!Write(Model.Kind, value, v => Model.Kind = v)) return;
             OnPropertyChanged(nameof(IsVpn));
             OnPropertyChanged(nameof(CanHoldTunnel));
+            OnPropertyChanged(nameof(SupportsAntiDpi));
             AddressChanged();
             PrivateKeyChanged();
         }
@@ -155,6 +156,43 @@ public sealed partial class OutboundRowViewModel : ObservableObject
     {
         get => Model.Ipv6Support;
         set => Write(Model.Ipv6Support, value, v => Model.Ipv6Support = v);
+    }
+
+    /// <summary>
+    /// Whether the anti-DPI cells are live on this row: Direct and the plain proxies. The one
+    /// setting the built-in Direct row lets the user change — it is how traffic goes out, not
+    /// where, so no policy pointing at Direct by id can be broken by it.
+    /// </summary>
+    public bool SupportsAntiDpi => Model.SupportsAntiDpi;
+
+    public bool AntiDpi
+    {
+        get => Model.AntiDpi;
+        set => WriteAntiDpi(Model.AntiDpi, value, v => Model.AntiDpi = v);
+    }
+
+    // Below 1 would mean "off" to the library, which is the check box's job; such a value is
+    // refused and the cell reads the model again.
+    public int AntiDpiChunkSize
+    {
+        get => Model.AntiDpiChunkSize;
+        set
+        {
+            if (value < 1) { OnPropertyChanged(); return; }
+            WriteAntiDpi(Model.AntiDpiChunkSize, value, v => Model.AntiDpiChunkSize = v);
+        }
+    }
+
+    private bool WriteAntiDpi<T>(T current, T value, Action<T> apply, [CallerMemberName] string? property = null)
+    {
+        if (!SupportsAntiDpi || EqualityComparer<T>.Default.Equals(current, value))
+        {
+            OnPropertyChanged(property);
+            return false;
+        }
+        apply(value);
+        OnPropertyChanged(property);
+        return true;
     }
 
     // ==== what is wrong with the address, said where it was typed ====

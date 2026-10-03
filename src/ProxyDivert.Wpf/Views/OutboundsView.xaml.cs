@@ -1,4 +1,5 @@
 using System.Windows.Controls;
+using ProxyDivert.Wpf.Bindings;
 using ProxyDivert.Wpf.ViewModels;
 
 namespace ProxyDivert.Wpf.Views;
@@ -16,6 +17,12 @@ public partial class OutboundsView : UserControl
     // are the only rows there are, and a whole grid greyed out reads as a broken tab.
     private void Grid_BeginningEdit(object sender, DataGridBeginningEditEventArgs e)
     {
-        if (e.Row.Item is OutboundRowViewModel row && !row.IsEditable) e.Cancel = true;
+        if (e.Row.Item is not OutboundRowViewModel row) return;
+        // The anti-DPI cells follow their own rule: live on Direct (built-in or not) and the plain
+        // proxies, dead everywhere else.
+        if (ColumnLayoutBehavior.GetColumnKey(e.Column) is "antiDpi" or "antiDpiChunk")
+            e.Cancel = !row.SupportsAntiDpi;
+        else if (!row.IsEditable)
+            e.Cancel = true;
     }
 }

@@ -19,6 +19,8 @@ public sealed class HttpProxyOutboundBuilder : IOutboundSourceBuilder
         var source = new HttpProxySource(uri, context.LoggerFactory);
         if (OutboundUrl.HasCredential(outbound))
             source.Credential = new ProxyCredential(outbound.Username!, outbound.Password!);
+        source.ConnectRequestChunkSize = outbound.EffectiveAntiDpiChunkSize;
+        source.TlsHandshakeChunkSize = outbound.EffectiveAntiDpiChunkSize;
 
         // No IPv6 switch handed over. CONNECT gives the upstream a name and the upstream resolves
         // it, so nothing on this side can keep AAAA records out of that answer — the property that

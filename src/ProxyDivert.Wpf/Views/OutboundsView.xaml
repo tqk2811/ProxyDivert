@@ -70,6 +70,26 @@
             </Style.Triggers>
         </Style>
 
+        <!-- The anti-DPI cells answer to SupportsAntiDpi rather than IsBuiltIn: the built-in
+             Direct row is the one where they matter most. -->
+        <Style x:Key="AntiDpiCheck" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SupportsAntiDpi}" Value="False">
+                    <Setter Property="IsEnabled" Value="False"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="AntiDpiCell" TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+            <Setter Property="ToolTip" Value="{DynamicResource Str.Outbound.AntiDpiHint}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SupportsAntiDpi}" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- An address that cannot be used says so on the cell it was typed into: the wording the
              parser used, on the row it belongs to. The alternative was finding out at the first
              connection through it, with the user already waiting. Built-in rows never have one —
@@ -217,6 +237,18 @@
                                             ElementStyle="{StaticResource RowPicker}"
                                             EditingElementStyle="{StaticResource RowPicker}"
                                             Width="100"/>
+                    <!-- Anti-DPI: live on Direct (the built-in row included — it changes how
+                         traffic goes out, not where) and the plain proxies; a VPN or SSH already
+                         carries the name encrypted. The code-behind decides the edit by column
+                         key, so the two keys here and there have to match. -->
+                    <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.Outbound.AntiDpi}" b:ColumnLayoutBehavior.ColumnKey="antiDpi"
+                                            Binding="{Binding AntiDpi, UpdateSourceTrigger=PropertyChanged}"
+                                            ElementStyle="{StaticResource AntiDpiCheck}"
+                                            EditingElementStyle="{StaticResource AntiDpiCheck}"
+                                            CellStyle="{StaticResource AntiDpiCell}" Width="80"/>
+                    <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.AntiDpiChunk}" b:ColumnLayoutBehavior.ColumnKey="antiDpiChunk"
+                                        Binding="{Binding AntiDpiChunkSize, UpdateSourceTrigger=LostFocus}"
+                                        CellStyle="{StaticResource AntiDpiCell}" Width="90"/>
                     <!-- The tunnel switch. A VPN's connection is the user's session with their
                          provider, not part of a redirection run: this connects and disconnects it
                          on its own, WinDivert on or off. Switching WinDivert ON connects whatever

@@ -84,6 +84,9 @@
     <sys:String x:Key="Str.Outbound.PreSharedKey">Pre-shared key</sys:String>
     <sys:String x:Key="Str.Outbound.VpnProtocol">VPN protocol</sys:String>
     <sys:String x:Key="Str.Outbound.Ipv6">IPv6</sys:String>
+    <sys:String x:Key="Str.Outbound.AntiDpi">Anti-DPI</sys:String>
+    <sys:String x:Key="Str.Outbound.AntiDpiChunk">DPI bytes</sys:String>
+    <sys:String x:Key="Str.Outbound.AntiDpiHint">Hides the destination name from deep packet inspection: the name in the proxy CONNECT request and the SNI of the TLS ClientHello go out this many bytes at a time, the ClientHello split into several TLS records around the name. Direct, HTTP, SOCKS4 and SOCKS5 only.</sys:String>
     <sys:String x:Key="Str.Outbound.TestOk">Connection succeeded.</sys:String>
     <sys:String x:Key="Str.Outbound.TestFailed">Connection failed:</sys:String>
     <sys:String x:Key="Str.Outbound.Hint">Direct and Block always exist. For a VPN the URL box is either a configuration file (.ovpn, .conf, .vpn) or the server itself, as in sstp://vpn.example.com:443 — see the README. A .conf runs on wireproxy and carries no UDP; every other VPN runs in this process and does. For SSH the URL box is the server, as in ssh://user@host:22; with a key file the password box is its passphrase. SSH carries no UDP.</sys:String>

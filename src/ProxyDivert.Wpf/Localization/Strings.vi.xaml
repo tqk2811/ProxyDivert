@@ -84,6 +84,9 @@
     <sys:String x:Key="Str.Outbound.PreSharedKey">Khoá chung</sys:String>
     <sys:String x:Key="Str.Outbound.VpnProtocol">Giao thức VPN</sys:String>
     <sys:String x:Key="Str.Outbound.Ipv6">IPv6</sys:String>
+    <sys:String x:Key="Str.Outbound.AntiDpi">Chống DPI</sys:String>
+    <sys:String x:Key="Str.Outbound.AntiDpiChunk">Số byte DPI</sys:String>
+    <sys:String x:Key="Str.Outbound.AntiDpiHint">Giấu tên miền đích khỏi bộ lọc DPI: tên miền trong lệnh CONNECT của proxy và SNI trong ClientHello của TLS được gửi mỗi lần chừng này byte, ClientHello tách thành nhiều TLS record quanh tên miền. Chỉ áp cho Direct, HTTP, SOCKS4 và SOCKS5.</sys:String>
     <sys:String x:Key="Str.Outbound.TestOk">Kết nối thành công.</sys:String>
     <sys:String x:Key="Str.Outbound.TestFailed">Kết nối thất bại:</sys:String>
     <sys:String x:Key="Str.Outbound.Hint">Direct và Block luôn tồn tại. Với VPN, ô URL là file cấu hình (.ovpn, .conf, .vpn) hoặc chính máy chủ, dạng sstp://vpn.example.com:443 — xem README. File .conf chạy bằng wireproxy nên không chở UDP; VPN loại khác chạy trong tiến trình này thì chở được. Với SSH, ô URL là máy chủ, dạng ssh://user@host:22; có file khoá thì ô mật khẩu là passphrase của khoá. SSH không chở UDP.</sys:String>

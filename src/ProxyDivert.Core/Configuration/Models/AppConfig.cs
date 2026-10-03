@@ -175,6 +175,11 @@ public sealed class AppConfig
 
         RestoreBuiltInOutbounds();
 
+        // A hand-edited size below 1 would run as 1 while the grid showed 0; put the default back so
+        // what is shown is what runs.
+        foreach (Outbound outbound in Outbounds)
+            if (outbound.AntiDpiChunkSize < 1) outbound.AntiDpiChunkSize = Outbound.DefaultAntiDpiChunkSize;
+
         // Nothing to point at is worse than pointing somewhere dull: the Rules tab with no policy
         // has no row to add a rule to, and every filter in the file is already dangling.
         if (Policies.Count == 0)
@@ -281,6 +286,7 @@ public sealed class AppConfig
             outbound.PreSharedKey = null;
             outbound.VpnProtocol = VpnProtocol.Auto;
             outbound.IsEnabled = true;
+            if (outbound.Id == Outbound.BlockId) outbound.AntiDpi = false;
         }
 
         // The engine puts them back for itself when they are missing, so their absence never broke
