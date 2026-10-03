@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.Configuration;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.DependencyInjection;
@@ -126,11 +127,19 @@ public sealed class AppServices : IAsyncDisposable
         // needed to read the file — and registering it is what gives the session a file to write.
         _provider = new ServiceCollection()
             .AddSingleton(ConfigStore)
-            .AddProxyDivert(EffectiveLogPath)
+            // The floor is asked for per line rather than fixed here, so that turning the
+            // per-packet trace on in Settings takes effect without a restart. Anything above
+            // Debug on disk still lets the log pane have its Debug lines — the file level filters
+            // the file, not the pane.
+            .AddProxyDivert(
+                EffectiveLogPath,
+                minimumLevelAccessor: () =>
+                    Config.FileLogLevel < LogLevel.Debug ? LogLevel.Trace : LogLevel.Debug)
             .BuildServiceProvider();
 
         Logs = _provider.GetRequiredService<InMemoryLogStore>();
         _loggerProvider = _provider.GetRequiredService<AppLoggerProvider>();
+        _loggerProvider.MinFileLevel = Config.FileLogLevel;
         // Resolved, nothing started: the session brings the process table, the driver and the
         // tunnels up only when redirection is switched on, so opening the window costs a file read.
         Session = _provider.GetRequiredService<ProxyDivertSession>();
@@ -165,6 +174,33 @@ public sealed class AppServices : IAsyncDisposable
         _autoSaveLog = enabled;
         Save();
         _loggerProvider.SetFilePath(EffectiveLogPath);
+    }
+
+    /// <summary>
+    /// Changes how much of the log reaches the file, applied to the next line rather than at the
+    /// next Save — the level is changed exactly when the next few seconds are the ones wanted, and
+    /// it keeps writing to the same file rather than starting a new one.
+    /// </summary>
+    public void SetFileLogLevel(LogLevel level)
+    {
+        Config.FileLogLevel = level;
+        _loggerProvider.MinFileLevel = level;
+        Save();
+    }
+
+    /// <summary>
+    /// The folder this run's trace is being written into, created if it is not there yet, so the
+    /// button that opens it always lands somewhere. Falls back to the folder auto-save would use,
+    /// because a user looking for the logs is looking for that folder whether or not anything is
+    /// being written right now.
+    /// </summary>
+    public string? EnsureLogDirectory()
+    {
+        string path = EffectiveLogPath ?? BuildAutoLogPath();
+        string? dir = Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(dir)) return null;
+        Directory.CreateDirectory(dir!);
+        return dir;
     }
 
     /// <summary>

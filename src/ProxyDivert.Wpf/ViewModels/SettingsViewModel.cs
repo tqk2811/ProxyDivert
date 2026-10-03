@@ -1,7 +1,10 @@
 ﻿using System;
+using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using ProxyDivert.Core.Configuration.Enums;
 using ProxyDivert.Core.Processes.Enums;
@@ -27,6 +30,14 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public Array Languages { get; } = Enum.GetValues(typeof(AppLanguage));
 
+    // Everything but None: "log nothing at all" is what unticking auto-save is for, and offering
+    // it here would be a second, quieter way to end up with an empty file.
+    public LogLevel[] FileLogLevels { get; } =
+    {
+        LogLevel.Trace, LogLevel.Debug, LogLevel.Information,
+        LogLevel.Warning, LogLevel.Error, LogLevel.Critical,
+    };
+
     public SettingsViewModel(AppServices services)
     {
         _services = services;
@@ -34,8 +45,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         _dohEndpoint = services.Config.Dns.DohEndpoint;
         _ipv6 = services.Config.Ipv6;
         _wireProxyPath = services.Config.WireProxyPath ?? string.Empty;
-        _diagnosticLogPath = services.Config.DiagnosticLogPath ?? string.Empty;
         _autoSaveLog = services.Config.AutoSaveLog;
+        _fileLogLevel = services.Config.FileLogLevel;
         _theme = ThemeManager.Parse(services.Config.Theme);
         _language = LocalizationManager.Parse(services.Config.Language);
         _startWithWindows = services.Config.StartWithWindows;
@@ -159,13 +170,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string _wireProxyPath;
 
     [ObservableProperty]
-    private string _diagnosticLogPath;
-
-    [ObservableProperty]
     private bool _autoSaveLog;
 
-    /// <summary>Where this run's trace is being written, for the view to show under the switch.</summary>
-    public string CurrentLogPath => _services.EffectiveLogPath ?? string.Empty;
+    /// <summary>How much of the log reaches the file. The log pane is not affected.</summary>
+    [ObservableProperty]
+    private LogLevel _fileLogLevel;
 
     [ObservableProperty]
     private ThemeMode _theme;
@@ -194,19 +203,13 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnWireProxyPathChanged(string value)
         => _services.Config.WireProxyPath = string.IsNullOrWhiteSpace(value) ? null : value;
 
-    partial void OnDiagnosticLogPathChanged(string value)
-    {
-        _services.Config.DiagnosticLogPath = string.IsNullOrWhiteSpace(value) ? null : value;
-        OnPropertyChanged(nameof(CurrentLogPath));
-    }
-
     // Applied the moment it is ticked, like the appearance settings and for the same reason: a
     // switch whose whole purpose is to capture what happens next is useless if it waits for Save.
-    partial void OnAutoSaveLogChanged(bool value)
-    {
-        _services.SetAutoSaveLog(value);
-        OnPropertyChanged(nameof(CurrentLogPath));
-    }
+    partial void OnAutoSaveLogChanged(bool value) => _services.SetAutoSaveLog(value);
+
+    // Same reasoning, and it takes effect on the next line rather than on the next run: the level
+    // is lowered precisely to catch something that is happening now.
+    partial void OnFileLogLevelChanged(LogLevel value) => _services.SetFileLogLevel(value);
 
     // Appearance is the one pair of settings that takes effect the moment it is picked, so it is
     // also written out at once: a theme that reverts on the next launch because Save was never
@@ -267,16 +270,30 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void Save() => _services.SaveAndApply();
 
+    /// <summary>
+    /// Opens the folder the trace is written into, with this run's file selected when there is
+    /// one — what the user wants after ticking the box is the file, and the folder holds every
+    /// earlier hour besides.
+    /// </summary>
     [RelayCommand]
-    private void BrowseLogPath()
+    private void OpenLogFolder()
     {
-        var dialog = new SaveFileDialog
+        try
         {
-            Filter = "Log files (*.log)|*.log|All files (*.*)|*.*",
-            FileName = "proxydivert.log",
-            OverwritePrompt = false,
-        };
-        if (dialog.ShowDialog() == true) DiagnosticLogPath = dialog.FileName;
+            string? folder = _services.EnsureLogDirectory();
+            if (string.IsNullOrEmpty(folder)) return;
+
+            string? file = _services.EffectiveLogPath;
+            string args = !string.IsNullOrEmpty(file) && File.Exists(file)
+                ? $"/select,\"{file}\""
+                : $"\"{folder}\"";
+            Process.Start(new ProcessStartInfo("explorer.exe", args) { UseShellExecute = true });
+        }
+        catch
+        {
+            // Explorer refusing to open is not worth a dialog: the path is a folder beside the
+            // executable, and the user can reach it by hand.
+        }
     }
 
     /// <summary>

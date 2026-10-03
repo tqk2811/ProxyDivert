@@ -33,7 +33,11 @@ public sealed class AppLoggerProvider : ILoggerProvider
 
     private readonly object _fileLock = new object();
     private readonly InMemoryLogStore _store;
-    private readonly LogLevel _minFileLevel;
+
+    // Not readonly: the level is picked in Settings while the application runs, for the same reason
+    // the path can move — a trace setting that needs a restart is useless at the moment it is
+    // wanted. Held as an int and volatile because the packet pumps read it without any lock.
+    private volatile int _minFileLevel;
 
     private readonly BlockingCollection<string> _pending =
         new BlockingCollection<string>(new ConcurrentQueue<string>(), QueueCapacity);
@@ -53,7 +57,7 @@ public sealed class AppLoggerProvider : ILoggerProvider
     public AppLoggerProvider(InMemoryLogStore store, string? filePath = null, LogLevel minFileLevel = LogLevel.Trace)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
-        _minFileLevel = minFileLevel;
+        _minFileLevel = (int)minFileLevel;
         _writerThread = new Thread(DrainLoop)
         {
             IsBackground = true,
@@ -64,6 +68,17 @@ public sealed class AppLoggerProvider : ILoggerProvider
         };
         _writerThread.Start();
         SetFilePath(filePath);
+    }
+
+    /// <summary>
+    /// How much detail reaches the trace file. The in-memory store is not affected: the log pane
+    /// keeps everything it is given, and this only decides what is worth putting on disk. A change
+    /// applies to the next line — no restart, and no new file.
+    /// </summary>
+    public LogLevel MinFileLevel
+    {
+        get => (LogLevel)_minFileLevel;
+        set => _minFileLevel = (int)value;
     }
 
     public ILogger CreateLogger(string categoryName) => new StoreLogger(this, ShortName(categoryName));
@@ -111,7 +126,7 @@ public sealed class AppLoggerProvider : ILoggerProvider
     {
         _store.Add(entry);
 
-        if (entry.Level < _minFileLevel) return;
+        if ((int)entry.Level < _minFileLevel) return;
         if (_disposed || _writer == null) return;
 
         // Hand off and return. TryAdd never waits, so a caller on the packet path is not held up

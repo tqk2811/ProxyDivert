@@ -619,3 +619,7 @@ Một phiên VPN có hai tầng sống độc lập nhau. **Mặt phẳng điề
 Máy chủ VPN có thể **bỏ mặt phẳng dữ liệu mà vẫn trả lời mặt phẳng điều khiển** — hết hạn phiên, thu hồi IP đã cấp, dọn bảng NAT — và khi ấy client không thấy socket đóng, không thấy lỗi, không thấy echo trượt: nó vẫn báo *Connected*. Đây là **cái chết im lặng của tunnel**. Giao thức nào có bản tin ngắt tường minh (L2TP gửi CDN, IKE gửi Delete) thì client biết ngay; SSTP và SoftEther thì không, nên chết im.
 
 Hệ quả: mọi thứ đo *đường truyền* — socket còn mở không, echo có hồi đáp không — đều không phát hiện được. Thứ duy nhất kết luận được là **gửi một gói thật xuyên tunnel và đợi trả lời** (ping trong tunnel, hoặc một câu hỏi DNS tới máy chủ DNS mà VPN cấp). Dấu vân tay trên log ProxyDivert: `Could not resolve '<tên>' inside the VPN tunnel` lặp lại đúng 30 giây một lần (3 máy chủ DNS × 2 lượt × 5 giây timeout), trong khi không có một dòng `link lost` hay đổi trạng thái nào của driver.
+
+## RST (TCP reset)
+
+Gói TCP có cờ `RST`: một đầu báo **huỷ ngang** kết nối, không qua bắt tay đóng FIN bình thường. Dữ liệu đang truyền dở bị bỏ. Trong log `ipstack` của tunnel VPN, dòng `closed in Established ... error=connection reset by peer` nghĩa là phía server (hoặc thiết bị nào đó trên đường đi phía bên kia tunnel) gửi RST khi kết nối vẫn đang dùng. Nếu kết nối đó đang chở file JS/CSS thì trình duyệt nhận file cụt, thường thấy là trang trắng dù HTML vẫn về đủ.

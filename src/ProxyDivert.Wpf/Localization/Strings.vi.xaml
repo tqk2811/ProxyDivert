@@ -155,7 +155,14 @@ Lợi: không cần phiên trace riêng nên chạy được cả khi ETW không
 Hại: thêm một dịch vụ và một chặng COM nên trễ hơn, và sự kiện của một watcher được giao lần lượt từng cái — một chương trình mở ba chục tiến trình cùng lúc sẽ bị dồn hàng, các tiến trình con sau bị chuyển hướng muộn hơn.</sys:String>
     <sys:String x:Key="Str.Settings.AutoSaveLog">Tự động lưu log ra file</sys:String>
     <sys:String x:Key="Str.Settings.AutoSaveLogHint">Mỗi lần chạy ghi ra một file riêng Logs\yyyyMMdd-HHmmss.log cạnh chương trình, bắt đầu ngay khi tích ô này.</sys:String>
-    <sys:String x:Key="Str.Settings.LogPath">File nhật ký chi tiết</sys:String>
+    <sys:String x:Key="Str.Settings.FileLogLevel">Mức ghi ra file</sys:String>
+    <sys:String x:Key="Str.Settings.OpenLogFolder">Mở thư mục</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Trace">Trace (từng gói tin)</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Debug">Debug</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Information">Information</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Warning">Warning</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Error">Error</sys:String>
+    <sys:String x:Key="Enum.LogLevel.Critical">Critical</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Giao diện</sys:String>
     <sys:String x:Key="Str.Settings.Language">Ngôn ngữ</sys:String>
     <sys:String x:Key="Str.Settings.Theme">Chủ đề</sys:String>
