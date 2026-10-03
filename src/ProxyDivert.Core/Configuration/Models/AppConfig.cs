@@ -286,7 +286,7 @@ public sealed class AppConfig
             outbound.PreSharedKey = null;
             outbound.VpnProtocol = VpnProtocol.Auto;
             outbound.IsEnabled = true;
-            if (outbound.Id == Outbound.BlockId) outbound.AntiDpi = false;
+            if (outbound.Id == Outbound.BlockId) outbound.AntiDpiTls = outbound.AntiDpiConnect = false;
         }
 
         // The engine puts them back for itself when they are missing, so their absence never broke

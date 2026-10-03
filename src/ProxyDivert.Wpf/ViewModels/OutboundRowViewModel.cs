@@ -99,6 +99,7 @@ public sealed partial class OutboundRowViewModel : ObservableObject
             OnPropertyChanged(nameof(IsVpn));
             OnPropertyChanged(nameof(CanHoldTunnel));
             OnPropertyChanged(nameof(SupportsAntiDpi));
+            OnPropertyChanged(nameof(SupportsAntiDpiConnect));
             AddressChanged();
             PrivateKeyChanged();
         }
@@ -165,10 +166,19 @@ public sealed partial class OutboundRowViewModel : ObservableObject
     /// </summary>
     public bool SupportsAntiDpi => Model.SupportsAntiDpi;
 
-    public bool AntiDpi
+    /// <summary>The CONNECT switch is live on the proxies only: Direct sends no CONNECT.</summary>
+    public bool SupportsAntiDpiConnect => Model.SupportsAntiDpiConnect;
+
+    public bool AntiDpiTls
     {
-        get => Model.AntiDpi;
-        set => WriteAntiDpi(Model.AntiDpi, value, v => Model.AntiDpi = v);
+        get => Model.AntiDpiTls;
+        set => WriteAntiDpi(SupportsAntiDpi, Model.AntiDpiTls, value, v => Model.AntiDpiTls = v);
+    }
+
+    public bool AntiDpiConnect
+    {
+        get => Model.AntiDpiConnect;
+        set => WriteAntiDpi(SupportsAntiDpiConnect, Model.AntiDpiConnect, value, v => Model.AntiDpiConnect = v);
     }
 
     // Below 1 would mean "off" to the library, which is the check box's job; such a value is
@@ -179,13 +189,13 @@ public sealed partial class OutboundRowViewModel : ObservableObject
         set
         {
             if (value < 1) { OnPropertyChanged(); return; }
-            WriteAntiDpi(Model.AntiDpiChunkSize, value, v => Model.AntiDpiChunkSize = v);
+            WriteAntiDpi(SupportsAntiDpi, Model.AntiDpiChunkSize, value, v => Model.AntiDpiChunkSize = v);
         }
     }
 
-    private bool WriteAntiDpi<T>(T current, T value, Action<T> apply, [CallerMemberName] string? property = null)
+    private bool WriteAntiDpi<T>(bool supported, T current, T value, Action<T> apply, [CallerMemberName] string? property = null)
     {
-        if (!SupportsAntiDpi || EqualityComparer<T>.Default.Equals(current, value))
+        if (!supported || EqualityComparer<T>.Default.Equals(current, value))
         {
             OnPropertyChanged(property);
             return false;

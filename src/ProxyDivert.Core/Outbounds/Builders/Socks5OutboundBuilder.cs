@@ -22,8 +22,8 @@ public sealed class Socks5OutboundBuilder : IOutboundSourceBuilder
         Socks5ProxySource source = OutboundUrl.HasCredential(outbound)
             ? new Socks5ProxySource(endPoint, new ProxyCredential(outbound.Username!, outbound.Password!), context.LoggerFactory)
             : new Socks5ProxySource(endPoint, context.LoggerFactory);
-        source.ConnectRequestChunkSize = outbound.EffectiveAntiDpiChunkSize;
-        source.TlsHandshakeChunkSize = outbound.EffectiveAntiDpiChunkSize;
+        source.ConnectRequestChunkSize = outbound.EffectiveConnectChunkSize;
+        source.TlsHandshakeChunkSize = outbound.EffectiveTlsChunkSize;
 
         // No IPv6 switch handed over: the destination goes to the upstream as a name and the
         // upstream resolves it. See HttpProxyOutboundBuilder for the same reasoning at length.

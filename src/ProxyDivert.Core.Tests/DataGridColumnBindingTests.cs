@@ -119,6 +119,8 @@ public class DataGridColumnBindingTests
         bool proxyAcceptedEdit = false;
         bool builtInAntiDpiLive = false;
         bool vpnAntiDpiLive = true;
+        bool builtInConnectLive = true;
+        bool proxyConnectLive = false;
         bool builtInChunkAccepted = false;
         bool vpnChunkAccepted = true;
 
@@ -165,7 +167,9 @@ public class DataGridColumnBindingTests
             DataGridColumn enabled = grid.Columns.OfType<DataGridCheckBoxColumn>()
                 .Single(c => (c.Binding as System.Windows.Data.Binding)?.Path.Path == "IsEnabled");
             DataGridColumn antiDpi = grid.Columns.OfType<DataGridCheckBoxColumn>()
-                .Single(c => (c.Binding as System.Windows.Data.Binding)?.Path.Path == "AntiDpi");
+                .Single(c => (c.Binding as System.Windows.Data.Binding)?.Path.Path == "AntiDpiTls");
+            DataGridColumn antiDpiConnect = grid.Columns.OfType<DataGridCheckBoxColumn>()
+                .Single(c => (c.Binding as System.Windows.Data.Binding)?.Path.Path == "AntiDpiConnect");
             DataGridColumn antiDpiChunk = grid.Columns.OfType<DataGridTextColumn>()
                 .Single(c => (c.Binding as System.Windows.Data.Binding)?.Path.Path == "AntiDpiChunkSize");
 
@@ -190,6 +194,8 @@ public class DataGridColumnBindingTests
             proxyAcceptedEdit = TryEdit(grid, proxy, url);
             builtInAntiDpiLive = FindVisuals<CheckBox>(CellFor(grid, direct, antiDpi)).Single().IsEnabled;
             vpnAntiDpiLive = FindVisuals<CheckBox>(CellFor(grid, vpn, antiDpi)).Single().IsEnabled;
+            builtInConnectLive = FindVisuals<CheckBox>(CellFor(grid, direct, antiDpiConnect)).Single().IsEnabled;
+            proxyConnectLive = FindVisuals<CheckBox>(CellFor(grid, proxy, antiDpiConnect)).Single().IsEnabled;
             builtInChunkAccepted = TryEdit(grid, direct, antiDpiChunk);
             vpnChunkAccepted = TryEdit(grid, vpn, antiDpiChunk);
 
@@ -210,6 +216,8 @@ public class DataGridColumnBindingTests
         Assert.True(proxyAcceptedEdit, "No row can be edited at all — the refusal is not limited to the built-ins.");
         Assert.True(builtInAntiDpiLive, "Direct cannot turn anti-DPI on, though it is the row where it matters most.");
         Assert.False(vpnAntiDpiLive, "A VPN row offers anti-DPI, which its encrypted tunnel makes meaningless.");
+        Assert.False(builtInConnectLive, "Direct offers a CONNECT switch, though it sends no CONNECT.");
+        Assert.True(proxyConnectLive, "A proxy row cannot turn the CONNECT switch on.");
         Assert.True(builtInChunkAccepted, "Direct refuses an edit of its anti-DPI byte count.");
         Assert.False(vpnChunkAccepted, "A VPN row accepts an anti-DPI byte count.");
     }

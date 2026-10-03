@@ -10,12 +10,16 @@ using Xunit;
 
 namespace ProxyDivert.Core.Tests;
 
-// The anti-DPI switch: which outbounds take it, what their sources are given, and when a change
-// has to rebuild the instance.
+// The two anti-DPI switches — TLS (the ClientHello's SNI) and CONNECT (the name sent to a proxy):
+// which outbounds take each, what their sources are given, and when a change rebuilds the instance.
 public class AntiDpiOutboundTests
 {
-    private static Outbound Make(OutboundKind kind, string? url, bool antiDpi, int chunk = Outbound.DefaultAntiDpiChunkSize)
-        => new Outbound { Id = Guid.NewGuid(), Name = "x", Kind = kind, Url = url, AntiDpi = antiDpi, AntiDpiChunkSize = chunk };
+    private static Outbound Make(OutboundKind kind, string? url, bool tls, bool connect = false, int chunk = Outbound.DefaultAntiDpiChunkSize)
+        => new Outbound
+        {
+            Id = Guid.NewGuid(), Name = "x", Kind = kind, Url = url,
+            AntiDpiTls = tls, AntiDpiConnect = connect, AntiDpiChunkSize = chunk,
+        };
 
     private static IOutboundInstance Build(IOutboundSourceBuilder builder, Outbound outbound)
         => builder.Build(outbound, new OutboundBuildContext { Signature = OutboundSignature.Of(outbound) });
@@ -25,73 +29,88 @@ public class AntiDpiOutboundTests
     {
         Outbound direct = Outbound.CreateDirect();
 
-        Assert.False(direct.AntiDpi);
+        Assert.False(direct.AntiDpiTls);
+        Assert.False(direct.AntiDpiConnect);
         Assert.Equal(2, direct.AntiDpiChunkSize);
-        Assert.Equal(0, direct.EffectiveAntiDpiChunkSize);
+        Assert.Equal((0, 0), (direct.EffectiveTlsChunkSize, direct.EffectiveConnectChunkSize));
     }
 
     [Theory]
     [InlineData(false, 0)]
     [InlineData(true, 2)]
-    public void Direct_HandsTheSizeToItsSource(bool antiDpi, int expected)
+    public void Direct_HandsTheTlsSizeToItsSource(bool tls, int expected)
     {
-        var source = (LocalProxySource)Build(new DirectOutboundBuilder(), Make(OutboundKind.Direct, null, antiDpi)).Source;
+        var source = (LocalProxySource)Build(new DirectOutboundBuilder(), Make(OutboundKind.Direct, null, tls, connect: true)).Source;
 
         Assert.Equal(expected, source.TlsHandshakeChunkSize);
     }
 
     [Fact]
-    public void Proxies_HandTheSizeToBothConnectAndTls()
+    public void Direct_HasNoConnectToSplit()
     {
-        var http = (HttpProxySource)Build(new HttpProxyOutboundBuilder(), Make(OutboundKind.HttpProxy, "http://127.0.0.1:8080", true, 3)).Source;
-        var socks5 = (Socks5ProxySource)Build(new Socks5OutboundBuilder(), Make(OutboundKind.Socks5, "socks5://127.0.0.1:1080", true, 3)).Source;
-        var socks4 = (Socks4ProxySource)Build(new Socks4OutboundBuilder(), Make(OutboundKind.Socks4, "socks4://127.0.0.1:1080", true, 3)).Source;
+        Assert.Equal(0, Make(OutboundKind.Direct, null, false, connect: true).EffectiveConnectChunkSize);
+    }
 
-        Assert.Equal((3, 3), (http.ConnectRequestChunkSize, http.TlsHandshakeChunkSize));
-        Assert.Equal((3, 3), (socks5.ConnectRequestChunkSize, socks5.TlsHandshakeChunkSize));
-        Assert.Equal((3, 3), (socks4.ConnectRequestChunkSize, socks4.TlsHandshakeChunkSize));
+    [Theory]
+    [InlineData(true, false, 3, 0)]
+    [InlineData(false, true, 0, 3)]
+    [InlineData(true, true, 3, 3)]
+    public void Proxies_TakeEachSwitchOnItsOwn(bool tls, bool connect, int expectedTls, int expectedConnect)
+    {
+        var http = (HttpProxySource)Build(new HttpProxyOutboundBuilder(), Make(OutboundKind.HttpProxy, "http://127.0.0.1:8080", tls, connect, 3)).Source;
+        var socks5 = (Socks5ProxySource)Build(new Socks5OutboundBuilder(), Make(OutboundKind.Socks5, "socks5://127.0.0.1:1080", tls, connect, 3)).Source;
+        var socks4 = (Socks4ProxySource)Build(new Socks4OutboundBuilder(), Make(OutboundKind.Socks4, "socks4://127.0.0.1:1080", tls, connect, 3)).Source;
+
+        Assert.Equal((expectedConnect, expectedTls), (http.ConnectRequestChunkSize, http.TlsHandshakeChunkSize));
+        Assert.Equal((expectedConnect, expectedTls), (socks5.ConnectRequestChunkSize, socks5.TlsHandshakeChunkSize));
+        Assert.Equal((expectedConnect, expectedTls), (socks4.ConnectRequestChunkSize, socks4.TlsHandshakeChunkSize));
     }
 
     [Fact]
     public void AHandEditedZero_StillLeavesTheSwitchOn()
     {
-        Assert.Equal(1, Make(OutboundKind.Direct, null, true, 0).EffectiveAntiDpiChunkSize);
+        Assert.Equal(1, Make(OutboundKind.Direct, null, true, chunk: 0).EffectiveTlsChunkSize);
     }
 
     [Theory]
     [InlineData(OutboundKind.Vpn)]
     [InlineData(OutboundKind.Ssh)]
     [InlineData(OutboundKind.Block)]
-    public void KindsWithNoNameOnTheWire_IgnoreTheSwitch(OutboundKind kind)
+    public void KindsWithNoNameOnTheWire_IgnoreBothSwitches(OutboundKind kind)
     {
-        Assert.Equal(0, Make(kind, null, true).EffectiveAntiDpiChunkSize);
+        Outbound outbound = Make(kind, null, true, true);
+
+        Assert.Equal((0, 0), (outbound.EffectiveTlsChunkSize, outbound.EffectiveConnectChunkSize));
     }
 
     [Fact]
-    public void Signature_ChangesWithTheSwitchAndTheSize()
+    public void Signature_ChangesWithEachSwitchAndTheSize()
     {
         Outbound outbound = Make(OutboundKind.Socks5, "socks5://127.0.0.1:1080", false);
         string off = OutboundSignature.Of(outbound);
 
-        outbound.AntiDpi = true;
-        string on = OutboundSignature.Of(outbound);
+        outbound.AntiDpiTls = true;
+        string tls = OutboundSignature.Of(outbound);
+        outbound.AntiDpiConnect = true;
+        string both = OutboundSignature.Of(outbound);
         outbound.AntiDpiChunkSize = 4;
         string four = OutboundSignature.Of(outbound);
 
-        Assert.NotEqual(off, on);
-        Assert.NotEqual(on, four);
+        Assert.Equal(4, new[] { off, tls, both, four }.Distinct().Count());
     }
 
     [Fact]
-    public void Normalize_KeepsItOnDirect_AndClearsItOnBlock()
+    public void Normalize_KeepsThemOnDirect_AndClearsThemOnBlock()
     {
         AppConfig config = AppConfig.CreateDefault();
-        foreach (Outbound outbound in config.Outbounds) outbound.AntiDpi = true;
+        foreach (Outbound outbound in config.Outbounds) outbound.AntiDpiTls = outbound.AntiDpiConnect = true;
 
         config.Normalize();
 
-        Assert.True(config.Outbounds.Find(o => o.Id == Outbound.DirectId)!.AntiDpi);
-        Assert.False(config.Outbounds.Find(o => o.Id == Outbound.BlockId)!.AntiDpi);
+        Outbound direct = config.Outbounds.Find(o => o.Id == Outbound.DirectId)!;
+        Outbound block = config.Outbounds.Find(o => o.Id == Outbound.BlockId)!;
+        Assert.True(direct.AntiDpiTls);
+        Assert.False(block.AntiDpiTls || block.AntiDpiConnect);
     }
 
     [Fact]
@@ -107,29 +126,33 @@ public class AntiDpiOutboundTests
     }
 
     [Fact]
-    public void BuiltInDirectRow_TakesTheSwitch_ThoughNothingElse()
+    public void BuiltInDirectRow_TakesTheTlsSwitch_ButNotConnectNorAnythingElse()
     {
         var row = new OutboundRowViewModel(Outbound.CreateDirect());
 
-        row.AntiDpi = true;
+        row.AntiDpiTls = true;
+        row.AntiDpiConnect = true;
         row.AntiDpiChunkSize = 5;
-        row.Name = "renamed is fine";
         row.Url = "http://not.allowed:1";
 
-        Assert.True(row.Model.AntiDpi);
+        Assert.True(row.Model.AntiDpiTls);
+        Assert.False(row.Model.AntiDpiConnect);
         Assert.Equal(5, row.Model.AntiDpiChunkSize);
         Assert.Null(row.Model.Url);
     }
 
     [Fact]
-    public void VpnRow_RefusesTheSwitch_AndAnyRowRefusesASizeBelowOne()
+    public void VpnRow_RefusesBoth_AndAnyRowRefusesASizeBelowOne()
     {
         var vpn = new OutboundRowViewModel(Make(OutboundKind.Vpn, "C:/none.conf", false));
-        vpn.AntiDpi = true;
-        Assert.False(vpn.Model.AntiDpi);
+        vpn.AntiDpiTls = true;
+        vpn.AntiDpiConnect = true;
+        Assert.False(vpn.Model.AntiDpiTls || vpn.Model.AntiDpiConnect);
 
         var proxy = new OutboundRowViewModel(Make(OutboundKind.Socks5, "socks5://127.0.0.1:1080", true));
+        proxy.AntiDpiConnect = true;
         proxy.AntiDpiChunkSize = 0;
+        Assert.True(proxy.Model.AntiDpiConnect);
         Assert.Equal(2, proxy.Model.AntiDpiChunkSize);
     }
 }

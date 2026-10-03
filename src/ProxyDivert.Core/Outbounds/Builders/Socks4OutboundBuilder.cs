@@ -23,8 +23,8 @@ public sealed class Socks4OutboundBuilder : IOutboundSourceBuilder
         var source = new Socks4ProxySource(OutboundUrl.ResolveEndPoint(uri), outbound.Username, context.LoggerFactory)
         {
             IsUseSocks4A = isSocks4a,
-            ConnectRequestChunkSize = outbound.EffectiveAntiDpiChunkSize,
-            TlsHandshakeChunkSize = outbound.EffectiveAntiDpiChunkSize,
+            ConnectRequestChunkSize = outbound.EffectiveConnectChunkSize,
+            TlsHandshakeChunkSize = outbound.EffectiveTlsChunkSize,
         };
         return new OutboundInstance(outbound.Id, context.Signature, source);
     }

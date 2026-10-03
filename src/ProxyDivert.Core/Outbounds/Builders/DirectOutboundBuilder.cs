@@ -16,7 +16,7 @@ public sealed class DirectOutboundBuilder : IOutboundSourceBuilder
 
     public IOutboundInstance Build(Outbound outbound, OutboundBuildContext context)
     {
-        var source = new LocalProxySource { TlsHandshakeChunkSize = outbound.EffectiveAntiDpiChunkSize };
+        var source = new LocalProxySource { TlsHandshakeChunkSize = outbound.EffectiveTlsChunkSize };
         return new OutboundInstance(
             outbound.Id, context.Signature, source,
             setIpv6Support: supported => source.AllowIpv6 = supported);

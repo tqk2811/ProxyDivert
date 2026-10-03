@@ -35,7 +35,8 @@ public static class OutboundSignature
           .Append(outbound.Password).Append('|')
           .Append(outbound.IsEnabled ? '1' : '0').Append('|')
           .Append((int)outbound.Ipv6Support).Append('|')
-          .Append(outbound.EffectiveAntiDpiChunkSize);
+          .Append(outbound.EffectiveTlsChunkSize).Append('|')
+          .Append(outbound.EffectiveConnectChunkSize);
 
         // A VPN's real settings often live in the file the outbound merely points at, so the path
         // alone would not notice the user editing it. Stamping the file makes "I changed my

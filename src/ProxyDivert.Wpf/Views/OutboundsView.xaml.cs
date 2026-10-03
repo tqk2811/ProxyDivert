@@ -20,7 +20,10 @@ public partial class OutboundsView : UserControl
         if (e.Row.Item is not OutboundRowViewModel row) return;
         // The anti-DPI cells follow their own rule: live on Direct (built-in or not) and the plain
         // proxies, dead everywhere else.
-        if (ColumnLayoutBehavior.GetColumnKey(e.Column) is "antiDpi" or "antiDpiChunk")
+        string? key = ColumnLayoutBehavior.GetColumnKey(e.Column);
+        if (key is "antiDpiConnect")
+            e.Cancel = !row.SupportsAntiDpiConnect;
+        else if (key is "antiDpi" or "antiDpiChunk")
             e.Cancel = !row.SupportsAntiDpi;
         else if (!row.IsEditable)
             e.Cancel = true;
