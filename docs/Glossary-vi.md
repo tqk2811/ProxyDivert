@@ -623,3 +623,11 @@ Hệ quả: mọi thứ đo *đường truyền* — socket còn mở không, ec
 ## RST (TCP reset)
 
 Gói TCP có cờ `RST`: một đầu báo **huỷ ngang** kết nối, không qua bắt tay đóng FIN bình thường. Dữ liệu đang truyền dở bị bỏ. Trong log `ipstack` của tunnel VPN, dòng `closed in Established ... error=connection reset by peer` nghĩa là phía server (hoặc thiết bị nào đó trên đường đi phía bên kia tunnel) gửi RST khi kết nối vẫn đang dùng. Nếu kết nối đó đang chở file JS/CSS thì trình duyệt nhận file cụt, thường thấy là trang trắng dù HTML vẫn về đủ.
+
+## DPI (Deep Packet Inspection)
+
+Thiết bị trên đường truyền (của nhà mạng hoặc tường lửa) đọc **nội dung** gói tin, không chỉ địa chỉ, để chặn hay bóp băng thông theo trang web. Với HTTPS nó thường đọc tên miền trong SNI của ClientHello. Với proxy không mã hoá, nó đọc tên miền trong lệnh CONNECT. GoodbyeDPI và cờ Anti-DPI của ProxyDivert lách bằng cách gửi phần tên miền thành nhiều mẩu nhỏ, để thiết bị chỉ soi từng gói hoặc từng record không thấy được trọn tên.
+
+## TLS record
+
+Đơn vị đóng gói của TLS: 5 byte đầu (loại nội dung, phiên bản, độ dài) rồi tới phần thân, tối đa khoảng 16 KB. Một thông điệp handshake như ClientHello **được phép cắt ra nhiều record** (RFC 8446 §5.1), và server phải ráp lại. Cờ Anti-DPI dựa vào điều này: cắt ClientHello thành record ngay quanh tên miền trong SNI.
