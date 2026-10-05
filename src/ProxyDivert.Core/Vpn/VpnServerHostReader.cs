@@ -36,11 +36,18 @@ public static class VpnServerHostReader
                 if (address.Path!.EndsWith(".vpn", StringComparison.OrdinalIgnoreCase))
                 {
                     string? host = VpnProfileReader.Read(outbound).Host;
-                    if (!string.IsNullOrWhiteSpace(host)) hosts.Add(host!);
+                    if (!string.IsNullOrWhiteSpace(host))
+                    {
+                        hosts.Add(host!);
+                        logger.LogDebug("VPN outbound {Outbound}: server {Host} read from {Path}", outbound.Name, host, address.Path);
+                    }
                 }
                 else
                 {
+                    int before = hosts.Count;
                     hosts.AddRange(ParseConfigHosts(File.ReadAllLines(address.Path)));
+                    logger.LogDebug("VPN outbound {Outbound}: {Count} server name(s) read from {Path}",
+                        outbound.Name, hosts.Count - before, address.Path);
                 }
             }
             catch (Exception ex)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -52,6 +53,7 @@ internal sealed class OutboundDnsResolverPool : IDisposable
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly List<List<Lazy<IDnsResolver>>> _retiredLists = new();
+    private readonly ConcurrentDictionary<Guid, DohHealth> _health = new();
     private int _disposed;
 
     /// <param name="endpoint">The DoH server every resolver of this pool asks.</param>
@@ -68,8 +70,11 @@ internal sealed class OutboundDnsResolverPool : IDisposable
         // TLS, all before its HttpClient timeout (NormalTimeout) starts counting down to failure.
         _retireDelay = NormalTimeout + TimeSpan.FromSeconds(2);
         ILogger<DohResolver> resolverLogger = loggerFactory.CreateLogger<DohResolver>();
-        _create = (outbound, timeout) => new DohResolver(
-            resolverLogger, CreateHandler(outbound, outbounds), disposeHandler: true, endpoint, timeout);
+        _create = (outbound, timeout) => new MonitoredDnsResolver(
+            new DohResolver(
+                resolverLogger, CreateHandler(outbound, outbounds, _logger), disposeHandler: true, endpoint, timeout,
+                logFailuresAsWarning: false),
+            _health.GetOrAdd(outbound.Id, _ => new DohHealth(outbound.Name, _logger)));
     }
 
     /// <summary>For tests: what a resolver is, and how long a retired one lives on.</summary>
@@ -96,7 +101,13 @@ internal sealed class OutboundDnsResolverPool : IDisposable
         Lazy<IDnsResolver> lazy = _resolvers.GetOrAdd(
             (outbound.Id, shortTimeout),
             _ => new Lazy<IDnsResolver>(
-                () => _create(outbound, shortTimeout ? ShortTimeout : NormalTimeout),
+                () =>
+                {
+                    if (_logger.IsEnabled(LogLevel.Debug))
+                        _logger.LogDebug("DoH resolver created for {Outbound} ({Timeout} timeout)",
+                            outbound.Name, shortTimeout ? "short" : "normal");
+                    return _create(outbound, shortTimeout ? ShortTimeout : NormalTimeout);
+                },
                 LazyThreadSafetyMode.ExecutionAndPublication));
         IDnsResolver resolver = lazy.Value;
 
@@ -116,12 +127,18 @@ internal sealed class OutboundDnsResolverPool : IDisposable
     public void Invalidate(Guid outboundId)
     {
         var retired = new List<Lazy<IDnsResolver>>(2);
+        // A fresh instance starts with a clean bill of health.
+        _health.TryRemove(outboundId, out _);
         foreach (bool kind in new[] { false, true })
         {
             if (_resolvers.TryRemove((outboundId, kind), out Lazy<IDnsResolver>? lazy))
                 retired.Add(lazy);
         }
-        if (retired.Count > 0) Retire(retired);
+        if (retired.Count > 0)
+        {
+            _logger.LogInformation("outbound {OutboundId} dropped: its {Count} DoH resolver(s) retired", outboundId, retired.Count);
+            Retire(retired);
+        }
     }
 
     /// <summary>
@@ -206,16 +223,20 @@ internal sealed class OutboundDnsResolverPool : IDisposable
     // Direct goes out of the machine's own stack. Anything else dials the DoH server's TCP
     // connection through the outbound, waiting for a supervised tunnel the way a redirected
     // connection does.
-    private static HttpMessageHandler CreateHandler(Outbound outbound, OutboundRegistry outbounds)
+    private static HttpMessageHandler CreateHandler(Outbound outbound, OutboundRegistry outbounds, ILogger logger)
     {
         var handler = new SocketsHttpHandler { PooledConnectionLifetime = PooledConnectionLifetime };
         if (outbound.IsDirect) return handler;
 
         handler.ConnectCallback = async (context, ct) =>
         {
+            long startedAt = Stopwatch.GetTimestamp();
             IOutboundInstance instance = await outbounds.GetReadyAsync(outbound, onWaiting: null, ct).ConfigureAwait(false);
+            if (logger.IsEnabled(LogLevel.Debug))
+                logger.LogDebug("DoH via {Outbound}: outbound ready after {Ms} ms",
+                    outbound.Name, (Stopwatch.GetTimestamp() - startedAt) * 1000.0 / Stopwatch.Frequency);
             return await ConnectSourceStream.OpenAsync(
-                instance.Source, context.DnsEndPoint.Host, context.DnsEndPoint.Port, ct).ConfigureAwait(false);
+                instance.Source, context.DnsEndPoint.Host, context.DnsEndPoint.Port, ct, logger).ConfigureAwait(false);
         };
         return handler;
     }

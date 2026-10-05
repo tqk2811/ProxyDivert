@@ -1,7 +1,9 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Diagnostics;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using TqkLibrary.Proxy.Interfaces;
 
 namespace ProxyDivert.Core.Engine;
@@ -31,20 +33,27 @@ internal sealed class ConnectSourceStream : Stream
     /// and returns its stream. On failure the half-opened tunnel is closed before the exception
     /// leaves.
     /// </summary>
-    public static async Task<Stream> OpenAsync(IProxySource source, string host, int port, CancellationToken ct)
+    public static async Task<Stream> OpenAsync(IProxySource source, string host, int port, CancellationToken ct, ILogger? logger = null)
     {
         if (source is null) throw new ArgumentNullException(nameof(source));
 
+        long startedAt = Stopwatch.GetTimestamp();
         IConnectSource connectSource = await source.GetConnectSourceAsync(Guid.NewGuid(), ct).ConfigureAwait(false);
         try
         {
             // UriBuilder brackets an IPv6 literal, which is what the proxy address parsers expect.
             await connectSource.ConnectAsync(new UriBuilder("tcp", host, port).Uri, ct).ConfigureAwait(false);
             Stream stream = await connectSource.GetStreamAsync(ct).ConfigureAwait(false);
+            if (logger is not null && logger.IsEnabled(LogLevel.Debug))
+                logger.LogDebug("connected to {Host}:{Port} through the outbound in {Ms} ms",
+                    host, port, (Stopwatch.GetTimestamp() - startedAt) * 1000.0 / Stopwatch.Frequency);
             return new ConnectSourceStream(stream, connectSource);
         }
-        catch
+        catch (Exception ex)
         {
+            if (logger is not null && logger.IsEnabled(LogLevel.Debug))
+                logger.LogDebug("connecting to {Host}:{Port} through the outbound failed after {Ms} ms: {Error}",
+                    host, port, (Stopwatch.GetTimestamp() - startedAt) * 1000.0 / Stopwatch.Frequency, ex.Message);
             try { connectSource.Dispose(); } catch { }
             throw;
         }

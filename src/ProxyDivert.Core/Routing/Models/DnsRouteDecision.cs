@@ -1,3 +1,5 @@
+using ProxyDivert.Core.Routing.Enums;
+
 namespace ProxyDivert.Core.Routing.Models;
 
 // The answer the resolver gives for one DNS query it takes over: resolve it over DNS over HTTPS
@@ -14,8 +16,12 @@ public sealed class DnsRouteDecision
     // nothing matching.
     public RoutingRule? MatchedRule { get; }
 
-    public DnsRouteDecision(Outbound outbound, RoutingPolicy policy, RoutingRule? matchedRule)
+    // Which half of the routing table took the query over; for logging.
+    public DnsQuerySide Side { get; }
+
+    public DnsRouteDecision(Outbound outbound, RoutingPolicy policy, RoutingRule? matchedRule, DnsQuerySide side = DnsQuerySide.Process)
     {
+        Side = side;
         Outbound = outbound;
         Policy = policy;
         MatchedRule = matchedRule;
@@ -24,6 +30,6 @@ public sealed class DnsRouteDecision
     public bool FallbackToPlainDns => Policy.SecureDnsFallbackToPlain;
 
     public override string ToString()
-        => $"{Outbound.Name} <- {Policy.Name}"
+        => $"{Outbound.Name} <- {Policy.Name} ({Side})"
            + (MatchedRule != null ? $": {MatchedRule.Matcher}:{MatchedRule.Pattern}" : ": no rule matched");
 }

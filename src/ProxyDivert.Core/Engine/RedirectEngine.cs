@@ -119,7 +119,16 @@ public sealed class RedirectEngine : IDisposable
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<RedirectEngine>();
         _secureDns = new SecureDnsQueryDecider(
-            route: (pid, name, isIpv6) => _run?.Resolver.ResolveDns(pid, name, isIpv6),
+            routeWithReason: (uint? pid, string name, bool isIpv6, out DnsPassReason reason) =>
+            {
+                EngineRun? run = _run;
+                if (run is null)
+                {
+                    reason = DnsPassReason.EngineStopped;
+                    return null;
+                }
+                return run.Resolver.ResolveDns(pid, name, isIpv6, out reason);
+            },
             // Re-reads _run on every call: the decider asks again when the pool it got was retired
             // in between. A null run is a stopped engine, and the query passes.
             resolverFor: (outbound, shortTimeout) => _run?.DnsResolvers.Get(outbound, shortTimeout),
@@ -187,11 +196,14 @@ public sealed class RedirectEngine : IDisposable
                 throw;
             }
 
-            int secureDnsPolicies = config.Policies.Count(x => x.SecureDnsProcess || x.SecureDnsSystem);
-            if (secureDnsPolicies > 0)
+            var secureDnsPolicies = config.Policies.Where(x => x.SecureDnsProcess || x.SecureDnsSystem).ToList();
+            if (secureDnsPolicies.Count > 0)
             {
                 _logger.LogInformation(
-                    "secure DNS ready, endpoint {Endpoint}; {Count} policies use it", run.DnsResolvers.Endpoint, secureDnsPolicies);
+                    "secure DNS ready, endpoint {Endpoint}; {Count} policies use it: {Policies}",
+                    run.DnsResolvers.Endpoint, secureDnsPolicies.Count,
+                    string.Join("; ", secureDnsPolicies.Select(x =>
+                        $"{x.Name} (process={x.SecureDnsProcess}, system={x.SecureDnsSystem}, fallback={x.SecureDnsFallbackToPlain})")));
             }
             _logger.LogInformation(
                 "engine started; relay tcp={Tcp} udp={Udp} tcpV6={TcpV6} udpV6={UdpV6}, ipv6={Ipv6Mode}",
@@ -299,8 +311,11 @@ public sealed class RedirectEngine : IDisposable
             Uri endpoint = ParseDohEndpoint(config.Dns.DohEndpoint);
             if (endpoint != run.DnsResolvers.Endpoint)
             {
+                Uri previous = run.DnsResolvers.Endpoint;
                 run.UseDnsResolvers(BuildDnsResolverPool(endpoint));
-                _logger.LogInformation("secure DNS now resolves over DoH at {Endpoint}", endpoint);
+                _logger.LogInformation(
+                    "secure DNS endpoint changed from {Previous} to {Endpoint}; resolver pool swapped, the old one retires after its queries finish",
+                    previous, endpoint);
             }
             run.Tracker.ApplyRules(config.ProcessRules);
 
@@ -487,12 +502,16 @@ public sealed class RedirectEngine : IDisposable
     // the next save. The process half is not in it — the resolver asks the tracker for that.
     private RoutingPolicyResolver BuildResolver(AppConfig config, IProcessPolicySource processes)
     {
+        // Reads the VPN profile files: here, on Start and Save, never on the packet path.
+        IReadOnlyCollection<string> vpnServerHosts = VpnServerHostReader.Read(config.Outbounds, _logger);
         var resolver = new RoutingPolicyResolver(
             CompiledRuleSet.Compile(config.Policies), config.Outbounds, processes,
             processRules: config.ProcessRules,
             dohEndpoint: config.Dns.DohEndpoint,
-            // Reads the VPN profile files: here, on Start and Save, never on the packet path.
-            extraDnsPassThroughHosts: VpnServerHostReader.Read(config.Outbounds, _logger));
+            extraDnsPassThroughHosts: vpnServerHosts);
+        if (_logger.IsEnabled(LogLevel.Debug))
+            _logger.LogDebug("routing table built; {Count} VPN server name(s) are kept out of secure DNS: {Hosts}",
+                vpnServerHosts.Count, string.Join(", ", vpnServerHosts));
 
         // A pattern nobody can parse matches nothing, on every connection, for as long as it stays
         // in the list — and inverted it claims everything instead. Compiling is the one moment

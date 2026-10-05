@@ -243,12 +243,28 @@ public sealed class RoutingPolicyResolver
     /// to the machine side: its filter has spoken.
     /// </remarks>
     public DnsRouteDecision? ResolveDns(uint? processId, string queryName, bool isIpv6 = false)
+        => ResolveDns(processId, queryName, isIpv6, out _);
+
+    /// <summary>
+    /// As above, and says why when the query is left alone (<paramref name="reason"/> is
+    /// <see cref="DnsPassReason.None"/> when it is taken over). For logging only.
+    /// </summary>
+    public DnsRouteDecision? ResolveDns(uint? processId, string queryName, bool isIpv6, out DnsPassReason reason)
     {
-        if (string.IsNullOrEmpty(queryName) || IsDnsPassThrough(queryName)) return null;
+        if (string.IsNullOrEmpty(queryName))
+        {
+            reason = DnsPassReason.InvalidName;
+            return null;
+        }
+        if (IsDnsPassThrough(queryName))
+        {
+            reason = DnsPassReason.PassThroughHost;
+            return null;
+        }
 
         return processId is uint pid && IsTracked(pid)
-            ? ResolveProcessDns(pid, queryName, isIpv6)
-            : ResolveSystemDns(queryName);
+            ? ResolveProcessDns(pid, queryName, isIpv6, out reason)
+            : ResolveSystemDns(queryName, out reason);
     }
 
     /// <summary>
@@ -258,15 +274,31 @@ public sealed class RoutingPolicyResolver
     /// policy turned it on. A Block outbound takes nothing over: there is no path to resolve on.
     /// </summary>
     public DnsRouteDecision? ResolveProcessDns(uint processId, string queryName, bool isIpv6 = false)
+        => ResolveProcessDns(processId, queryName, isIpv6, out _);
+
+    private DnsRouteDecision? ResolveProcessDns(uint processId, string queryName, bool isIpv6, out DnsPassReason reason)
     {
-        if (string.IsNullOrEmpty(queryName) || IsDnsPassThrough(queryName)) return null;
+        reason = DnsPassReason.InvalidName;
+        if (string.IsNullOrEmpty(queryName)) return null;
+        reason = DnsPassReason.PassThroughHost;
+        if (IsDnsPassThrough(queryName)) return null;
 
         var target = new RouteTarget(
             processId, isIpv6 ? IPAddress.IPv6Any : IPAddress.Any, 53, queryName, isUdp: true);
         RouteDecision decision = Resolve(target, GetCompiledPolicies(processId), applyAntiDpi: false);
 
-        if (!decision.Policy.SecureDnsProcess || decision.IsBlocked) return null;
-        return new DnsRouteDecision(decision.Outbound, decision.Policy, decision.MatchedRule);
+        if (!decision.Policy.SecureDnsProcess)
+        {
+            reason = DnsPassReason.ProcessPolicyDeclined;
+            return null;
+        }
+        if (decision.IsBlocked)
+        {
+            reason = DnsPassReason.ProcessBlocked;
+            return null;
+        }
+        reason = DnsPassReason.None;
+        return new DnsRouteDecision(decision.Outbound, decision.Policy, decision.MatchedRule, DnsQuerySide.Process);
     }
 
     /// <summary>
@@ -276,9 +308,17 @@ public sealed class RoutingPolicyResolver
     /// rule that claims the name decides. Nothing claiming it leaves it alone.
     /// </summary>
     public DnsRouteDecision? ResolveSystemDns(string queryName)
+        => ResolveSystemDns(queryName, out _);
+
+    private DnsRouteDecision? ResolveSystemDns(string queryName, out DnsPassReason reason)
     {
-        if (string.IsNullOrEmpty(queryName) || IsDnsPassThrough(queryName)) return null;
+        reason = DnsPassReason.InvalidName;
+        if (string.IsNullOrEmpty(queryName)) return null;
+        reason = DnsPassReason.PassThroughHost;
+        if (IsDnsPassThrough(queryName)) return null;
+        reason = DnsPassReason.NoSystemPolicy;
         if (_systemDnsPolicies.Count == 0) return null;
+        reason = DnsPassReason.NoMatchingPolicy;
 
         var target = new RouteTarget(0, IPAddress.Any, 53, queryName, isUdp: true);
         foreach (CompiledPolicy policy in _systemDnsPolicies)
@@ -290,8 +330,13 @@ public sealed class RoutingPolicyResolver
                 // Same as a connection: a policy whose way out is gone or switched off is passed
                 // over rather than resolving under its name some other way.
                 if (!TryGetUsableOutbound(policy.Source.OutboundId, out Outbound? outbound)) continue;
-                if (outbound!.IsBlocked) return null;
-                return new DnsRouteDecision(outbound, policy.Source, rule.Source);
+                if (outbound!.IsBlocked)
+                {
+                    reason = DnsPassReason.SystemBlocked;
+                    return null;
+                }
+                reason = DnsPassReason.None;
+                return new DnsRouteDecision(outbound, policy.Source, rule.Source, DnsQuerySide.System);
             }
         }
 

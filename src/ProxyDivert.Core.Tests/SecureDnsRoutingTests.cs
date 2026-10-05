@@ -342,4 +342,105 @@ public class SecureDnsRoutingTests
         Assert.False(resolver.IsDnsPassThrough("::1"));
         Assert.False(resolver.IsDnsPassThrough("example.com"));
     }
+
+    // ---- why a query is left alone -------------------------------------------------------------------
+
+    private static void AssertReason(DnsPassReason expected, RoutingPolicyResolver resolver, uint? pid, string name)
+    {
+        DnsRouteDecision? withOut = resolver.ResolveDns(pid, name, false, out DnsPassReason reason);
+        Assert.Equal(expected, reason);
+        Assert.Equal(expected == DnsPassReason.None, withOut is not null);
+
+        // The 3-argument overload is the same decision, only without the reason.
+        DnsRouteDecision? threeArg = resolver.ResolveDns(pid, name);
+        Assert.Equal(withOut is null, threeArg is null);
+        if (withOut is not null)
+        {
+            Assert.Same(withOut.Outbound, threeArg!.Outbound);
+            Assert.Same(withOut.Policy, threeArg.Policy);
+            Assert.Equal(withOut.Side, threeArg.Side);
+        }
+    }
+
+    [Fact]
+    public void Reason_None_when_taken_over_on_the_process_and_machine_side()
+    {
+        RoutingPolicy policy = Policy("p", ProxyAId, process: true, system: true, rules: Rule(HostMatcherType.DomainSuffix, "example.com"));
+        var resolver = new RoutingPolicyResolver(
+            new[] { policy },
+            new[] { Socks5(ProxyAId) },
+            new Dictionary<uint, IReadOnlyList<Guid>> { [Pid] = new[] { policy.Id } },
+            processRules: new[] { Filter(true, policy) });
+
+        AssertReason(DnsPassReason.None, resolver, Pid, "example.com");
+        AssertReason(DnsPassReason.None, resolver, null, "example.com");
+    }
+
+    [Fact]
+    public void Reason_InvalidName_for_an_empty_name_on_every_path()
+    {
+        RoutingPolicy policy = Policy("p", ProxyAId, process: true, system: true, rules: Rule(HostMatcherType.Any, ""));
+        var resolver = new RoutingPolicyResolver(
+            new[] { policy },
+            new[] { Socks5(ProxyAId) },
+            new Dictionary<uint, IReadOnlyList<Guid>> { [Pid] = new[] { policy.Id } },
+            processRules: new[] { Filter(true, policy) });
+
+        AssertReason(DnsPassReason.InvalidName, resolver, Pid, "");
+        AssertReason(DnsPassReason.InvalidName, resolver, null, "");
+    }
+
+    [Fact]
+    public void Reason_PassThroughHost_for_an_outbound_server_name()
+    {
+        RoutingPolicy policy = Policy("p", ProxyAId, process: true, rules: Rule(HostMatcherType.Any, ""));
+        var resolver = new RoutingPolicyResolver(
+            new[] { policy },
+            new[] { Socks5(ProxyAId, "socks5://proxy.example.net:1080") },
+            new Dictionary<uint, IReadOnlyList<Guid>> { [Pid] = new[] { policy.Id } });
+
+        AssertReason(DnsPassReason.PassThroughHost, resolver, Pid, "proxy.example.net");
+    }
+
+    [Fact]
+    public void Reason_ProcessPolicyDeclined_when_the_claiming_policy_has_no_flag()
+    {
+        RoutingPolicy policy = Policy("p", ProxyAId, process: false, rules: Rule(HostMatcherType.Any, ""));
+
+        AssertReason(DnsPassReason.ProcessPolicyDeclined, ProcessResolver(policy), Pid, "example.com");
+    }
+
+    [Fact]
+    public void Reason_ProcessBlocked_when_the_claiming_policy_blocks()
+    {
+        RoutingPolicy policy = Policy("block", Outbound.BlockId, process: true, rules: Rule(HostMatcherType.Any, ""));
+
+        AssertReason(DnsPassReason.ProcessBlocked, ProcessResolver(policy), Pid, "example.com");
+    }
+
+    [Fact]
+    public void Reason_NoSystemPolicy_when_no_policy_turned_the_machine_side_on()
+    {
+        RoutingPolicy policy = Policy("p", ProxyAId, process: true, system: false, rules: Rule(HostMatcherType.Any, ""));
+
+        AssertReason(DnsPassReason.NoSystemPolicy, ProcessResolver(policy), UntrackedPid, "example.com");
+    }
+
+    [Fact]
+    public void Reason_NoMatchingPolicy_when_no_machine_side_rule_claims_the_name()
+    {
+        RoutingPolicy policy = Policy("p", ProxyAId, system: true, rules: Rule(HostMatcherType.DomainSuffix, "example.com"));
+        RoutingPolicyResolver resolver = SystemResolver(new[] { policy }, new[] { Filter(true, policy) });
+
+        AssertReason(DnsPassReason.NoMatchingPolicy, resolver, null, "other.org");
+    }
+
+    [Fact]
+    public void Reason_SystemBlocked_when_the_machine_side_policy_blocks()
+    {
+        RoutingPolicy policy = Policy("p", Outbound.BlockId, system: true, rules: Rule(HostMatcherType.DomainSuffix, "example.com"));
+        RoutingPolicyResolver resolver = SystemResolver(new[] { policy }, new[] { Filter(true, policy) });
+
+        AssertReason(DnsPassReason.SystemBlocked, resolver, null, "www.example.com");
+    }
 }

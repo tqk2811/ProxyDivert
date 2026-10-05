@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using TqkLibrary.WinDivert.SecureDns.Interfaces;
 using TqkLibrary.WinDivert.SecureDns.Models;
@@ -22,7 +23,7 @@ namespace ProxyDivert.Core.Engine;
 /// </remarks>
 internal sealed class SecureDnsQueryDecider
 {
-    private readonly Func<uint?, string, bool, DnsRouteDecision?> _route;
+    private readonly SecureDnsRouteFunc _route;
     private readonly Func<Outbound, bool, IDnsResolver?> _resolverFor;
     private readonly ILogger _logger;
 
@@ -36,38 +37,74 @@ internal sealed class SecureDnsQueryDecider
         Func<uint?, string, bool, DnsRouteDecision?> route,
         Func<Outbound, bool, IDnsResolver?> resolverFor,
         ILogger logger)
+        : this(Wrap(route), resolverFor, logger)
     {
-        _route = route ?? throw new ArgumentNullException(nameof(route));
+    }
+
+    /// <summary>As above, for a routing table that also says why it let a query through (for the log).</summary>
+    public SecureDnsQueryDecider(
+        SecureDnsRouteFunc routeWithReason,
+        Func<Outbound, bool, IDnsResolver?> resolverFor,
+        ILogger logger)
+    {
+        _route = routeWithReason ?? throw new ArgumentNullException(nameof(routeWithReason));
         _resolverFor = resolverFor ?? throw new ArgumentNullException(nameof(resolverFor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    private static SecureDnsRouteFunc Wrap(Func<uint?, string, bool, DnsRouteDecision?> route)
+    {
+        if (route is null) throw new ArgumentNullException(nameof(route));
+        return (uint? pid, string name, bool isIpv6, out DnsPassReason reason) =>
+        {
+            DnsRouteDecision? decision = route(pid, name, isIpv6);
+            reason = decision is null ? DnsPassReason.NoMatchingPolicy : DnsPassReason.None;
+            return decision;
+        };
     }
 
     public DnsQueryDecision Decide(in DnsQueryInfo query)
     {
         DnsRouteDecision? decision;
+        DnsPassReason reason;
         try
         {
-            decision = _route(query.ProcessId, query.QueryName, query.IsIpv6);
+            decision = _route(query.ProcessId, query.QueryName, query.IsIpv6, out reason);
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "dns pid={Pid} {Name}: routing threw, the query passes", query.ProcessId, query.QueryName);
+            _logger.LogDebug(ex, "dns pid={Pid} {Name}: pass ({Reason})", query.ProcessId, query.QueryName, DnsPassReason.RoutingError);
             return DnsQueryDecision.Pass;
         }
-        if (decision is null) return DnsQueryDecision.Pass;
+        if (decision is null)
+        {
+            // Per query on the pump thread: a Pass is the common case, so nothing is built unless asked.
+            if (_logger.IsEnabled(LogLevel.Debug))
+                _logger.LogDebug("dns pid={Pid} {Name} type={Type} -> pass ({Reason})",
+                    query.ProcessId, query.QueryName, query.QueryType, reason);
+            return DnsQueryDecision.Pass;
+        }
 
         try
         {
             // The fallback flag picks the short timeout too: a fallback that arrives after the stub
             // resolver has given up is no fallback at all.
             IDnsResolver? resolver = AcquireResolver(decision);
-            if (resolver is null) return DnsQueryDecision.Pass;
+            if (resolver is null)
+            {
+                if (_logger.IsEnabled(LogLevel.Debug))
+                    _logger.LogDebug("dns pid={Pid} {Name} type={Type} -> pass (engine not running)",
+                        query.ProcessId, query.QueryName, query.QueryType);
+                return DnsQueryDecision.Pass;
+            }
 
             if (_logger.IsEnabled(LogLevel.Debug))
             {
                 _logger.LogDebug(
-                    "dns pid={Pid} {Name} type={Type} -> DoH via {Decision}, fallback={Fallback}",
-                    query.ProcessId, query.QueryName, query.QueryType, decision, decision.FallbackToPlainDns);
+                    "dns pid={Pid} {Name} type={Type} -> DoH via {Outbound}, policy {Policy}, rule {Rule}, side={Side}, fallback={Fallback}",
+                    query.ProcessId, query.QueryName, query.QueryType, decision.Outbound.Name, decision.Policy.Name,
+                    decision.MatchedRule is null ? "(none)" : decision.MatchedRule.Matcher + ":" + decision.MatchedRule.Pattern,
+                    decision.Side, decision.FallbackToPlainDns);
             }
             return DnsQueryDecision.Resolve(resolver, decision.FallbackToPlainDns);
         }
