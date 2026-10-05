@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using ProxyDivert.Core.Routing.Compiled;
 using ProxyDivert.Core.Routing.Enums;
+using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Routing.Models;
 
 namespace ProxyDivert.Core.Routing;
@@ -83,8 +84,11 @@ public sealed class RoutingPolicyResolver
         _systemDnsPolicies = BuildSystemDnsPolicies(ruleSet, processRules);
         _dnsPassThroughHosts = BuildDnsPassThroughHosts(_outbounds.Values, dohEndpoint);
         // Every policy's own DoH server too: its name has to resolve before any query can go to it.
+        // Only a policy that uses secure DNS has a use for the server; the others keep their name
+        // out of the pass-through set like any other host.
         foreach (CompiledPolicy policy in ruleSet.Policies)
-            AddEndpointHost(_dnsPassThroughHosts, policy.Source.DohEndpoint);
+            if (policy.Source.SecureDnsProcess || policy.Source.SecureDnsSystem)
+                AddEndpointHost(_dnsPassThroughHosts, policy.Source.DohEndpoint);
         if (extraDnsPassThroughHosts != null)
             foreach (string host in extraDnsPassThroughHosts) AddHostName(_dnsPassThroughHosts, host);
     }
@@ -415,7 +419,7 @@ public sealed class RoutingPolicyResolver
 
     private static void AddEndpointHost(HashSet<string> hosts, string? dohEndpoint)
     {
-        if (Uri.TryCreate(dohEndpoint, UriKind.Absolute, out Uri? endpoint))
+        if (DohEndpointParser.TryParse(dohEndpoint, out Uri endpoint))
             AddHostName(hosts, endpoint.IdnHost);
     }
 

@@ -308,13 +308,19 @@ public sealed class RedirectEngine : IDisposable
             run.UseResolver(BuildResolver(config, run.Tracker));
 
             // A new DoH server means new resolvers; the old ones finish the queries they hold.
+            // A policy's own server counts too: the pool caches the resolvers (and the warn-once
+            // note about an unusable value) per endpoint, so editing only that has to replace it.
+            foreach (RoutingPolicy policy in config.Policies)
+                if (!string.IsNullOrWhiteSpace(policy.DohEndpoint) && !DohEndpointParser.TryParse(policy.DohEndpoint, out _))
+                    _logger.LogWarning("policy {Policy}: DoH endpoint is not an http(s) URL; using the default one", policy.Name);
             Uri endpoint = ParseDohEndpoint(config.Dns.DohEndpoint);
-            if (endpoint != run.DnsResolvers.Endpoint)
+            string signature = DohEndpointParser.Signature(endpoint, config.Policies);
+            if (signature != run.DnsResolvers.EndpointSignature)
             {
                 Uri previous = run.DnsResolvers.Endpoint;
-                run.UseDnsResolvers(BuildDnsResolverPool(endpoint));
+                run.UseDnsResolvers(BuildDnsResolverPool(endpoint, signature));
                 _logger.LogInformation(
-                    "secure DNS endpoint changed from {Previous} to {Endpoint}; resolver pool swapped, the old one retires after its queries finish",
+                    "secure DNS endpoints changed (default {Previous} -> {Endpoint}); resolver pool swapped, the old one retires after its queries finish",
                     previous, endpoint);
             }
             run.Tracker.ApplyRules(config.ProcessRules);
@@ -523,16 +529,19 @@ public sealed class RedirectEngine : IDisposable
     }
 
     private OutboundDnsResolverPool BuildDnsResolverPool(AppConfig config)
-        => BuildDnsResolverPool(ParseDohEndpoint(config.Dns.DohEndpoint));
+    {
+        Uri endpoint = ParseDohEndpoint(config.Dns.DohEndpoint);
+        return BuildDnsResolverPool(endpoint, DohEndpointParser.Signature(endpoint, config.Policies));
+    }
 
-    private OutboundDnsResolverPool BuildDnsResolverPool(Uri endpoint)
-        => new OutboundDnsResolverPool(endpoint, _outbounds, _loggerFactory);
+    private OutboundDnsResolverPool BuildDnsResolverPool(Uri endpoint, string signature)
+        => new OutboundDnsResolverPool(endpoint, _outbounds, _loggerFactory) { EndpointSignature = signature };
 
     // Settings validates the box, but a hand-edited file can say anything; a resolver with no
     // endpoint would fail every query it takes over.
     private Uri ParseDohEndpoint(string? raw)
     {
-        if (Uri.TryCreate(raw, UriKind.Absolute, out Uri? uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)) return uri;
+        if (DohEndpointParser.TryParse(raw, out Uri uri)) return uri;
         _logger.LogWarning("DoH endpoint {Endpoint} is not an http(s) URL; using {Default}", raw, DohResolver.DefaultEndpoint);
         return DohResolver.DefaultEndpoint;
     }

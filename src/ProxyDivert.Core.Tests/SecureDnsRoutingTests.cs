@@ -467,4 +467,36 @@ public class SecureDnsRoutingTests
         Assert.Null(resolver.ResolveDns(Pid, "dns.quad9.net"));
         Assert.NotNull(resolver.ResolveDns(Pid, "www.example.com"));
     }
+
+    // The pool only takes http(s); a name behind any other scheme must not be exempted from secure
+    // DNS, or it would leak to plain DNS for a server nobody will ever query.
+    [Fact]
+    public void Dns_pass_through_ignores_a_policy_endpoint_that_is_not_http()
+    {
+        RoutingPolicy a = Policy("a", ProxyAId, process: true, system: false, rules: Rule(HostMatcherType.Any, ""));
+        a.DohEndpoint = "ftp://bank.example/dns-query";
+        var resolver = new RoutingPolicyResolver(
+            new[] { a },
+            new[] { Socks5(ProxyAId, "socks5://proxy.example.net:1080") },
+            new Dictionary<uint, IReadOnlyList<Guid>> { [Pid] = new[] { a.Id } },
+            dohEndpoint: "https://global.example.org/dns-query");
+
+        Assert.False(resolver.IsDnsPassThrough("bank.example"));
+        Assert.NotNull(resolver.ResolveDns(Pid, "bank.example"));
+    }
+
+    [Fact]
+    public void Dns_pass_through_skips_the_endpoint_of_a_policy_without_secure_dns()
+    {
+        RoutingPolicy plain = Policy("plain", ProxyAId, process: false, system: false, rules: Rule(HostMatcherType.Any, ""));
+        plain.DohEndpoint = "https://dns.unused.example/dns-query";
+        var resolver = new RoutingPolicyResolver(
+            new[] { plain },
+            new[] { Socks5(ProxyAId, "socks5://proxy.example.net:1080") },
+            new Dictionary<uint, IReadOnlyList<Guid>> { [Pid] = new[] { plain.Id } },
+            dohEndpoint: "https://global.example.org/dns-query");
+
+        Assert.False(resolver.IsDnsPassThrough("dns.unused.example"));
+        Assert.True(resolver.IsDnsPassThrough("global.example.org"));
+    }
 }

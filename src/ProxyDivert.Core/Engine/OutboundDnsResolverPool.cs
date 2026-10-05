@@ -106,6 +106,12 @@ internal sealed class OutboundDnsResolverPool : IDisposable
     public Uri Endpoint { get; }
 
     /// <summary>
+    /// What <see cref="DohEndpointParser.Signature"/> said about the configuration this pool was
+    /// built for; the engine compares it on Save to know whether the pool is stale.
+    /// </summary>
+    public string EndpointSignature { get; set; } = string.Empty;
+
+    /// <summary>
     /// The DoH server a policy's queries go to: its own <paramref name="policyEndpoint"/> when that
     /// is an http(s) URL, otherwise <see cref="Endpoint"/>. A non-empty value that is not usable is
     /// logged once as a warning.
@@ -115,9 +121,7 @@ internal sealed class OutboundDnsResolverPool : IDisposable
         if (string.IsNullOrWhiteSpace(policyEndpoint)) return Endpoint;
         return _overrides.GetOrAdd(policyEndpoint!.Trim(), raw =>
         {
-            if (Uri.TryCreate(raw, UriKind.Absolute, out Uri? uri)
-                && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp))
-                return uri;
+            if (DohEndpointParser.TryParse(raw, out Uri uri)) return uri;
             _logger.LogWarning("policy DoH endpoint {Endpoint} is not an http(s) URL; using the default {Default}", raw, Endpoint);
             return Endpoint;
         });

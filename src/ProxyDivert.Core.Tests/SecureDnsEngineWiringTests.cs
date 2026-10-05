@@ -436,4 +436,43 @@ public class SecureDnsEngineWiringTests
         Assert.False(decider.Decide(new DnsQueryInfo(42, "example.com", 1, false)).IsPass);
         Assert.Equal("https://9.9.9.9/dns-query", asked!.Policy.DohEndpoint);
     }
+
+    // The engine swaps the pool on Save when this text changes (the old one is retired, which also
+    // empties the pool's warn-once cache), so it has to move for a policy-only edit and stay put
+    // for one that cannot change any query.
+    [Fact]
+    public void Endpoint_signature_changes_when_only_a_secure_dns_policys_endpoint_changes()
+    {
+        RoutingPolicy policy = new() { Id = Guid.NewGuid(), Name = "p", OutboundId = Outbound.DirectId, SecureDnsProcess = true };
+        string before = DohEndpointParser.Signature(Endpoint, new[] { policy });
+
+        policy.DohEndpoint = "https://9.9.9.9/dns-query";
+        string after = DohEndpointParser.Signature(Endpoint, new[] { policy });
+        Assert.NotEqual(before, after);
+
+        policy.DohEndpoint = "https://8.8.8.8/dns-query";
+        Assert.NotEqual(after, DohEndpointParser.Signature(Endpoint, new[] { policy }));
+    }
+
+    [Fact]
+    public void Endpoint_signature_ignores_policies_that_cannot_use_it_and_unusable_values()
+    {
+        RoutingPolicy off = new() { Id = Guid.NewGuid(), Name = "off", OutboundId = Outbound.DirectId, DohEndpoint = "https://9.9.9.9/dns-query" };
+        RoutingPolicy broken = new() { Id = Guid.NewGuid(), Name = "b", OutboundId = Outbound.DirectId, SecureDnsSystem = true, DohEndpoint = "ftp://9.9.9.9/x" };
+        RoutingPolicy empty = new() { Id = Guid.NewGuid(), Name = "e", OutboundId = Outbound.DirectId, SecureDnsSystem = true };
+
+        string baseline = DohEndpointParser.Signature(Endpoint, new[] { empty });
+        Assert.Equal(baseline, DohEndpointParser.Signature(Endpoint, new[] { off, broken, empty }));
+        Assert.NotEqual(baseline, DohEndpointParser.Signature(new Uri("https://8.8.8.8/dns-query"), new[] { empty }));
+    }
+
+    [Theory]
+    [InlineData("https://a.example/x", true)]
+    [InlineData("  http://a.example/x ", true)]
+    [InlineData("ftp://a.example/x", false)]
+    [InlineData("a.example/x", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void Endpoint_parser_accepts_only_http_and_https(string? text, bool expected)
+        => Assert.Equal(expected, DohEndpointParser.TryParse(text, out _));
 }
