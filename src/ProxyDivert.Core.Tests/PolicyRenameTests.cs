@@ -126,7 +126,7 @@ public class PolicyRenameTests
                 window.Show();
                 view.UpdateLayout();
 
-                PolicyRowViewModel first = model.Policies[0];
+                PolicyRowViewModel first = model.Policies[1];
                 model.BeginRename(first);
                 model.PolicyName = "Renamed";
                 model.CommitRename();
@@ -154,10 +154,10 @@ public class PolicyRenameTests
         });
 
         Assert.Contains("Renamed", namesOnScreen);
-        Assert.DoesNotContain("Default", namesOnScreen);
+        Assert.DoesNotContain(namesOnScreen, name => name.Contains("Policy"));
 
         // The other policy is untouched, so the redraw is not "rebuild everything and hope".
-        Assert.Contains(namesOnScreen, name => name.Contains("Policy"));
+        Assert.Contains("Default", namesOnScreen);
 
         Assert.Contains("Renamed", savedFile);
     }
@@ -186,6 +186,8 @@ public class PolicyRenameTests
             try
             {
                 var model = new ProxyDivert.Wpf.ViewModels.RulesViewModel(services);
+                // The built-in Default is fixed, so the rule goes into a policy of the user's own.
+                model.AddPolicyCommand.Execute(null);
                 model.AddRuleCommand.Execute(null);
 
                 var view = new ProxyDivert.Wpf.Views.RulesView { DataContext = model };
@@ -193,7 +195,7 @@ public class PolicyRenameTests
                 window.Show();
                 view.UpdateLayout();
 
-                PolicyRowViewModel policy = model.Policies[0];
+                PolicyRowViewModel policy = model.Policies[1];
                 object? rule = model.SelectedRule;
 
                 model.BeginRename(policy);

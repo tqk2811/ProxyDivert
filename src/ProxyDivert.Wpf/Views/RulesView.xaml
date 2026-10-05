@@ -167,6 +167,7 @@
 
                 <DataGrid ItemsSource="{Binding Rules}" SelectedItem="{Binding SelectedRule}"
                           b:ColumnLayoutBehavior.Layout="{Binding ColumnLayout}"
+                          IsEnabled="{Binding CanEditSelectedPolicy}"
                           AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}" b:ColumnLayoutBehavior.ColumnKey="enabled"

@@ -10,6 +10,35 @@ namespace ProxyDivert.Core.Routing.Models;
 // per-process routing possible.
 public sealed class RoutingPolicy
 {
+    /// <summary>
+    /// The built-in "Default" policy: always present, first in the Rules tab, one rule that matches
+    /// everything. Its name and rules are fixed; only how its traffic leaves is the user's. Where it
+    /// stands among a filter's policies is the filter's business, like any other policy.
+    /// </summary>
+    public static readonly Guid DefaultId = new Guid("6c1f0e8a-3b52-4d7e-9a41-0d5e2f7b8c01");
+
+    public static readonly Guid DefaultRuleId = new Guid("6c1f0e8a-3b52-4d7e-9a41-0d5e2f7b8c02");
+
+    public const string DefaultName = "Default";
+
+    [JsonIgnore]
+    public bool IsBuiltIn => Id == DefaultId;
+
+    public static RoutingPolicy CreateDefault() => new RoutingPolicy
+    {
+        Id = DefaultId,
+        Name = DefaultName,
+        OutboundId = Outbound.DirectId,
+        Rules = { CreateDefaultRule() },
+    };
+
+    public static RoutingRule CreateDefaultRule() => new RoutingRule
+    {
+        Id = DefaultRuleId,
+        Matcher = HostMatcherType.Any,
+        Pattern = string.Empty,
+    };
+
     public required Guid Id { get; set; }
 
     public required string Name { get; set; }

@@ -201,7 +201,8 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
     [RelayCommand]
     private void AddRule()
     {
-        RoutingPolicy? policy = Policies.FirstOrDefault();
+        // Not the built-in Default: it claims everything, which a new filter should not by default.
+        RoutingPolicy? policy = Policies.FirstOrDefault(p => !p.IsBuiltIn) ?? Policies.FirstOrDefault();
         if (policy is null) return;
 
         string pattern = SelectedProcess?.Name ?? "program.exe";

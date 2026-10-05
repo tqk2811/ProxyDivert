@@ -213,9 +213,11 @@ public class AppConfigIntegrityTests
 
         config.Normalize();
 
+        // The built-in Default: everything, Direct.
         RoutingPolicy policy = Assert.Single(config.Policies);
+        Assert.True(policy.IsBuiltIn);
         Assert.Equal(Outbound.DirectId, policy.OutboundId);
-        Assert.Empty(policy.Rules);
+        Assert.Equal(HostMatcherType.Any, Assert.Single(policy.Rules).Matcher);
     }
 
     // Two rows sharing an id is not a question routing can answer — asked for that policy it would
@@ -232,7 +234,7 @@ public class AppConfigIntegrityTests
 
         config.Normalize();
 
-        RoutingPolicy survivor = Assert.Single(config.Policies);
+        RoutingPolicy survivor = Assert.Single(config.Policies, p => !p.IsBuiltIn);
         Assert.Equal("second", survivor.Name);
     }
 
@@ -387,5 +389,85 @@ public class AppConfigIntegrityTests
         Assert.NotNull(hollow.Children);
         Assert.Empty(hollow.Children);
         Assert.True(ProxyDivert.Core.Processes.ProcessRuleMatcher.IsMatch(config.ProcessRules[0], "java", null));
+    }
+
+    // ==== the built-in Default policy ====
+
+    [Fact]
+    public void TheDefaultPolicy_CannotBeRemoved()
+    {
+        AppConfig config = AppConfig.CreateDefault();
+        config.Policies.Add(Policy("other"));
+
+        Assert.False(config.RemovePolicy(RoutingPolicy.DefaultId));
+        Assert.Contains(config.Policies, p => p.IsBuiltIn);
+    }
+
+    [Fact]
+    public void Normalize_PutsTheDefaultPolicyBackFirst_WithItsFixedNameAndRule_KeepingItsOutbound()
+    {
+        var config = new AppConfig { Outbounds = { Outbound.CreateDirect(), Outbound.CreateBlock() } };
+        config.Policies.Add(Policy("mine"));
+        RoutingPolicy edited = RoutingPolicy.CreateDefault();
+        edited.Name = "renamed";
+        edited.OutboundId = Outbound.BlockId;
+        edited.Rules.Add(new RoutingRule { Id = Guid.NewGuid(), Matcher = HostMatcherType.Port, Pattern = "80" });
+        config.Policies.Add(edited);
+
+        config.Normalize();
+
+        RoutingPolicy first = config.Policies[0];
+        Assert.True(first.IsBuiltIn);
+        Assert.Equal(RoutingPolicy.DefaultName, first.Name);
+        Assert.Equal(HostMatcherType.Any, Assert.Single(first.Rules).Matcher);
+        Assert.Equal(Outbound.BlockId, first.OutboundId);
+        Assert.Equal(2, config.Policies.Count);
+    }
+
+    [Fact]
+    public void Normalize_AddsTheDefaultPolicy_ToAFileThatHasNone()
+    {
+        var config = new AppConfig { Policies = { Policy("mine") } };
+
+        config.Normalize();
+
+        Assert.True(config.Policies[0].IsBuiltIn);
+        Assert.Equal("mine", config.Policies[1].Name);
+    }
+
+    [Fact]
+    public void TheDefaultPolicy_MatchesEveryConnection()
+    {
+        AppConfig config = AppConfig.CreateDefault();
+        Guid proxyId = Guid.NewGuid();
+        config.Outbounds.Add(Proxy(proxyId));
+        config.Policies[0].OutboundId = proxyId;
+
+        var resolver = new RoutingPolicyResolver(config.Policies, config.Outbounds,
+            new System.Collections.Generic.Dictionary<uint, System.Collections.Generic.IReadOnlyList<Guid>>
+            {
+                [42] = new[] { RoutingPolicy.DefaultId },
+            });
+
+        RouteDecision decision = resolver.Resolve(new RouteTarget(42, System.Net.IPAddress.Parse("1.2.3.4"), 8080, null));
+        Assert.Equal(proxyId, decision.Outbound.Id);
+    }
+
+    // Default claims everything, so a filter that lost its last policy must not fall back to it
+    // while the user has a policy of their own.
+    [Fact]
+    public void AFilterLosingItsLastPolicy_FallsBackToTheUsersPolicy_NotTheDefault()
+    {
+        AppConfig config = AppConfig.CreateDefault();
+        RoutingPolicy mine = Policy("mine");
+        RoutingPolicy doomed = Policy("doomed");
+        config.Policies.Add(mine);
+        config.Policies.Add(doomed);
+        var filter = new ProcessRule { Id = Guid.NewGuid(), Name = "x", PolicyIds = { doomed.Id } };
+        config.ProcessRules.Add(filter);
+
+        Assert.True(config.RemovePolicy(doomed.Id));
+
+        Assert.Equal(mine.Id, Assert.Single(filter.PolicyIds));
     }
 }

@@ -139,8 +139,20 @@ public sealed partial class RulesViewModel : ObservableObject
         if (SelectedPolicy != null) SelectedPolicy.PropertyChanged -= OnSelectedPolicyPropertyChanged;
     }
 
+    /// <summary>
+    /// False for the built-in Default policy: its name and rules are fixed, only the
+    /// outbound/UDP/QUIC/anti-DPI settings under the grid stay editable.
+    /// </summary>
+    public bool CanEditSelectedPolicy => SelectedPolicy?.Model.IsBuiltIn == false;
+
     partial void OnSelectedPolicyChanged(PolicyRowViewModel? value)
     {
+        OnPropertyChanged(nameof(CanEditSelectedPolicy));
+        RemovePolicyCommand.NotifyCanExecuteChanged();
+        AddRuleCommand.NotifyCanExecuteChanged();
+        RemoveRuleCommand.NotifyCanExecuteChanged();
+        MoveUpCommand.NotifyCanExecuteChanged();
+        MoveDownCommand.NotifyCanExecuteChanged();
         if (value != null) value.PropertyChanged += OnSelectedPolicyPropertyChanged;
         RaiseAntiDpiSupport();
 
@@ -163,7 +175,7 @@ public sealed partial class RulesViewModel : ObservableObject
     [RelayCommand]
     public void BeginRename(PolicyRowViewModel? policy)
     {
-        if (policy is null) return;
+        if (policy is null || policy.Model.IsBuiltIn) return;
 
         PolicyName = policy.Name;
         RenamingPolicy = policy;
@@ -180,6 +192,7 @@ public sealed partial class RulesViewModel : ObservableObject
         if (policy is null) return;
 
         RenamingPolicy = null;
+        if (policy.Model.IsBuiltIn) return;
 
         string name = (PolicyName ?? string.Empty).Trim();
         if (name.Length == 0 || name == policy.Name) return;
@@ -211,11 +224,11 @@ public sealed partial class RulesViewModel : ObservableObject
         SaveAndApply();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanEditSelectedPolicy))]
     private void RemovePolicy()
     {
         PolicyRowViewModel? policy = SelectedPolicy;
-        if (policy is null) return;
+        if (policy is null || policy.Model.IsBuiltIn) return;
 
         // The configuration takes the policy out of every filter that named it, and refuses when
         // this is the last one — a filter must always have somewhere to point, because catching
@@ -228,11 +241,11 @@ public sealed partial class RulesViewModel : ObservableObject
         SaveAndApply();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanEditSelectedPolicy))]
     private void AddRule()
     {
         PolicyRowViewModel? policy = SelectedPolicy;
-        if (policy is null) return;
+        if (policy is null || policy.Model.IsBuiltIn) return;
 
         var rule = new RoutingRule
         {
@@ -249,12 +262,12 @@ public sealed partial class RulesViewModel : ObservableObject
         SaveAndApply();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanEditSelectedPolicy))]
     private void RemoveRule()
     {
         PolicyRowViewModel? policy = SelectedPolicy;
         RuleRowViewModel? rule = SelectedRule;
-        if (policy is null || rule is null) return;
+        if (policy is null || rule is null || policy.Model.IsBuiltIn) return;
 
         policy.Model.Rules.Remove(rule.Model);
         Rules.Remove(rule);
@@ -262,16 +275,16 @@ public sealed partial class RulesViewModel : ObservableObject
         SaveAndApply();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanEditSelectedPolicy))]
     private void MoveUp() => Move(-1);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanEditSelectedPolicy))]
     private void MoveDown() => Move(+1);
 
     private void Move(int delta)
     {
         RuleRowViewModel? rule = SelectedRule;
-        if (rule is null) return;
+        if (rule is null || SelectedPolicy?.Model.IsBuiltIn != false) return;
 
         int index = Rules.IndexOf(rule);
         int target = index + delta;

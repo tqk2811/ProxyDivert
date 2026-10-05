@@ -217,6 +217,7 @@ Downside: an extra service and a COM hop add latency, and the events of one watc
     <sys:String x:Key="Enum.HostMatcherType.Regex">Regular expression</sys:String>
     <sys:String x:Key="Enum.HostMatcherType.IpCidr">IP / CIDR</sys:String>
     <sys:String x:Key="Enum.HostMatcherType.Port">Port</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Any">Any (everything)</sys:String>
     <sys:String x:Key="Enum.HostMatcherType.Protocol">Protocol (tcp/udp)</sys:String>
 
     <sys:String x:Key="Enum.ProcessMatcherType.ExeName">Executable name</sys:String>

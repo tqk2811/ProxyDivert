@@ -31,9 +31,15 @@ public static class HostPredicate
     /// <summary>A predicate that matches nothing. What an unusable pattern compiles to.</summary>
     public static IHostPredicate Never { get; } = new NeverPredicate();
 
+    /// <summary>A predicate that matches everything. What <see cref="HostMatcherType.Any"/> compiles to.</summary>
+    public static IHostPredicate Always { get; } = new AlwaysPredicate();
+
     public static IHostPredicate Compile(HostMatcherType matcher, string? pattern, out string? error)
     {
         error = null;
+        // Asks nothing of the target, so it needs no pattern either.
+        if (matcher == HostMatcherType.Any) return Always;
+
         if (string.IsNullOrWhiteSpace(pattern))
         {
             error = "the pattern is empty";
@@ -164,6 +170,11 @@ public static class HostPredicate
     private sealed class NeverPredicate : IHostPredicate
     {
         public bool IsMatch(RouteTarget target) => false;
+    }
+
+    private sealed class AlwaysPredicate : IHostPredicate
+    {
+        public bool IsMatch(RouteTarget target) => true;
     }
 
     private sealed class ProtocolPredicate : IHostPredicate

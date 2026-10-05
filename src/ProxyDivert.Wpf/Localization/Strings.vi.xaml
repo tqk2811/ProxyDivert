@@ -217,6 +217,7 @@ Hại: thêm một dịch vụ và một chặng COM nên trễ hơn, và sự k
     <sys:String x:Key="Enum.HostMatcherType.Regex">Biểu thức chính quy</sys:String>
     <sys:String x:Key="Enum.HostMatcherType.IpCidr">IP / CIDR</sys:String>
     <sys:String x:Key="Enum.HostMatcherType.Port">Cổng</sys:String>
+    <sys:String x:Key="Enum.HostMatcherType.Any">Mọi kết nối</sys:String>
     <sys:String x:Key="Enum.HostMatcherType.Protocol">Giao thức (tcp/udp)</sys:String>
 
     <sys:String x:Key="Enum.ProcessMatcherType.ExeName">Tên tệp chạy</sys:String>

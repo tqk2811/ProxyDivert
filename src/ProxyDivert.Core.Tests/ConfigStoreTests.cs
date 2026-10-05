@@ -61,8 +61,9 @@ public class ConfigStoreTests : IDisposable
     {
         var store = new ConfigStore(ConfigPath);
         AppConfig config = AppConfig.CreateDefault();
-        Guid policyId = config.Policies[0].Id;
-        config.Policies[0].Rules.Add(new RoutingRule
+        Guid policyId = Guid.NewGuid();
+        config.Policies.Add(new RoutingPolicy { Id = policyId, Name = "mine" });
+        config.Policies[1].Rules.Add(new RoutingRule
         {
             Id = Guid.NewGuid(),
             Matcher = HostMatcherType.Wildcard,
@@ -93,7 +94,7 @@ public class ConfigStoreTests : IDisposable
         store.Save(config);
         AppConfig loaded = new ConfigStore(ConfigPath).Load();
 
-        RoutingRule rule = Assert.Single(loaded.Policies[0].Rules);
+        RoutingRule rule = Assert.Single(loaded.Policies[1].Rules);
         Assert.Equal(HostMatcherType.Wildcard, rule.Matcher);
         Assert.Equal("*.google.com", rule.Pattern);
         Assert.Equal(5, rule.Order);

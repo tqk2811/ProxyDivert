@@ -29,4 +29,7 @@ public enum HostMatcherType
     // before anything else, with no name and no handshake needed. This is how a policy claims all
     // of a process's UDP (its DNS included) without having to guess which ports it will use.
     Protocol = 9,
+
+    // Every connection; the pattern is ignored. The one rule of the built-in Default policy.
+    Any = 10,
 }

@@ -80,20 +80,14 @@ public sealed class AppConfig
     // the engine is meant to keep running, and the tray icon is there to say it still is.
     public bool MinimizeToTrayOnClose { get; set; } = true;
 
-    // A fresh install still needs something that works: the Direct outbound, and one policy that
-    // has no rules yet — so nothing is claimed and nothing is redirected until the user says so.
+    // A fresh install still needs something that works: the Direct outbound, and the built-in
+    // Default policy sending everything Direct — nothing is redirected until a filter says so.
     public static AppConfig CreateDefault()
     {
-        var policy = new RoutingPolicy
-        {
-            Id = Guid.NewGuid(),
-            Name = "Default",
-            OutboundId = Outbound.DirectId,
-        };
         return new AppConfig
         {
             Outbounds = { Outbound.CreateDirect(), Outbound.CreateBlock() },
-            Policies = { policy },
+            Policies = { RoutingPolicy.CreateDefault() },
         };
     }
 
@@ -110,8 +104,8 @@ public sealed class AppConfig
     // So the rules live here instead, on the object that owns both sides of every reference.
 
     /// <summary>
-    /// Removes a policy and every reference to it. False when there is no such policy, or when it
-    /// is the last one left.
+    /// Removes a policy and every reference to it. False when there is no such policy, when it is
+    /// the built-in Default, or when it is the last one left.
     /// </summary>
     /// <remarks>
     /// The last policy stays because a filter must always have somewhere to point. A filter that
@@ -122,7 +116,7 @@ public sealed class AppConfig
     public bool RemovePolicy(Guid id)
     {
         RoutingPolicy? policy = Policies.FirstOrDefault(p => p.Id == id);
-        if (policy is null || Policies.Count <= 1) return false;
+        if (policy is null || policy.IsBuiltIn || Policies.Count <= 1) return false;
 
         Policies.Remove(policy);
         DropMissingPolicyReferences();
@@ -183,17 +177,7 @@ public sealed class AppConfig
         foreach (RoutingPolicy policy in Policies)
             if (policy.AntiDpiChunkSize < 1) policy.AntiDpiChunkSize = null;
 
-        // Nothing to point at is worse than pointing somewhere dull: the Rules tab with no policy
-        // has no row to add a rule to, and every filter in the file is already dangling.
-        if (Policies.Count == 0)
-        {
-            Policies.Add(new RoutingPolicy
-            {
-                Id = Guid.NewGuid(),
-                Name = "Default",
-                OutboundId = Outbound.DirectId,
-            });
-        }
+        RestoreBuiltInPolicy();
 
         var outboundIds = new HashSet<Guid>(Outbounds.Select(o => o.Id));
         foreach (RoutingPolicy policy in Policies)
@@ -245,7 +229,9 @@ public sealed class AppConfig
         if (Policies.Count == 0) return;
 
         var policyIds = new HashSet<Guid>(Policies.Select(p => p.Id));
-        Guid fallback = Policies[0].Id;
+        // The user's first policy rather than the built-in Default: Default claims everything, so a
+        // filter falling back to it would send all of that process's traffic its way.
+        Guid fallback = FirstPolicyForNewFilter()!.Id;
 
         foreach (ProcessRule rule in ProcessRules)
         {
@@ -260,6 +246,27 @@ public sealed class AppConfig
             if (!rule.PolicyOrder.Contains(fallback)) rule.PolicyOrder.Insert(0, fallback);
         }
     }
+
+    // The built-in Default policy is always there and always first, with its fixed name and its one
+    // match-all rule; what the user chose for its outbound, UDP and anti-DPI is kept. A hand-edited
+    // file that dropped it or changed its rules gets them back.
+    private void RestoreBuiltInPolicy()
+    {
+        RoutingPolicy? policy = Policies.FirstOrDefault(p => p.IsBuiltIn);
+        if (policy is null) policy = RoutingPolicy.CreateDefault();
+        else Policies.Remove(policy);
+
+        policy.Name = RoutingPolicy.DefaultName;
+        policy.Rules = new List<RoutingRule> { RoutingPolicy.CreateDefaultRule() };
+        Policies.Insert(0, policy);
+    }
+
+    /// <summary>
+    /// The policy a filter gets when nothing else is chosen: the user's first one, and the built-in
+    /// Default only when there is no other — it matches everything.
+    /// </summary>
+    public RoutingPolicy? FirstPolicyForNewFilter()
+        => Policies.FirstOrDefault(p => !p.IsBuiltIn) ?? Policies.FirstOrDefault();
 
     /// <summary>
     /// Puts Direct and Block back the way they are defined, and back in the list if they went
