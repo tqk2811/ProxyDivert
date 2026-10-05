@@ -330,6 +330,12 @@ Các ô bị mờ khi đường ra của policy là Block. Chúng chỉ có tác
 endpoint DoH thì có hiệu lực ngay khi bấm Apply & Save. Tên máy chủ của chính các outbound (proxy, VPN,
 SSH) luôn được phân giải bằng DNS thường, vì bản thân yêu cầu DoH cần chúng.
 
+Giới hạn:
+- Phần mềm có driver lọc mạng riêng có thể lấy DNS/53 trước khi WinDivert thấy, khi đó không truy vấn
+  nào bị chuyển hướng. ExitLag là một ví dụ: khi nó đang chạy, không truy vấn nào tới được ProxyDivert.
+- Trình duyệt bật DNS bảo mật riêng (*Use secure DNS* của Chrome, DNS over HTTPS của Firefox) không hỏi
+  DNS của Windows, nên các công tắc này không thấy truy vấn của chúng. Tắt cài đặt đó để chúng đi qua đây.
+
 ## Công cụ dòng lệnh (`ProxyDivert.Cli`)
 
 Bản console để thử engine mà không cần giao diện: mọi thứ truyền bằng argument, không đọc file cấu hình.

@@ -36,3 +36,24 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 - **Vị trí:** `src/ProxyDivert.Wpf/Services/AppServices.cs` (`DiscardChanges`), `src/ProxyDivert.Core/Hosting/ProxyDivertSession.cs` (`SetVpnConnectedAsync`).
 - **Vì sao:** finding của review ngày 2026-10-05; hiếm gặp. Hướng sửa: sau khi discard thì đưa session một lượt đồng bộ VPN theo cấu hình đã khôi phục.
 - **Ngày ghi:** 2026-10-05.
+
+### Secure DNS: chế độ máy chủ DNS cục bộ
+
+- **Vấn đề:** Secure DNS hiện bắt gói UDP/53 bằng WinDivert. Phần mềm có driver lọc mạng riêng (ExitLag đã thấy trên máy thật ngày 2026-10-05) lấy gói trước, nên không truy vấn nào tới app và không bắt lại được: thứ tự giữa WinDivert và driver khác do trọng số sublayer WFP quyết định, app không đổi được.
+- **Hướng làm:** thêm chế độ thứ hai, app mở DNS server tại `127.0.0.1:53` và `[::1]:53`, đặt DNS của card mạng về đó khi bật engine và khôi phục khi tắt (kèm tự khôi phục lúc khởi động nếu lần trước app chết giữa chừng). Quyết định theo tên miền giữ như `RoutingPolicyResolver.ResolveDns`; câu không khớp chuyển tới DNS gốc. Mất pid người hỏi, nên checkbox "DNS của chính tiến trình" chỉ còn tác dụng ở chế độ bắt gói. Chưa kiểm ExitLag có để yên traffic loopback không.
+- **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.SecureDns/DnsOverHttpsMiddleware.cs`, `src/ProxyDivert.Core/Engine/SecureDnsQueryDecider.cs`, `src/ProxyDivert.Core/Routing/RoutingPolicyResolver.cs`.
+- **Vì sao:** người dùng game hay chạy ExitLag hoặc phần mềm tương tự song song.
+- **Ngày ghi:** 2026-10-05.
+
+### Secure DNS: cảnh báo khi không thấy truy vấn DNS nào
+
+- **Vấn đề:** khi phần mềm khác lấy mất DNS/53 (vd ExitLag), Secure DNS im lặng không làm gì, log không có dòng nào báo.
+- **Hướng làm:** có policy bật Secure DNS mà engine chạy khoảng một phút không thấy truy vấn UDP/53 nào thì log Warning một lần, gợi ý kiểm phần mềm can thiệp DNS.
+- **Vị trí:** `src/ProxyDivert.Core/Engine/SecureDnsQueryDecider.cs` (đếm truy vấn), `RedirectEngine.cs`.
+- **Ngày ghi:** 2026-10-05.
+
+### Secure DNS: TCP/53 và circuit breaker
+
+- **Vấn đề:** (1) trả lời DNS quá dài làm Windows hỏi lại qua TCP/53, mà TCP/53 không bị chặn nên đi DNS thường. (2) DoH lỗi liên tiếp thì mỗi truy vấn vẫn chờ hết timeout; nên có circuit breaker chuyển sang "cho qua" ngay lúc quyết định khi policy cho phép rơi về DNS thường.
+- **Vị trí:** `DnsOverHttpsMiddleware.cs` (chỉ xét UDP), `src/ProxyDivert.Core/Engine/DohHealth.cs`.
+- **Ngày ghi:** 2026-10-05.

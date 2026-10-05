@@ -346,6 +346,13 @@ running; ticking a box or changing the DoH endpoint takes effect on Apply & Save
 outbounds' own servers (proxy, VPN and SSH endpoints) are always resolved with normal DNS, since the
 DoH request itself needs them.
 
+Limits:
+- Software with its own network filter driver can take DNS/53 before WinDivert sees it, and then
+  nothing is taken over. ExitLag does this: with it running, no query reaches ProxyDivert.
+- Browsers with their own secure DNS (Chrome's *Use secure DNS*, Firefox's DNS over HTTPS) never ask
+  the system resolver, so these switches do not see their lookups. Turn that setting off to route
+  them here.
+
 ## Command line (`ProxyDivert.Cli`)
 
 A console build for exercising the engine without the window: everything is passed as arguments, and
