@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
+using ProxyDivert.Wpf.Helpers;
 using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.Services;
 using ProxyDivert.Wpf.Themes;
@@ -33,6 +34,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        HorizontalWheelScroll.Register();
 
         // Nothing closes this application by accident any more: the window may be hidden to the
         // tray, and starting with --minimized means it is never shown at all, so the default rule
