@@ -10,6 +10,7 @@ using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.Services;
+using ProxyDivert.Wpf.ViewModels.Models;
 
 namespace ProxyDivert.Wpf.ViewModels;
 
@@ -125,6 +126,9 @@ public sealed partial class RulesViewModel : ObservableObject
     // A Block outbound has nothing to carry a DoH request, so both are greyed out; the built-in
     // Default policy has no domain rules, so it cannot take the system switch either. The
     // fallback only means something while one of the two is on.
+
+    // Suggestions for the policy's own DoH server box; empty keeps the one in Settings.
+    public IReadOnlyList<DohEndpointPreset> DohEndpointPresets => DohEndpointPreset.All;
 
     public bool SelectedPolicyAllowsSecureDnsProcess
         => SelectedPolicy is not null && SelectedPolicyOutbound()?.Kind != OutboundKind.Block;

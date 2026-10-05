@@ -47,16 +47,18 @@ internal sealed class OutboundDnsResolverPool : IDisposable
     // tunnel that changed underneath does not hold a dead connection for ever.
     private static readonly TimeSpan PooledConnectionLifetime = TimeSpan.FromMinutes(2);
 
-    private readonly ConcurrentDictionary<(Guid OutboundId, bool Short), Lazy<IDnsResolver>> _resolvers = new();
-    private readonly Func<Outbound, TimeSpan, IDnsResolver> _create;
+    private readonly ConcurrentDictionary<(Guid OutboundId, Uri Endpoint, bool Short), Lazy<IDnsResolver>> _resolvers = new();
+    private readonly Func<Outbound, Uri, TimeSpan, IDnsResolver> _create;
     private readonly TimeSpan _retireDelay;
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly List<List<Lazy<IDnsResolver>>> _retiredLists = new();
-    private readonly ConcurrentDictionary<Guid, DohHealth> _health = new();
+    private readonly ConcurrentDictionary<(Guid OutboundId, Uri Endpoint), DohHealth> _health = new();
+    // A policy's own endpoint as written, parsed once; an unusable one maps to Endpoint (warned once).
+    private readonly ConcurrentDictionary<string, Uri> _overrides = new(StringComparer.Ordinal);
     private int _disposed;
 
-    /// <param name="endpoint">The DoH server every resolver of this pool asks.</param>
+    /// <param name="endpoint">The default DoH server: what a policy naming none of its own asks.</param>
     /// <param name="outbounds">Where the resolvers of a non-direct outbound dial their HTTPS through. Not owned.</param>
     public OutboundDnsResolverPool(Uri endpoint, OutboundRegistry outbounds, ILoggerFactory loggerFactory)
     {
@@ -70,16 +72,23 @@ internal sealed class OutboundDnsResolverPool : IDisposable
         // TLS, all before its HttpClient timeout (NormalTimeout) starts counting down to failure.
         _retireDelay = NormalTimeout + TimeSpan.FromSeconds(2);
         ILogger<DohResolver> resolverLogger = loggerFactory.CreateLogger<DohResolver>();
-        _create = (outbound, timeout) => new MonitoredDnsResolver(
+        _create = (outbound, target, timeout) => new MonitoredDnsResolver(
             new DohResolver(
-                resolverLogger, CreateHandler(outbound, outbounds, _logger), disposeHandler: true, endpoint, timeout,
+                resolverLogger, CreateHandler(outbound, outbounds, _logger), disposeHandler: true, target, timeout,
                 logFailuresAsWarning: false),
-            _health.GetOrAdd(outbound.Id, _ => new DohHealth(outbound.Name, _logger)));
+            _health.GetOrAdd((outbound.Id, target), _ => new DohHealth($"{outbound.Name} ({target.Host})", _logger)));
     }
 
     /// <summary>For tests: what a resolver is, and how long a retired one lives on.</summary>
     internal OutboundDnsResolverPool(
         Uri endpoint, Func<Outbound, TimeSpan, IDnsResolver> create, TimeSpan retireDelay, ILogger logger)
+        : this(endpoint, WithoutEndpoint(create), retireDelay, logger)
+    {
+    }
+
+    /// <summary>For tests: as above, told which endpoint each resolver asks.</summary>
+    internal OutboundDnsResolverPool(
+        Uri endpoint, Func<Outbound, Uri, TimeSpan, IDnsResolver> create, TimeSpan retireDelay, ILogger logger)
     {
         Endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
         _create = create ?? throw new ArgumentNullException(nameof(create));
@@ -87,26 +96,53 @@ internal sealed class OutboundDnsResolverPool : IDisposable
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    private static Func<Outbound, Uri, TimeSpan, IDnsResolver> WithoutEndpoint(Func<Outbound, TimeSpan, IDnsResolver> create)
+    {
+        if (create is null) throw new ArgumentNullException(nameof(create));
+        return (outbound, _, timeout) => create(outbound, timeout);
+    }
+
+    /// <summary>The default DoH server: the one in Settings, for every policy that names none of its own.</summary>
     public Uri Endpoint { get; }
 
     /// <summary>
-    /// The resolver for queries going out through <paramref name="outbound"/>, created on first use.
-    /// Throws <see cref="ObjectDisposedException"/> once the pool is disposed.
+    /// The DoH server a policy's queries go to: its own <paramref name="policyEndpoint"/> when that
+    /// is an http(s) URL, otherwise <see cref="Endpoint"/>. A non-empty value that is not usable is
+    /// logged once as a warning.
     /// </summary>
-    public IDnsResolver Get(Outbound outbound, bool shortTimeout)
+    public Uri EffectiveEndpoint(string? policyEndpoint)
+    {
+        if (string.IsNullOrWhiteSpace(policyEndpoint)) return Endpoint;
+        return _overrides.GetOrAdd(policyEndpoint!.Trim(), raw =>
+        {
+            if (Uri.TryCreate(raw, UriKind.Absolute, out Uri? uri)
+                && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp))
+                return uri;
+            _logger.LogWarning("policy DoH endpoint {Endpoint} is not an http(s) URL; using the default {Default}", raw, Endpoint);
+            return Endpoint;
+        });
+    }
+
+    /// <summary>
+    /// The resolver for queries going out through <paramref name="outbound"/> to the DoH server
+    /// <paramref name="policyEndpoint"/> names (see <see cref="EffectiveEndpoint"/>), created on
+    /// first use. Throws <see cref="ObjectDisposedException"/> once the pool is disposed.
+    /// </summary>
+    public IDnsResolver Get(Outbound outbound, bool shortTimeout, string? policyEndpoint = null)
     {
         if (outbound is null) throw new ArgumentNullException(nameof(outbound));
         ThrowIfDisposed();
 
+        Uri target = EffectiveEndpoint(policyEndpoint);
         Lazy<IDnsResolver> lazy = _resolvers.GetOrAdd(
-            (outbound.Id, shortTimeout),
+            (outbound.Id, target, shortTimeout),
             _ => new Lazy<IDnsResolver>(
                 () =>
                 {
                     if (_logger.IsEnabled(LogLevel.Debug))
-                        _logger.LogDebug("DoH resolver created for {Outbound} ({Timeout} timeout)",
-                            outbound.Name, shortTimeout ? "short" : "normal");
-                    return _create(outbound, shortTimeout ? ShortTimeout : NormalTimeout);
+                        _logger.LogDebug("DoH resolver created for {Outbound} to {Endpoint} ({Timeout} timeout)",
+                            outbound.Name, target, shortTimeout ? "short" : "normal");
+                    return _create(outbound, target, shortTimeout ? ShortTimeout : NormalTimeout);
                 },
                 LazyThreadSafetyMode.ExecutionAndPublication));
         IDnsResolver resolver = lazy.Value;
@@ -128,10 +164,13 @@ internal sealed class OutboundDnsResolverPool : IDisposable
     {
         var retired = new List<Lazy<IDnsResolver>>(2);
         // A fresh instance starts with a clean bill of health.
-        _health.TryRemove(outboundId, out _);
-        foreach (bool kind in new[] { false, true })
+        foreach (var key in _health.Keys)
         {
-            if (_resolvers.TryRemove((outboundId, kind), out Lazy<IDnsResolver>? lazy))
+            if (key.OutboundId == outboundId) _health.TryRemove(key, out _);
+        }
+        foreach (var key in _resolvers.Keys)
+        {
+            if (key.OutboundId == outboundId && _resolvers.TryRemove(key, out Lazy<IDnsResolver>? lazy))
                 retired.Add(lazy);
         }
         if (retired.Count > 0)

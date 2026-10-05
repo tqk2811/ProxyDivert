@@ -92,5 +92,9 @@ public sealed class RoutingPolicy
     // out instead of answering with a failure.
     public bool SecureDnsFallbackToPlain { get; set; }
 
+    // The DNS over HTTPS server this policy's taken-over queries go to. Empty means the one in
+    // Settings (DnsSettings.DohEndpoint); a value that is not an http(s) URL falls back to it too.
+    public string? DohEndpoint { get; set; }
+
     public override string ToString() => Name;
 }

@@ -157,6 +157,19 @@ public sealed partial class PolicyRowViewModel : ObservableObject
         }
     }
 
+    /// <summary>This policy's own DoH server; empty uses the one in Settings.</summary>
+    public string? DohEndpoint
+    {
+        get => Model.DohEndpoint;
+        set
+        {
+            string? normalized = string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+            if (normalized == Model.DohEndpoint) return;
+            Model.DohEndpoint = normalized;
+            OnPropertyChanged();
+        }
+    }
+
     public bool IsBuiltIn => Model.IsBuiltIn;
 
     public override string ToString() => Name;

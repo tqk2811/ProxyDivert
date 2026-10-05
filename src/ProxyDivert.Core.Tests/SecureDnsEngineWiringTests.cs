@@ -358,4 +358,82 @@ public class SecureDnsEngineWiringTests
             File.Delete(path);
         }
     }
+
+    // ---- per-policy endpoint ----------------------------------------------------------------
+
+    private static (OutboundDnsResolverPool Pool, List<(Outbound Outbound, Uri Endpoint)> Created) EndpointPool()
+    {
+        var created = new List<(Outbound, Uri)>();
+        var pool = new OutboundDnsResolverPool(
+            Endpoint,
+            (outbound, endpoint, timeout) => { lock (created) created.Add((outbound, endpoint)); return new FakeResolver(timeout); },
+            TimeSpan.Zero,
+            NullLogger.Instance);
+        return (pool, created);
+    }
+
+    [Fact]
+    public void Pool_uses_the_policys_own_endpoint()
+    {
+        var (pool, created) = EndpointPool();
+        Outbound a = Socks5();
+
+        pool.Get(a, false, "https://9.9.9.9/dns-query");
+
+        Assert.Equal(new Uri("https://9.9.9.9/dns-query"), created.Single().Endpoint);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("not a url")]
+    [InlineData("ftp://9.9.9.9/dns-query")]
+    public void Pool_falls_back_to_the_default_endpoint_when_the_policy_names_none_usable(string? policyEndpoint)
+    {
+        var (pool, created) = EndpointPool();
+        Outbound a = Socks5();
+
+        IDnsResolver resolver = pool.Get(a, false, policyEndpoint);
+
+        Assert.Equal(Endpoint, created.Single().Endpoint);
+        Assert.Same(resolver, pool.Get(a, false));
+    }
+
+    [Fact]
+    public void Pool_gives_two_endpoints_on_one_outbound_two_resolvers_and_invalidate_drops_both()
+    {
+        var (pool, created) = EndpointPool();
+        Outbound a = Socks5();
+
+        IDnsResolver first = pool.Get(a, false, "https://9.9.9.9/dns-query");
+        IDnsResolver second = pool.Get(a, false, "https://8.8.8.8/dns-query");
+        Assert.NotSame(first, second);
+        Assert.Same(first, pool.Get(a, false, "https://9.9.9.9/dns-query"));
+        Assert.Equal(2, created.Count);
+
+        pool.Invalidate(a.Id);
+
+        Assert.True(((FakeResolver)first).IsDisposed);
+        Assert.True(((FakeResolver)second).IsDisposed);
+    }
+
+    [Fact]
+    public void Decider_hands_the_whole_decision_to_the_resolver_lookup()
+    {
+        Outbound outbound = Socks5();
+        var policy = new RoutingPolicy { Id = Guid.NewGuid(), Name = "p", OutboundId = outbound.Id, DohEndpoint = "https://9.9.9.9/dns-query" };
+        DnsRouteDecision? asked = null;
+        var decider = new SecureDnsQueryDecider(
+            (uint? pid, string name, bool isIpv6, out DnsPassReason reason) =>
+            {
+                reason = default;
+                return new DnsRouteDecision(outbound, policy, matchedRule: null);
+            },
+            (DnsRouteDecision d) => { asked = d; return new FakeResolver(TimeSpan.Zero); },
+            NullLogger.Instance);
+
+        Assert.False(decider.Decide(new DnsQueryInfo(42, "example.com", 1, false)).IsPass);
+        Assert.Equal("https://9.9.9.9/dns-query", asked!.Policy.DohEndpoint);
+    }
 }

@@ -131,7 +131,7 @@ public sealed class RedirectEngine : IDisposable
             },
             // Re-reads _run on every call: the decider asks again when the pool it got was retired
             // in between. A null run is a stopped engine, and the query passes.
-            resolverFor: (outbound, shortTimeout) => _run?.DnsResolvers.Get(outbound, shortTimeout),
+            resolverFor: (DnsRouteDecision decision) => _run?.DnsResolvers.Get(decision.Outbound, decision.FallbackToPlainDns, decision.Policy.DohEndpoint),
             loggerFactory.CreateLogger<SecureDnsQueryDecider>());
         // Every instance this engine routes through is dropped by its owner, and this is how the
         // things keyed by outbound hear about it. Subscribed for the life of the engine rather than
@@ -200,10 +200,10 @@ public sealed class RedirectEngine : IDisposable
             if (secureDnsPolicies.Count > 0)
             {
                 _logger.LogInformation(
-                    "secure DNS ready, endpoint {Endpoint}; {Count} policies use it: {Policies}",
+                    "secure DNS ready, default endpoint {Endpoint}; {Count} policies use it: {Policies}",
                     run.DnsResolvers.Endpoint, secureDnsPolicies.Count,
                     string.Join("; ", secureDnsPolicies.Select(x =>
-                        $"{x.Name} (process={x.SecureDnsProcess}, system={x.SecureDnsSystem}, fallback={x.SecureDnsFallbackToPlain})")));
+                        $"{x.Name} (process={x.SecureDnsProcess}, system={x.SecureDnsSystem}, fallback={x.SecureDnsFallbackToPlain}, endpoint={run.DnsResolvers.EffectiveEndpoint(x.DohEndpoint)})")));
             }
             _logger.LogInformation(
                 "engine started; relay tcp={Tcp} udp={Udp} tcpV6={TcpV6} udpV6={UdpV6}, ipv6={Ipv6Mode}",

@@ -331,8 +331,9 @@ The boxes are greyed out when the policy's outbound cannot do it. UDP is never s
 ## Secure DNS per policy
 
 Each policy on the **Rules** tab has three switches that send DNS over DoH through the policy's own
-outbound, so the name lookups follow the same road as the traffic. The DoH server is the single
-endpoint in **Settings** (*DoH endpoint*).
+outbound, so the name lookups follow the same road as the traffic. The DoH server is the
+endpoint in **Settings** (*DoH endpoint*), unless the policy names its own in the *DoH server* box
+beside the switches (empty = the one in Settings).
 
 | Switch | What it does |
 |---|---|

@@ -443,4 +443,28 @@ public class SecureDnsRoutingTests
 
         AssertReason(DnsPassReason.SystemBlocked, resolver, null, "www.example.com");
     }
+
+    // A policy's own DoH server has to resolve as plain DNS, or the query for its name would be
+    // sent to itself.
+    [Fact]
+    public void Dns_pass_through_includes_every_policys_own_doh_server()
+    {
+        RoutingPolicy a = Policy("a", ProxyAId, process: true, system: false, rules: Rule(HostMatcherType.Any, ""));
+        a.DohEndpoint = "https://dns.Quad9.net/dns-query";
+        RoutingPolicy b = Policy("b", ProxyAId, process: true, system: false, rules: Rule(HostMatcherType.Any, ""));
+        b.DohEndpoint = "https://bücher.example/dns-query";
+        RoutingPolicy broken = Policy("c", ProxyAId, process: true, system: false, rules: Rule(HostMatcherType.Any, ""));
+        broken.DohEndpoint = "not a url";
+        var resolver = new RoutingPolicyResolver(
+            new[] { a, b, broken },
+            new[] { Socks5(ProxyAId, "socks5://proxy.example.net:1080") },
+            new Dictionary<uint, IReadOnlyList<Guid>> { [Pid] = new[] { a.Id } },
+            dohEndpoint: "https://global.example.org/dns-query");
+
+        Assert.True(resolver.IsDnsPassThrough("global.example.org"));
+        Assert.True(resolver.IsDnsPassThrough("dns.quad9.net"));
+        Assert.True(resolver.IsDnsPassThrough("xn--bcher-kva.example"));
+        Assert.Null(resolver.ResolveDns(Pid, "dns.quad9.net"));
+        Assert.NotNull(resolver.ResolveDns(Pid, "www.example.com"));
+    }
 }

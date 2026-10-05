@@ -288,6 +288,7 @@ public class ConfigStoreTests : IDisposable
             SecureDnsProcess = true,
             SecureDnsSystem = true,
             SecureDnsFallbackToPlain = true,
+            DohEndpoint = "https://dns.quad9.net/dns-query",
         });
         store.Save(config);
 
@@ -295,6 +296,7 @@ public class ConfigStoreTests : IDisposable
         Assert.True(loaded.SecureDnsProcess);
         Assert.True(loaded.SecureDnsSystem);
         Assert.True(loaded.SecureDnsFallbackToPlain);
+        Assert.Equal("https://dns.quad9.net/dns-query", loaded.DohEndpoint);
     }
 
     public void Dispose()

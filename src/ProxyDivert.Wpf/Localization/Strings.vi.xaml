@@ -118,6 +118,8 @@
     <sys:String x:Key="Str.Rules.SecureDnsSystemTip">DNS do Windows hỏi thay cho ứng dụng (dịch vụ DNS Client): nếu tên khớp một luật tên miền của policy này thì được phân giải qua DoH bằng đường ra của policy này. Chỉ tính luật tên miền dạng khẳng định; luật IP, cổng, giao thức, Any và luật phủ định (NOT) bị bỏ qua. Thứ tự: các bộ lọc theo thứ tự trong danh sách, rồi các policy được tick trong mỗi bộ lọc theo thứ tự của bộ lọc đó. Không dùng được với policy Default dựng sẵn hoặc đường ra Block.</sys:String>
     <sys:String x:Key="Str.Rules.SecureDnsFallback">Cho phép DNS thường nếu DoH lỗi</sys:String>
     <sys:String x:Key="Str.Rules.SecureDnsFallbackTip">Khi DoH lỗi, truy vấn được gửi như DNS thường thay vì trả lỗi. Cách này làm lộ tên miền. Chỉ có nghĩa khi một trong hai công tắc DNS bảo mật đang bật.</sys:String>
+    <sys:String x:Key="Str.Rules.DohEndpoint">Máy chủ DoH</sys:String>
+    <sys:String x:Key="Str.Rules.DohEndpointTip">Máy chủ DNS qua HTTPS cho policy này. Để trống thì dùng máy chủ đặt trong Cài đặt. Giá trị không phải URL http(s) cũng quay về máy chủ đó.</sys:String>
     <sys:String x:Key="Str.Rules.AntiDpiStateHint">Tick: bật cho bộ luật này. Trống: tắt. Ô vuông đặc: theo outbound.</sys:String>
     <sys:String x:Key="Str.Rules.AntiDpiChunkHint">Số byte tên miền mỗi mảnh cho bộ luật này; để trống thì dùng của outbound.</sys:String>
     <sys:String x:Key="Str.Rules.PatternProblems">Các luật sau không bao giờ khớp được với cách viết hiện tại:</sys:String>

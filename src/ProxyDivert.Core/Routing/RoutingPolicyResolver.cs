@@ -82,6 +82,9 @@ public sealed class RoutingPolicyResolver
 
         _systemDnsPolicies = BuildSystemDnsPolicies(ruleSet, processRules);
         _dnsPassThroughHosts = BuildDnsPassThroughHosts(_outbounds.Values, dohEndpoint);
+        // Every policy's own DoH server too: its name has to resolve before any query can go to it.
+        foreach (CompiledPolicy policy in ruleSet.Policies)
+            AddEndpointHost(_dnsPassThroughHosts, policy.Source.DohEndpoint);
         if (extraDnsPassThroughHosts != null)
             foreach (string host in extraDnsPassThroughHosts) AddHostName(_dnsPassThroughHosts, host);
     }
@@ -400,8 +403,7 @@ public sealed class RoutingPolicyResolver
     {
         var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (Uri.TryCreate(dohEndpoint, UriKind.Absolute, out Uri? endpoint))
-            AddHostName(hosts, endpoint.IdnHost);
+        AddEndpointHost(hosts, dohEndpoint);
 
         foreach (Outbound outbound in outbounds)
         {
@@ -409,6 +411,12 @@ public sealed class RoutingPolicyResolver
             AddHostName(hosts, outbound.Address?.Host);
         }
         return hosts;
+    }
+
+    private static void AddEndpointHost(HashSet<string> hosts, string? dohEndpoint)
+    {
+        if (Uri.TryCreate(dohEndpoint, UriKind.Absolute, out Uri? endpoint))
+            AddHostName(hosts, endpoint.IdnHost);
     }
 
     private static void AddHostName(HashSet<string> hosts, string? host)

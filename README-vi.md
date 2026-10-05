@@ -317,7 +317,8 @@ không hỗ trợ. UDP không bao giờ bị cắt.
 ## DNS bảo mật theo policy
 
 Mỗi policy ở tab **Rules** có ba công tắc đưa DNS qua DoH bằng chính đường ra của policy, để việc
-tra tên đi cùng đường với dữ liệu. Máy chủ DoH là endpoint duy nhất trong **Settings** (*DoH endpoint*).
+tra tên đi cùng đường với dữ liệu. Máy chủ DoH là endpoint trong **Settings** (*DoH endpoint*),
+trừ khi policy tự chọn máy chủ riêng ở ô *DoH server* cạnh các công tắc (để trống = dùng máy chủ trong Settings).
 
 | Công tắc | Tác dụng |
 |---|---|

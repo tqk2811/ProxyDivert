@@ -177,6 +177,23 @@
                                   IsEnabled="{Binding SelectedPolicyAllowsSecureDnsFallback}"
                                   ToolTip="{DynamicResource Str.Rules.SecureDnsFallbackTip}"
                                   VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <!-- Empty = the DoH server in Settings. Picking a suggestion writes its URL. -->
+                        <TextBlock Text="{DynamicResource Str.Rules.DohEndpoint}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <ComboBox IsEditable="True" IsTextSearchEnabled="False" TextSearch.TextPath="Url" Width="260"
+                                  Margin="8,0,0,0" VerticalAlignment="Center"
+                                  ItemsSource="{Binding DohEndpointPresets}"
+                                  IsEnabled="{Binding SelectedPolicyAllowsSecureDnsFallback}"
+                                  ToolTip="{DynamicResource Str.Rules.DohEndpointTip}"
+                                  Text="{Binding SelectedPolicy.DohEndpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Provider}" MinWidth="70" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Url}" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                     </WrapPanel>
 
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,6,0,0" TextWrapping="Wrap"

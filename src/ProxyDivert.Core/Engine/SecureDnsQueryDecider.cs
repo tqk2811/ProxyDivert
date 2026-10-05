@@ -24,7 +24,7 @@ namespace ProxyDivert.Core.Engine;
 internal sealed class SecureDnsQueryDecider
 {
     private readonly SecureDnsRouteFunc _route;
-    private readonly Func<Outbound, bool, IDnsResolver?> _resolverFor;
+    private readonly Func<DnsRouteDecision, IDnsResolver?> _resolverFor;
     private readonly ILogger _logger;
 
     /// <param name="route">The routing table's verdict for (pid, name, isIpv6); null is "pass".</param>
@@ -45,6 +45,18 @@ internal sealed class SecureDnsQueryDecider
     public SecureDnsQueryDecider(
         SecureDnsRouteFunc routeWithReason,
         Func<Outbound, bool, IDnsResolver?> resolverFor,
+        ILogger logger)
+    {
+        _route = routeWithReason ?? throw new ArgumentNullException(nameof(routeWithReason));
+        if (resolverFor is null) throw new ArgumentNullException(nameof(resolverFor));
+        _resolverFor = d => resolverFor(d.Outbound, d.FallbackToPlainDns);
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    /// <summary>As above, with a resolver chosen from the whole decision — outbound, timeout kind and the policy's own DoH server.</summary>
+    public SecureDnsQueryDecider(
+        SecureDnsRouteFunc routeWithReason,
+        Func<DnsRouteDecision, IDnsResolver?> resolverFor,
         ILogger logger)
     {
         _route = routeWithReason ?? throw new ArgumentNullException(nameof(routeWithReason));
@@ -124,11 +136,11 @@ internal sealed class SecureDnsQueryDecider
     {
         try
         {
-            return _resolverFor(decision.Outbound, decision.FallbackToPlainDns);
+            return _resolverFor(decision);
         }
         catch (ObjectDisposedException)
         {
-            return _resolverFor(decision.Outbound, decision.FallbackToPlainDns);
+            return _resolverFor(decision);
         }
     }
 
