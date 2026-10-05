@@ -147,7 +147,7 @@ Step 1 is unavailable in a few cases, and step 2's guess is what remains:
   application retries over IPv4 ([Happy Eyeballs](docs/Glossary-vi.md#L81)). Each outbound carries an
   [Ipv6Support](docs/Glossary-vi.md#L89) setting: `Auto` (try once, then remember), `Enabled`,
   `Disabled`. SOCKS4 has no IPv6 in the protocol at all, so it is always treated as unsupported.
-- DoH only handles DNS/53 over IPv4; the target's IPv6 DNS/53 follows the ordinary UDP rules.
+- Secure DNS (see [Secure DNS per policy](#secure-dns-per-policy)) takes over DNS/53 over UDP, IPv4 and IPv6 alike; DNS over TCP/53 (asked again when an answer is too long) still goes out as plain DNS.
 - IPv6 connections already open when the engine starts fall under the "connections that started
   first" rule below.
 - A connection opened **before** its process was attached goes out **direct**, and says so in the log:

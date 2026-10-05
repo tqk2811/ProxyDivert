@@ -140,7 +140,7 @@ Bước 1 không dùng được trong mấy trường hợp, lúc đó phải ch
   tự chuyển sang IPv4 ([Happy Eyeballs](docs/Glossary-vi.md#L81)). Mỗi đường ra có thiết lập
   [Ipv6Support](docs/Glossary-vi.md#L89): `Auto` (thử một lần rồi tự nhớ), `Enabled`, `Disabled`.
   SOCKS4 không có IPv6 trong giao thức nên luôn coi là không hỗ trợ.
-- DoH chỉ xử lý DNS/53 trên IPv4; DNS/53 IPv6 của tiến trình đích đi theo luật UDP thông thường.
+- Secure DNS (xem mục [DNS bảo mật theo policy](#dns-bảo-mật-theo-policy)) xử lý DNS/53 qua UDP, cả IPv4 lẫn IPv6; DNS qua TCP/53 (hỏi lại khi câu trả lời quá dài) vẫn đi DNS thường.
 - Kết nối IPv6 đang mở sẵn lúc bật engine cũng rơi vào luật "kết nối đã mở trước" bên dưới.
 - Kết nối đã mở TRƯỚC khi tiến trình được gắn sẽ **đi thẳng** (không chuyển hướng) và ghi rõ trong log:
   chuyển hướng nửa chừng một kết nối đang chạy sẽ làm hỏng hẳn kết nối đó. Muốn không lọt gói nào
