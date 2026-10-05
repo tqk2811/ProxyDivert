@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -109,8 +110,40 @@ public sealed partial class RulesViewModel : ObservableObject
         CheckPatterns();
     }
 
+    // ==== the policy's anti-DPI boxes ====
+    //
+    // Only usable when the policy's outbound has something to split: TLS for Direct and the plain
+    // proxies, CONNECT for the proxies alone. Ticks on an outbound that cannot use them are kept,
+    // greyed out, and ignored when connecting — switching back brings them back.
+
+    public bool SelectedPolicySupportsAntiDpi => SelectedPolicyOutbound()?.SupportsAntiDpi == true;
+
+    public bool SelectedPolicySupportsAntiDpiConnect => SelectedPolicyOutbound()?.SupportsAntiDpiConnect == true;
+
+    private Outbound? SelectedPolicyOutbound()
+        => SelectedPolicy is null ? null : Outbounds.FirstOrDefault(o => o.Id == SelectedPolicy.OutboundId);
+
+    private void RaiseAntiDpiSupport()
+    {
+        OnPropertyChanged(nameof(SelectedPolicySupportsAntiDpi));
+        OnPropertyChanged(nameof(SelectedPolicySupportsAntiDpiConnect));
+    }
+
+    private void OnSelectedPolicyPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PolicyRowViewModel.OutboundId)) RaiseAntiDpiSupport();
+    }
+
+    partial void OnSelectedPolicyChanging(PolicyRowViewModel? value)
+    {
+        if (SelectedPolicy != null) SelectedPolicy.PropertyChanged -= OnSelectedPolicyPropertyChanged;
+    }
+
     partial void OnSelectedPolicyChanged(PolicyRowViewModel? value)
     {
+        if (value != null) value.PropertyChanged += OnSelectedPolicyPropertyChanged;
+        RaiseAntiDpiSupport();
+
         Rules.Clear();
         SelectedRule = null;
         if (value is null) return;

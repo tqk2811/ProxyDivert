@@ -179,6 +179,9 @@ public sealed class AppConfig
         // what is shown is what runs.
         foreach (Outbound outbound in Outbounds)
             if (outbound.AntiDpiChunkSize < 1) outbound.AntiDpiChunkSize = Outbound.DefaultAntiDpiChunkSize;
+        // A policy's size below 1 would quietly follow the outbound; say so by clearing it.
+        foreach (RoutingPolicy policy in Policies)
+            if (policy.AntiDpiChunkSize < 1) policy.AntiDpiChunkSize = null;
 
         // Nothing to point at is worse than pointing somewhere dull: the Rules tab with no policy
         // has no row to add a rule to, and every filter in the file is already dangling.

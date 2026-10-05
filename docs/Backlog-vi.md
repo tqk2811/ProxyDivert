@@ -22,3 +22,10 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 - **Vị trí:** `src/ProxyDivert.Cli/Program.cs:82-117`, `src/ProxyDivert.Cli/CliOptions.cs`.
 - **Vì sao:** nếu CLI được dùng ngang WPF thì thiếu tính năng; đợt 2026-10-03 chỉ làm WPF.
 - **Ngày ghi:** 2026-10-03.
+
+### Dọn source biến thể Anti-DPI không còn policy nào dùng
+
+- **Vấn đề:** `OutboundRegistry` giữ một source riêng cho mỗi cặp chunk size hiệu lực mà policy yêu cầu. Khi user sửa hoặc bỏ cài đặt Anti-DPI của policy, source biến thể cũ không bị dọn tới khi outbound đó bị sửa, bị xoá hoặc app tắt.
+- **Vị trí:** `src/ProxyDivert.Core/Outbounds/OutboundRegistry.cs` (`ReconcileAsync`, `InstanceKey`).
+- **Vì sao:** với Direct/HTTP/SOCKS thì rẻ, nhưng số source tăng dần theo số lần sửa. Hướng sửa: cho `ReconcileAsync` biết danh sách policy để tính tập key còn dùng. Hướng gọn hơn về lâu dài: thư viện Proxy nhận tuỳ chọn Anti-DPI theo từng lượt connect, registry trở lại một Id một source.
+- **Ngày ghi:** 2026-10-05.

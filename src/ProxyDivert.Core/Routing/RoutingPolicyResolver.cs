@@ -119,10 +119,12 @@ public sealed class RoutingPolicyResolver
     public RouteDecision Resolve(RouteTarget target)
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
-        return Resolve(target, GetCompiledPolicies(target.ProcessId));
+        return Resolve(target, GetCompiledPolicies(target.ProcessId), applyAntiDpi: true);
     }
 
-    private RouteDecision Resolve(RouteTarget target, IReadOnlyList<CompiledPolicy> policies)
+    // applyAntiDpi: TCP gets the matching policy's anti-DPI overrides; UDP has no ClientHello to
+    // split, and an override would only build its outbound a second, identical source.
+    private RouteDecision Resolve(RouteTarget target, IReadOnlyList<CompiledPolicy> policies, bool applyAntiDpi)
     {
         foreach (CompiledPolicy policy in policies)
         {
@@ -131,7 +133,11 @@ public sealed class RoutingPolicyResolver
                 if (!rule.IsMatch(target)) continue;
 
                 if (TryGetUsableOutbound(policy.Source.OutboundId, out Outbound? outbound))
+                {
+                    if (applyAntiDpi)
+                        outbound = outbound!.WithAntiDpi(policy.Source.AntiDpiTls, policy.Source.AntiDpiConnect, policy.Source.AntiDpiChunkSize);
                     return new RouteDecision(outbound!, policy.Source, rule.Source);
+                }
             }
         }
 
@@ -165,7 +171,7 @@ public sealed class RoutingPolicyResolver
         if (policy.UdpMode == UdpMode.Block)
             return new RouteDecision(_outbounds[Outbound.BlockId], policy, null);
 
-        RouteDecision tcpDecision = Resolve(target, policies);
+        RouteDecision tcpDecision = Resolve(target, policies, applyAntiDpi: false);
         // Neither of these has an outbound to ride, so UdpMode has nothing left to decide.
         if (!tcpDecision.UsesTunnel) return tcpDecision;
 

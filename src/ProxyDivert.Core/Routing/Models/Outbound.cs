@@ -169,6 +169,34 @@ public sealed class Outbound
     [JsonIgnore]
     public int EffectiveConnectChunkSize => AntiDpiConnect && SupportsAntiDpiConnect ? Math.Max(1, AntiDpiChunkSize) : 0;
 
+    /// <summary>
+    /// This outbound as a policy wants it: its own anti-DPI switches unless the policy overrides
+    /// one (null leaves it alone).
+    /// </summary>
+    /// <remarks>
+    /// Returns this same instance when the overrides change nothing the source would be built
+    /// from — a VPN told to split its ClientHello is still a VPN — so the common case allocates
+    /// nothing. Otherwise a copy under the same <see cref="Id"/>: everything keyed by id (the live
+    /// connections, the tunnel supervision) keeps treating it as the outbound it is, and only the
+    /// registry, which keys by the switches as well, builds it a source of its own.
+    /// </remarks>
+    public Outbound WithAntiDpi(bool? tls, bool? connect, int? chunkSize = null)
+    {
+        bool wantTls = tls ?? AntiDpiTls;
+        bool wantConnect = connect ?? AntiDpiConnect;
+        int wantChunk = chunkSize is >= 1 ? chunkSize.Value : AntiDpiChunkSize;
+        if (wantTls == AntiDpiTls && wantConnect == AntiDpiConnect && wantChunk == AntiDpiChunkSize) return this;
+
+        var copy = (Outbound)MemberwiseClone();
+        copy.AntiDpiTls = wantTls;
+        copy.AntiDpiConnect = wantConnect;
+        copy.AntiDpiChunkSize = wantChunk;
+        return copy.EffectiveTlsChunkSize == EffectiveTlsChunkSize
+            && copy.EffectiveConnectChunkSize == EffectiveConnectChunkSize
+            ? this
+            : copy;
+    }
+
     // True when this outbound can carry UDP (SOCKS5 UDP ASSOCIATE). Direct carries UDP too. SSH never
     // does — its only forwarding channel is a TCP stream — so it falls under the last arm with the
     // HTTP and SOCKS4 proxies.

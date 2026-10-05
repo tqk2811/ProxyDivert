@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
@@ -74,6 +75,48 @@ public sealed partial class PolicyRowViewModel : ObservableObject
         {
             if (value == Model.BlockQuic) return;
             Model.BlockQuic = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Anti-DPI TLS for what this policy matches: ticked, unticked, or (null) as the outbound says.</summary>
+    public bool? AntiDpiTls
+    {
+        get => Model.AntiDpiTls;
+        set
+        {
+            if (value == Model.AntiDpiTls) return;
+            Model.AntiDpiTls = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Anti-DPI CONNECT, the same three ways.</summary>
+    public bool? AntiDpiConnect
+    {
+        get => Model.AntiDpiConnect;
+        set
+        {
+            if (value == Model.AntiDpiConnect) return;
+            Model.AntiDpiConnect = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// Bytes per piece for this policy, or null to use the outbound's. The box is text so it can be
+    /// left empty; anything that is not a number of at least 1 empties it.
+    /// </summary>
+    public string AntiDpiChunkSize
+    {
+        get => Model.AntiDpiChunkSize?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        set
+        {
+            int? parsed = int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n >= 1
+                ? n
+                : null;
+            if (parsed != Model.AntiDpiChunkSize) Model.AntiDpiChunkSize = parsed;
+            // Raised even when unchanged, so a rejected entry is wiped from the box.
             OnPropertyChanged();
         }
     }

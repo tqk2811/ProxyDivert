@@ -35,5 +35,17 @@ public sealed class RoutingPolicy
     // direct or dies, depending on UdpMode.
     public bool BlockQuic { get; set; } = true;
 
+    // Anti-DPI per destination: what these rules match goes out with the outbound's switches
+    // turned on (true) or off (false) for this policy alone; null follows the outbound. Only the
+    // policy whose rule matched has a say — unlike UdpMode and BlockQuic, which come off the first
+    // policy — because the point is to pick the sites, and an outbound that cannot split anything
+    // ignores them (see Outbound.WithAntiDpi).
+    public bool? AntiDpiTls { get; set; }
+
+    public bool? AntiDpiConnect { get; set; }
+
+    // Bytes of the name per piece for this policy; null follows the outbound.
+    public int? AntiDpiChunkSize { get; set; }
+
     public override string ToString() => Name;
 }

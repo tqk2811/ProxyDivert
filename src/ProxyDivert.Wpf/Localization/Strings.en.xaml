@@ -110,8 +110,10 @@
     <sys:String x:Key="Str.Rules.Not">Not</sys:String>
     <sys:String x:Key="Str.Rules.UdpMode">UDP</sys:String>
     <sys:String x:Key="Str.Rules.BlockQuic">Block QUIC (UDP/443)</sys:String>
+    <sys:String x:Key="Str.Rules.AntiDpiStateHint">Ticked: on for this policy. Empty: off. Filled square: as the outbound says.</sys:String>
+    <sys:String x:Key="Str.Rules.AntiDpiChunkHint">Bytes of the name per piece for this policy; leave empty to use the outbound's.</sys:String>
     <sys:String x:Key="Str.Rules.PatternProblems">These rules can never match as written:</sys:String>
-    <sys:String x:Key="Str.Rules.BlockQuicHint">Whatever these rules match goes out through this policy's outbound; anything they do not match falls to the next policy the filter names, and to Direct if none of them claims it. Blocking QUIC makes browsers fall back to TCP, which the proxy can actually carry.</sys:String>
+    <sys:String x:Key="Str.Rules.BlockQuicHint">Whatever these rules match goes out through this policy's outbound; anything they do not match falls to the next policy the filter names, and to Direct if none of them claims it. Blocking QUIC makes browsers fall back to TCP, which the proxy can actually carry. Anti-DPI: ticked turns it on for what these rules match, empty turns it off, the filled square follows the outbound. The policy wins over the outbound.</sys:String>
 
     <sys:String x:Key="Str.Conn.Process">Process</sys:String>
     <sys:String x:Key="Str.Conn.Host">Host</sys:String>

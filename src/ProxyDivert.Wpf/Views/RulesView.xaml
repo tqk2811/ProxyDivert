@@ -142,6 +142,22 @@
                         <CheckBox Content="{DynamicResource Str.Rules.BlockQuic}"
                                   IsChecked="{Binding SelectedPolicy.BlockQuic}"
                                   VerticalAlignment="Center" Margin="20,0,0,0"/>
+
+                        <CheckBox Content="{DynamicResource Str.Outbound.AntiDpiTls}" IsThreeState="True"
+                                  IsChecked="{Binding SelectedPolicy.AntiDpiTls}"
+                                  IsEnabled="{Binding SelectedPolicySupportsAntiDpi}"
+                                  ToolTip="{DynamicResource Str.Rules.AntiDpiStateHint}"
+                                  VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <CheckBox Content="{DynamicResource Str.Outbound.AntiDpiConnect}" IsThreeState="True"
+                                  IsChecked="{Binding SelectedPolicy.AntiDpiConnect}"
+                                  IsEnabled="{Binding SelectedPolicySupportsAntiDpiConnect}"
+                                  ToolTip="{DynamicResource Str.Rules.AntiDpiStateHint}"
+                                  VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <TextBlock Text="{DynamicResource Str.Outbound.AntiDpiChunk}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <TextBox Text="{Binding SelectedPolicy.AntiDpiChunkSize, UpdateSourceTrigger=LostFocus}"
+                                 IsEnabled="{Binding SelectedPolicySupportsAntiDpi}"
+                                 ToolTip="{DynamicResource Str.Rules.AntiDpiChunkHint}"
+                                 Width="50" Margin="8,0,0,0" VerticalContentAlignment="Center"/>
                     </WrapPanel>
 
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,6,0,0" TextWrapping="Wrap"

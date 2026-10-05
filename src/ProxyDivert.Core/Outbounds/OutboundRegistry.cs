@@ -36,7 +36,11 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
     private readonly OutboundSourceFactory _factory;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly ILogger _logger;
-    private readonly ConcurrentDictionary<Guid, Entry> _instances = new ConcurrentDictionary<Guid, Entry>();
+    private readonly ConcurrentDictionary<InstanceKey, Entry> _instances = new ConcurrentDictionary<InstanceKey, Entry>();
+
+    // What SetIpv6Support last said per outbound, so an anti-DPI variant built afterwards starts
+    // with what the others already learned instead of trying IPv6 again.
+    private readonly ConcurrentDictionary<Guid, bool> _ipv6Support = new ConcurrentDictionary<Guid, bool>();
 
     // Read on the build path from threads that never took a lock; written whenever a configuration
     // is applied. A stale read costs one instance built from the previous path, which the signature
@@ -97,7 +101,7 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
     {
         if (outbound is null) throw new ArgumentNullException(nameof(outbound));
         return _instances.GetOrAdd(
-            outbound.Id,
+            InstanceKey.Of(outbound),
             _ => new Entry(SignatureOf(outbound), () => Build(outbound))).Instance;
     }
 
@@ -106,7 +110,15 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
     /// one — a caller that wants it built asks <see cref="GetOrCreate"/>.
     /// </summary>
     public IOutboundInstance? Find(Guid outboundId)
-        => _instances.TryGetValue(outboundId, out Entry? entry) ? entry.InstanceIfBuilt : null;
+    {
+        foreach (var kv in _instances)
+        {
+            if (kv.Key.Id != outboundId) continue;
+            IOutboundInstance? instance = kv.Value.InstanceIfBuilt;
+            if (instance != null) return instance;
+        }
+        return null;
+    }
 
     /// <summary>
     /// Brings the instances in line with an edited configuration, disposing only the ones that are
@@ -129,14 +141,21 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
         var dropped = new List<Guid>();
         foreach (var kv in _instances)
         {
+            if (dropped.Contains(kv.Key.Id)) continue;
+
             // An outbound that has disappeared from the configuration cannot be routed to any more,
-            // so its instance is only holding a subprocess or a socket open.
-            bool stale = !current.TryGetValue(kv.Key, out Outbound? outbound)
-                || !string.Equals(kv.Value.Signature, SignatureOf(outbound), StringComparison.Ordinal);
+            // so its instance is only holding a subprocess or a socket open. A policy's anti-DPI
+            // variant is compared as the edited outbound with that variant's switches, so editing
+            // the outbound's address or chunk size rebuilds it too.
+            bool stale = !current.TryGetValue(kv.Key.Id, out Outbound? outbound)
+                || !string.Equals(
+                    kv.Value.Signature,
+                    SignatureOf(kv.Key.Apply(outbound)),
+                    StringComparison.Ordinal);
             if (!stale) continue;
 
-            await DropAsync(kv.Key, "the configuration changed").ConfigureAwait(false);
-            dropped.Add(kv.Key);
+            await DropAsync(kv.Key.Id, "the configuration changed").ConfigureAwait(false);
+            dropped.Add(kv.Key.Id);
         }
         return dropped;
     }
@@ -159,17 +178,33 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
     /// handing IPv6 addresses out on its own. A no-op for an outbound nothing has built yet, and
     /// for one whose answer cannot change after it is built.
     /// </summary>
-    public void SetIpv6Support(Guid outboundId, bool supported) => Find(outboundId)?.SetIpv6Support(supported);
+    public void SetIpv6Support(Guid outboundId, bool supported)
+    {
+        _ipv6Support[outboundId] = supported;
+        // Every anti-DPI variant of the outbound reaches the same network, so they share the answer.
+        foreach (var kv in _instances)
+            if (kv.Key.Id == outboundId) kv.Value.InstanceIfBuilt?.SetIpv6Support(supported);
+    }
 
     private IOutboundInstance Build(Outbound outbound)
-        => _factory.Create(outbound, _loggerFactory, _wireProxyPath);
+    {
+        IOutboundInstance instance = _factory.Create(outbound, _loggerFactory, _wireProxyPath);
+        if (_ipv6Support.TryGetValue(outbound.Id, out bool supported)) instance.SetIpv6Support(supported);
+        return instance;
+    }
 
     private async ValueTask DropAsync(Guid outboundId, string reason)
     {
-        if (!_instances.TryRemove(outboundId, out Entry? entry)) return;
+        // The outbound and every anti-DPI variant a policy asked of it go together: they are one
+        // outbound to everyone outside this class.
+        var removed = new List<Entry>();
+        foreach (InstanceKey key in _instances.Keys)
+            if (key.Id == outboundId && _instances.TryRemove(key, out Entry? entry)) removed.Add(entry);
+        if (removed.Count == 0) return;
+        _ipv6Support.TryRemove(outboundId, out _);
 
         _logger.LogDebug("outbound {Outbound} was dropped: {Reason}", outboundId, reason);
-        await DisposeAsync(entry).ConfigureAwait(false);
+        foreach (Entry entry in removed) await DisposeAsync(entry).ConfigureAwait(false);
         Raise(outboundId);
     }
 
@@ -189,7 +224,9 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
     /// <summary>Drops every instance, as the application closes.</summary>
     public async ValueTask DisposeAsync()
     {
-        foreach (Guid outboundId in new List<Guid>(_instances.Keys))
+        var ids = new HashSet<Guid>();
+        foreach (InstanceKey key in _instances.Keys) ids.Add(key.Id);
+        foreach (Guid outboundId in ids)
             await DropAsync(outboundId, "the application is closing").ConfigureAwait(false);
     }
 
@@ -207,6 +244,19 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
     // or dials a tunnel, the copies it discards are not merely wasted work — nobody holds them, so
     // nobody ever shuts them down. Making the expensive part a Lazy means only the entry the
     // dictionary actually kept is ever built.
+    // An outbound's instances are kept per effective anti-DPI chunk sizes, so a policy that turns the
+    // switches on for a few sites gets a source of its own while the rest share the outbound's.
+    private readonly record struct InstanceKey(Guid Id, int TlsChunk, int ConnectChunk)
+    {
+        // The sizes the source is actually built with, so settings that build the same source share it.
+        public static InstanceKey Of(Outbound outbound)
+            => new InstanceKey(outbound.Id, outbound.EffectiveTlsChunkSize, outbound.EffectiveConnectChunkSize);
+
+        // The outbound as this key builds it, for comparing against an edited configuration.
+        public Outbound Apply(Outbound outbound)
+            => outbound.WithAntiDpi(TlsChunk > 0, ConnectChunk > 0, Math.Max(TlsChunk, ConnectChunk) is int n && n > 0 ? n : null);
+    }
+
     private sealed class Entry
     {
         private readonly Lazy<IOutboundInstance> _instance;

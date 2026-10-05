@@ -110,8 +110,10 @@
     <sys:String x:Key="Str.Rules.Not">Phủ định</sys:String>
     <sys:String x:Key="Str.Rules.UdpMode">UDP</sys:String>
     <sys:String x:Key="Str.Rules.BlockQuic">Chặn QUIC (UDP/443)</sys:String>
+    <sys:String x:Key="Str.Rules.AntiDpiStateHint">Tick: bật cho bộ luật này. Trống: tắt. Ô vuông đặc: theo outbound.</sys:String>
+    <sys:String x:Key="Str.Rules.AntiDpiChunkHint">Số byte tên miền mỗi mảnh cho bộ luật này; để trống thì dùng của outbound.</sys:String>
     <sys:String x:Key="Str.Rules.PatternProblems">Các luật sau không bao giờ khớp được với cách viết hiện tại:</sys:String>
-    <sys:String x:Key="Str.Rules.BlockQuicHint">Thứ gì khớp các luật này thì đi qua đường ra của bộ luật; thứ không khớp rơi xuống bộ luật kế tiếp trong bộ lọc, không bộ luật nào nhận thì đi thẳng. Chặn QUIC để trình duyệt lùi về TCP — thứ mà proxy thật sự chở được.</sys:String>
+    <sys:String x:Key="Str.Rules.BlockQuicHint">Thứ gì khớp các luật này thì đi qua đường ra của bộ luật; thứ không khớp rơi xuống bộ luật kế tiếp trong bộ lọc, không bộ luật nào nhận thì đi thẳng. Chặn QUIC để trình duyệt lùi về TCP — thứ mà proxy thật sự chở được. Chống DPI: tick là bật cho thứ khớp các luật này, trống là tắt, ô vuông đặc là theo outbound. Cài đặt của bộ luật thắng cài đặt outbound.</sys:String>
 
     <sys:String x:Key="Str.Conn.Process">Tiến trình</sys:String>
     <sys:String x:Key="Str.Conn.Host">Tên miền</sys:String>
