@@ -555,6 +555,8 @@ public class DataGridColumnBindingTests
 
             foreach (TextBox box in FindVisuals<TextBox>(window))
             {
+                // Every ComboBox template carries its own (collapsed) edit box; only the row's pattern box counts.
+                if (box.TemplatedParent is ComboBox) continue;
                 if (box.DataContext is not ProxyDivert.Wpf.ViewModels.Conditions.ConditionLeafViewModel row) continue;
 
                 ComboBox subjectPicker = FindVisuals<ComboBox>(window).First(combo =>
@@ -573,7 +575,7 @@ public class DataGridColumnBindingTests
             // Switching a row's subject has to move the hint with it; the old trigger did that by
             // itself, the converter only does it if the binding is on the right property.
             TextBox first = FindVisuals<TextBox>(window)
-                .First(box => box.DataContext is ProxyDivert.Wpf.ViewModels.Conditions.ConditionLeafViewModel);
+                .First(box => box.TemplatedParent is not ComboBox && box.DataContext is ProxyDivert.Wpf.ViewModels.Conditions.ConditionLeafViewModel);
             var firstRow = (ProxyDivert.Wpf.ViewModels.Conditions.ConditionLeafViewModel)first.DataContext;
             firstRow.Subject = ConditionSubject.CommandLine;
             window.UpdateLayout();
