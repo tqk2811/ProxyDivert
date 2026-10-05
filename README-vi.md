@@ -290,6 +290,30 @@ Giới hạn:
   có passphrase (xem `LiveSshOutboundTests`). Chưa thử đăng nhập bằng mật khẩu và máy chủ Linux ở xa.
   Chưa hỗ trợ keyboard-interactive và ssh-agent.
 
+## Chống DPI
+
+Có mạng đọc tên miền đích ngay trên đường truyền — [SNI](docs/Glossary-vi.md#L13) trong ClientHello
+của TLS, hoặc tên máy trong dòng `CONNECT` gửi tới proxy — rồi chặn hay bóp băng thông theo đó
+([DPI](docs/Glossary-vi.md#L627)). Các công tắc chống DPI gửi phần tên miền thành nhiều mẩu nhỏ, để
+thiết bị chỉ soi từng gói hoặc từng record không thấy được trọn tên (ý tưởng của GoodbyeDPI).
+
+Ở tab **Outbounds**:
+
+| Cột | Làm gì | Áp dụng cho |
+|---|---|---|
+| **Chống DPI TLS** | ClientHello được dựng lại thành nhiều [TLS record](docs/Glossary-vi.md#L631) quanh tên miền trong SNI, riêng tên miền cắt thành record mỗi cái *Số byte DPI* byte. Server bắt buộc phải ráp lại (RFC 8446 §5.1). | Direct (cả hàng dựng sẵn), HTTP, SOCKS4, SOCKS5 |
+| **Chống DPI CONNECT** | Tên miền trong lệnh `CONNECT` gửi tới proxy được gửi mỗi lần *Số byte DPI* byte. Vài proxy xử lý kém. | HTTP, SOCKS4, SOCKS5 |
+| **Số byte DPI** | Số byte tên miền mỗi mảnh; mặc định 2. | |
+
+Chỉ phần bắt tay chứa tên miền bị cắt; mọi thứ sau đó đi thẳng, nên kết nối đã lên thì không tốn
+thêm gì. Đường ra VPN và SSH không có tuỳ chọn này — dữ liệu của chúng vốn đã mã hoá suốt đường.
+
+**Theo từng policy.** Ở tab **Rules**, mỗi policy có hai công tắc tương tự cạnh Block QUIC, dạng ô
+3 trạng thái: tick là bật chống DPI cho những gì luật của policy khớp, trống là tắt, ô vuông đặc là
+theo outbound. Ô *Số byte DPI* riêng của policy để trống thì dùng của outbound. Policy thắng
+outbound, nên cùng một proxy có thể chỉ cắt cho những trang cần. Các ô bị mờ khi outbound của policy
+không hỗ trợ. UDP không bao giờ bị cắt.
+
 ## Công cụ dòng lệnh (`ProxyDivert.Cli`)
 
 Bản console để thử engine mà không cần giao diện: mọi thứ truyền bằng argument, không đọc file cấu hình.

@@ -303,6 +303,31 @@ Limits:
   a passphrase (see `LiveSshOutboundTests`). Password logins and a remote Linux server have not been
   tried yet. Keyboard-interactive and ssh-agent are not supported.
 
+## Anti-DPI
+
+Some networks read the destination's name off the wire — the [SNI](docs/Glossary-vi.md#L13) in a
+TLS ClientHello, or the host in a proxy's `CONNECT` line — and block or throttle by it
+([DPI](docs/Glossary-vi.md#L627)). The anti-DPI switches send that name in small pieces, so a box
+that looks at one packet or one record at a time never sees it whole (the GoodbyeDPI idea).
+
+On the **Outbounds** tab:
+
+| Column | What it does | Applies to |
+|---|---|---|
+| **Anti-DPI TLS** | The ClientHello is rebuilt as several [TLS records](docs/Glossary-vi.md#L631) around the SNI name, the name itself cut into records of *DPI bytes* each. Servers must reassemble them (RFC 8446 §5.1). | Direct (the built-in row too), HTTP, SOCKS4, SOCKS5 |
+| **Anti-DPI CONNECT** | The name in the `CONNECT` request to the proxy goes out *DPI bytes* at a time. Some proxies handle this badly. | HTTP, SOCKS4, SOCKS5 |
+| **DPI bytes** | Bytes of the name per piece; defaults to 2. | |
+
+Only the part of the handshake that carries the name is split; everything after it passes through
+untouched, so there is no cost once the connection is up. VPN and SSH outbounds do not offer it —
+their traffic is already encrypted end to end.
+
+**Per policy.** On the **Rules** tab each policy has the same two switches beside Block QUIC, as
+three-state boxes: ticked turns anti-DPI on for whatever the policy's rules match, empty turns it
+off, and the filled square follows the outbound. Its own *DPI bytes* box, left empty, uses the
+outbound's. The policy wins over the outbound, so one proxy can split only the sites that need it.
+The boxes are greyed out when the policy's outbound cannot do it. UDP is never split.
+
 ## Command line (`ProxyDivert.Cli`)
 
 A console build for exercising the engine without the window: everything is passed as arguments, and
