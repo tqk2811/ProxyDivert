@@ -328,6 +328,23 @@ off, and the filled square follows the outbound. Its own *DPI bytes* box, left e
 outbound's. The policy wins over the outbound, so one proxy can split only the sites that need it.
 The boxes are greyed out when the policy's outbound cannot do it. UDP is never split.
 
+## Secure DNS per policy
+
+Each policy on the **Rules** tab has three switches that send DNS over DoH through the policy's own
+outbound, so the name lookups follow the same road as the traffic. The DoH server is the single
+endpoint in **Settings** (*DoH endpoint*).
+
+| Switch | What it does |
+|---|---|
+| **Secure DNS: app's own DNS** | The DNS queries the matched app sends itself go over DoH through this policy's outbound. |
+| **Secure DNS: system DNS** | DNS that Windows asks on behalf of apps (the DNS Client service): when the queried name matches one of this policy's domain rules, it is resolved over DoH through this policy's outbound. Only positive domain rules count; IP, port, protocol, Any and NOT rules are ignored. Tried in the filters' list order, then the policies ticked in each filter in that filter's order. Not available for the built-in Default policy. |
+| **Allow plain DNS if DoH fails** | When DoH fails the query goes out as normal DNS instead of an error answer. This leaks the name. Only meaningful while one of the two above is on. |
+
+The boxes are greyed out when the policy's outbound is Block. They only act while the engine is
+running; ticking a box or changing the DoH endpoint takes effect on Apply & Save. The names of the
+outbounds' own servers (proxy, VPN and SSH endpoints) are always resolved with normal DNS, since the
+DoH request itself needs them.
+
 ## Command line (`ProxyDivert.Cli`)
 
 A console build for exercising the engine without the window: everything is passed as arguments, and

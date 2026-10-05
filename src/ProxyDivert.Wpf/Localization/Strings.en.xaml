@@ -112,6 +112,12 @@
     <sys:String x:Key="Str.Rules.Not">Not</sys:String>
     <sys:String x:Key="Str.Rules.UdpMode">UDP</sys:String>
     <sys:String x:Key="Str.Rules.BlockQuic">Block QUIC (UDP/443)</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsProcess">Secure DNS: app's own DNS</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsProcessTip">The DNS queries the matched app sends itself go over DoH through this policy's outbound. The DoH server is the one in Settings. Not available when the outbound is Block.</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsSystem">Secure DNS: system DNS</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsSystemTip">DNS asked by Windows on behalf of apps (the DNS Client service): when the name matches one of this policy's domain rules, it is resolved over DoH through this policy's outbound. Only positive domain rules count; IP, port, protocol, Any and NOT rules are ignored. Order: the filters in their list order, then the policies ticked in each filter in that filter's order. Not available for the built-in Default policy or a Block outbound.</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsFallback">Allow plain DNS if DoH fails</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsFallbackTip">When DoH fails, the query is sent as normal DNS instead of answering an error. This leaks the name. Only meaningful while one of the two Secure DNS switches is on.</sys:String>
     <sys:String x:Key="Str.Rules.AntiDpiStateHint">Ticked: on for this policy. Empty: off. Filled square: as the outbound says.</sys:String>
     <sys:String x:Key="Str.Rules.AntiDpiChunkHint">Bytes of the name per piece for this policy; leave empty to use the outbound's.</sys:String>
     <sys:String x:Key="Str.Rules.PatternProblems">These rules can never match as written:</sys:String>

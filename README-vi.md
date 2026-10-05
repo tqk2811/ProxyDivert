@@ -314,6 +314,21 @@ theo outbound. Ô *Số byte DPI* riêng của policy để trống thì dùng c
 outbound, nên cùng một proxy có thể chỉ cắt cho những trang cần. Các ô bị mờ khi outbound của policy
 không hỗ trợ. UDP không bao giờ bị cắt.
 
+## DNS bảo mật theo policy
+
+Mỗi policy ở tab **Rules** có ba công tắc đưa DNS qua DoH bằng chính đường ra của policy, để việc
+tra tên đi cùng đường với dữ liệu. Máy chủ DoH là endpoint duy nhất trong **Settings** (*DoH endpoint*).
+
+| Công tắc | Tác dụng |
+|---|---|
+| **Secure DNS: app's own DNS** | Các truy vấn DNS do chính ứng dụng khớp tự gửi đi qua DoH bằng đường ra của policy. |
+| **Secure DNS: system DNS** | DNS do Windows hỏi thay cho ứng dụng (dịch vụ DNS Client): nếu tên được hỏi khớp một luật tên miền của policy thì phân giải qua DoH bằng đường ra của policy. Chỉ tính luật tên miền dạng khẳng định; luật IP, cổng, giao thức, Any và luật NOT bị bỏ qua. Xét theo thứ tự bộ lọc trong danh sách, rồi các policy được tick trong mỗi bộ lọc theo thứ tự của bộ lọc đó. Không dùng được với policy Default dựng sẵn. |
+| **Allow plain DNS if DoH fails** | Khi DoH lỗi, truy vấn đi ra như DNS thường thay vì trả lỗi. Cách này làm lộ tên miền. Chỉ có nghĩa khi một trong hai công tắc trên đang bật. |
+
+Các ô bị mờ khi đường ra của policy là Block. Chúng chỉ có tác dụng khi engine đang chạy, và đổi
+endpoint DoH thì có hiệu lực ngay khi bấm Apply & Save. Tên máy chủ của chính các outbound (proxy, VPN,
+SSH) luôn được phân giải bằng DNS thường, vì bản thân yêu cầu DoH cần chúng.
+
 ## Công cụ dòng lệnh (`ProxyDivert.Cli`)
 
 Bản console để thử engine mà không cần giao diện: mọi thứ truyền bằng argument, không đọc file cấu hình.

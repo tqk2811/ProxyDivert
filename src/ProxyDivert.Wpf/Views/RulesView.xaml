@@ -159,6 +159,24 @@
                                  Width="50" Margin="8,0,0,0" VerticalContentAlignment="Center"/>
                     </WrapPanel>
 
+                    <WrapPanel Margin="0,6,0,0" VerticalAlignment="Center">
+                        <CheckBox Content="{DynamicResource Str.Rules.SecureDnsProcess}"
+                                  IsChecked="{Binding SelectedPolicy.SecureDnsProcess}"
+                                  IsEnabled="{Binding SelectedPolicyAllowsSecureDnsProcess}"
+                                  ToolTip="{DynamicResource Str.Rules.SecureDnsProcessTip}"
+                                  VerticalAlignment="Center"/>
+                        <CheckBox Content="{DynamicResource Str.Rules.SecureDnsSystem}"
+                                  IsChecked="{Binding SelectedPolicy.SecureDnsSystem}"
+                                  IsEnabled="{Binding SelectedPolicyAllowsSecureDnsSystem}"
+                                  ToolTip="{DynamicResource Str.Rules.SecureDnsSystemTip}"
+                                  VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <CheckBox Content="{DynamicResource Str.Rules.SecureDnsFallback}"
+                                  IsChecked="{Binding SelectedPolicy.SecureDnsFallbackToPlain}"
+                                  IsEnabled="{Binding SelectedPolicyAllowsSecureDnsFallback}"
+                                  ToolTip="{DynamicResource Str.Rules.SecureDnsFallbackTip}"
+                                  VerticalAlignment="Center" Margin="20,0,0,0"/>
+                    </WrapPanel>
+
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,6,0,0" TextWrapping="Wrap"
                                Text="{DynamicResource Str.Rules.BlockQuicHint}"/>
                 </StackPanel>
