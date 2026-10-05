@@ -261,6 +261,44 @@ public class ConfigStoreTests : IDisposable
         Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
     }
 
+    // The DNS section used to carry "Mode", and for a while "Redirect". There is no migration: a
+    // file still holding either must load, with the endpoint it named kept.
+    [Fact]
+    public void A_config_with_the_old_dns_keys_loads()
+    {
+        File.WriteAllText(ConfigPath,
+            "{ \"Dns\": { \"Mode\": \"DnsOverHttps\", \"Redirect\": \"WholeMachine\", "
+            + "\"DohEndpoint\": \"https://9.9.9.9/dns-query\" } }");
+
+        AppConfig loaded = new ConfigStore(ConfigPath).Load();
+
+        Assert.Equal("https://9.9.9.9/dns-query", loaded.Dns.DohEndpoint);
+    }
+
+    [Fact]
+    public void Policy_secure_dns_flags_round_trip()
+    {
+        var store = new ConfigStore(ConfigPath);
+        AppConfig config = AppConfig.CreateDefault();
+        Guid policyId = Guid.NewGuid();
+        config.Policies.Add(new RoutingPolicy
+        {
+            Id = policyId,
+            Name = "dns",
+            SecureDnsProcess = true,
+            SecureDnsSystem = true,
+            SecureDnsFallbackToPlain = true,
+            DohEndpoint = "https://dns.quad9.net/dns-query",
+        });
+        store.Save(config);
+
+        RoutingPolicy loaded = store.Load().Policies.Single(p => p.Id == policyId);
+        Assert.True(loaded.SecureDnsProcess);
+        Assert.True(loaded.SecureDnsSystem);
+        Assert.True(loaded.SecureDnsFallbackToPlain);
+        Assert.Equal("https://dns.quad9.net/dns-query", loaded.DohEndpoint);
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_directory, recursive: true); } catch { }

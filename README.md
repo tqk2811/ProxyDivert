@@ -147,7 +147,7 @@ Step 1 is unavailable in a few cases, and step 2's guess is what remains:
   application retries over IPv4 ([Happy Eyeballs](docs/Glossary-vi.md#L81)). Each outbound carries an
   [Ipv6Support](docs/Glossary-vi.md#L89) setting: `Auto` (try once, then remember), `Enabled`,
   `Disabled`. SOCKS4 has no IPv6 in the protocol at all, so it is always treated as unsupported.
-- DoH only handles DNS/53 over IPv4; the target's IPv6 DNS/53 follows the ordinary UDP rules.
+- Secure DNS (see [Secure DNS per policy](#secure-dns-per-policy)) takes over DNS/53 over UDP, IPv4 and IPv6 alike; DNS over TCP/53 (asked again when an answer is too long) still goes out as plain DNS.
 - IPv6 connections already open when the engine starts fall under the "connections that started
   first" rule below.
 - A connection opened **before** its process was attached goes out **direct**, and says so in the log:
@@ -327,6 +327,31 @@ three-state boxes: ticked turns anti-DPI on for whatever the policy's rules matc
 off, and the filled square follows the outbound. Its own *DPI bytes* box, left empty, uses the
 outbound's. The policy wins over the outbound, so one proxy can split only the sites that need it.
 The boxes are greyed out when the policy's outbound cannot do it. UDP is never split.
+
+## Secure DNS per policy
+
+Each policy on the **Rules** tab has three switches that send DNS over DoH through the policy's own
+outbound, so the name lookups follow the same road as the traffic. The DoH server is the
+endpoint in **Settings** (*DoH endpoint*), unless the policy names its own in the *DoH server* box
+beside the switches (empty = the one in Settings).
+
+| Switch | What it does |
+|---|---|
+| **Secure DNS: app's own DNS** | The DNS queries the matched app sends itself go over DoH through this policy's outbound. |
+| **Secure DNS: system DNS** | DNS that Windows asks on behalf of apps (the DNS Client service): when the queried name matches one of this policy's domain rules, it is resolved over DoH through this policy's outbound. Only positive domain rules count; IP, port, protocol, Any and NOT rules are ignored. Tried in the filters' list order, then the policies ticked in each filter in that filter's order. Not available for the built-in Default policy. |
+| **Allow plain DNS if DoH fails** | When DoH fails the query goes out as normal DNS instead of an error answer. This leaks the name. Only meaningful while one of the two above is on. |
+
+The boxes are greyed out when the policy's outbound is Block. They only act while the engine is
+running; ticking a box or changing the DoH endpoint takes effect on Apply & Save. The names of the
+outbounds' own servers (proxy, VPN and SSH endpoints) are always resolved with normal DNS, since the
+DoH request itself needs them.
+
+Limits:
+- Software with its own network filter driver can take DNS/53 before WinDivert sees it, and then
+  nothing is taken over. ExitLag does this in its default (WFP) mode; switching ExitLag to its NDIS driver mode lets the queries through again.
+- Browsers with their own secure DNS (Chrome's *Use secure DNS*, Firefox's DNS over HTTPS) never ask
+  the system resolver, so these switches do not see their lookups. Turn that setting off to route
+  them here.
 
 ## Command line (`ProxyDivert.Cli`)
 

@@ -602,6 +602,15 @@
                                           ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
                                           Margin="12,0,30,0" VerticalAlignment="Center" HorizontalAlignment="Left"/>
 
+                        <!-- Editable mode keeps its text in this box and leaves SelectionBoxItem empty, so
+                             without it an editable combo shows nothing at all, picked or typed. -->
+                        <TextBox x:Name="PART_EditableTextBox" Visibility="Collapsed"
+                                 Margin="4,0,28,0" VerticalAlignment="Center" Padding="6,0,0,0"
+                                 Background="Transparent" BorderThickness="0" Height="Auto"
+                                 Foreground="{TemplateBinding Foreground}"
+                                 VerticalContentAlignment="Center"
+                                 IsReadOnly="{Binding IsReadOnly, RelativeSource={RelativeSource TemplatedParent}}"/>
+
                         <TextBlock x:Name="Watermark" Text="{TemplateBinding Tag}" IsHitTestVisible="False"
                                    Foreground="{DynamicResource Brush.Text.Secondary}"
                                    Margin="12,0,30,0" VerticalAlignment="Center" Visibility="Collapsed"/>
@@ -625,6 +634,11 @@
                         </Trigger>
                         <Trigger Property="SelectionBoxItem" Value="{x:Null}">
                             <Setter TargetName="Watermark" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsEditable" Value="True">
+                            <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ContentSite" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="Watermark" Property="Visibility" Value="Collapsed"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5"/>

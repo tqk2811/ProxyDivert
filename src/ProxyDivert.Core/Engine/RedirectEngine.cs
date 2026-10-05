@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using ProxyDivert.Core.Configuration.Enums;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Engine.Extensions;
 using ProxyDivert.Core.Engine.Interfaces;
@@ -30,6 +30,7 @@ using TqkLibrary.WinDivert.Redirect;
 using TqkLibrary.WinDivert.Redirect.Interfaces;
 using TqkLibrary.WinDivert.Redirect.Enums;
 using TqkLibrary.WinDivert.Redirect.Models;
+using TqkLibrary.WinDivert.SecureDns;
 
 namespace ProxyDivert.Core.Engine;
 
@@ -61,6 +62,10 @@ public sealed class RedirectEngine : IDisposable
     // What we have learned about which outbounds can actually reach IPv6. Lives across Start/Stop
     // because it describes the proxies, not the run.
     private readonly OutboundIpv6Capability _ipv6Capability = new OutboundIpv6Capability();
+
+    // Answers the redirector for every DNS query on the machine. Reads the run, like the other
+    // handlers, so a query arriving after Stop is passed.
+    private readonly SecureDnsQueryDecider _secureDns;
 
     // What the engine is running, or null while it is stopped. Volatile because it is published and
     // taken away under _stateLock but read without it, from the relay threads: a handler takes the
@@ -113,6 +118,21 @@ public sealed class RedirectEngine : IDisposable
         _outbounds = outbounds ?? throw new ArgumentNullException(nameof(outbounds));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<RedirectEngine>();
+        _secureDns = new SecureDnsQueryDecider(
+            routeWithReason: (uint? pid, string name, bool isIpv6, out DnsPassReason reason) =>
+            {
+                EngineRun? run = _run;
+                if (run is null)
+                {
+                    reason = DnsPassReason.EngineStopped;
+                    return null;
+                }
+                return run.Resolver.ResolveDns(pid, name, isIpv6, out reason);
+            },
+            // Re-reads _run on every call: the decider asks again when the pool it got was retired
+            // in between. A null run is a stopped engine, and the query passes.
+            resolverFor: (DnsRouteDecision decision) => _run?.DnsResolvers.Get(decision.Outbound, decision.FallbackToPlainDns, decision.Policy.DohEndpoint),
+            loggerFactory.CreateLogger<SecureDnsQueryDecider>());
         // Every instance this engine routes through is dropped by its owner, and this is how the
         // things keyed by outbound hear about it. Subscribed for the life of the engine rather than
         // of a run: a VPN tunnel can die while redirection is switched off, and the UDP tunnels
@@ -176,6 +196,15 @@ public sealed class RedirectEngine : IDisposable
                 throw;
             }
 
+            var secureDnsPolicies = config.Policies.Where(x => x.SecureDnsProcess || x.SecureDnsSystem).ToList();
+            if (secureDnsPolicies.Count > 0)
+            {
+                _logger.LogInformation(
+                    "secure DNS ready, default endpoint {Endpoint}; {Count} policies use it: {Policies}",
+                    run.DnsResolvers.Endpoint, secureDnsPolicies.Count,
+                    string.Join("; ", secureDnsPolicies.Select(x =>
+                        $"{x.Name} (process={x.SecureDnsProcess}, system={x.SecureDnsSystem}, fallback={x.SecureDnsFallbackToPlain}, endpoint={run.DnsResolvers.EffectiveEndpoint(x.DohEndpoint)})")));
+            }
             _logger.LogInformation(
                 "engine started; relay tcp={Tcp} udp={Udp} tcpV6={TcpV6} udpV6={UdpV6}, ipv6={Ipv6Mode}",
                 run.Redirector.TcpRelayPort, run.Redirector.UdpRelayPort,
@@ -202,6 +231,7 @@ public sealed class RedirectEngine : IDisposable
         tracker.ProcessDetached += OnProcessDetached;
 
         var resolvers = new ResolverSlot(BuildResolver(config, tracker));
+        var dnsResolvers = BuildDnsResolverPool(config);
 
         var options = new RedirectOptions
         {
@@ -211,11 +241,14 @@ public sealed class RedirectEngine : IDisposable
 
             Ipv6Mode = config.Ipv6,
             EnableDnsSniff = true,
-            EnableSecureDns = config.Dns.Mode == DnsMode.DnsOverHttps,
-            DohEndpoint = ParseDohEndpoint(config.Dns.DohEndpoint),
             TcpConnectionHandler = HandleTcpAsync,
             UdpDatagramHandler = HandleUdpDatagram,
             ShouldRedirectUdp = ShouldRedirectUdpFlow,
+            // Always set, whether or not a policy asks for secure DNS today: the options are fixed
+            // for the life of the redirector, and a save that ticks the box on a policy has to take
+            // effect without a restart. With nothing ticked every query is answered "pass" in a
+            // couple of dictionary reads.
+            SecureDnsDecider = _secureDns.Decide,
         };
         // Whether the redirector watches the whole machine and asks about each pid it meets, or is
         // handed the pids by the tracker. The judge is the engine's rather than the tracker's own
@@ -237,12 +270,12 @@ public sealed class RedirectEngine : IDisposable
             resolvers, redirector.ReverseDns, udpForwarder, _outbounds, _ipv6Capability,
             _loggerFactory.CreateLogger<UdpFlowRouter>());
 
-        return new EngineRun(redirector, tracker, hostNames, udpForwarder, tcp, udp, resolvers, pids, cts);
+        return new EngineRun(redirector, tracker, hostNames, udpForwarder, tcp, udp, resolvers, pids, dnsResolvers, cts);
     }
 
     // Applies an edited configuration without dropping the redirector: rules, outbounds and DNS
     // preferences take effect on the NEXT connection. Options that live in the WinDivert handles
-    // (the IPv6 mode, DoH) need a restart — the UI says so rather than silently ignoring them.
+    // (the IPv6 mode) need a restart — the UI says so rather than silently ignoring them.
     public async Task ApplyConfigAsync(AppConfig config)
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
@@ -273,6 +306,23 @@ public sealed class RedirectEngine : IDisposable
             // No lock: this is the only writer of the routing table now that attaching a process no
             // longer rebuilds it, and two saves cannot overlap (_lifecycle).
             run.UseResolver(BuildResolver(config, run.Tracker));
+
+            // A new DoH server means new resolvers; the old ones finish the queries they hold.
+            // A policy's own server counts too: the pool caches the resolvers (and the warn-once
+            // note about an unusable value) per endpoint, so editing only that has to replace it.
+            foreach (RoutingPolicy policy in config.Policies)
+                if (!string.IsNullOrWhiteSpace(policy.DohEndpoint) && !DohEndpointParser.TryParse(policy.DohEndpoint, out _))
+                    _logger.LogWarning("policy {Policy}: DoH endpoint is not an http(s) URL; using the default one", policy.Name);
+            Uri endpoint = ParseDohEndpoint(config.Dns.DohEndpoint);
+            string signature = DohEndpointParser.Signature(endpoint, config.Policies);
+            if (signature != run.DnsResolvers.EndpointSignature)
+            {
+                Uri previous = run.DnsResolvers.Endpoint;
+                run.UseDnsResolvers(BuildDnsResolverPool(endpoint, signature));
+                _logger.LogInformation(
+                    "secure DNS endpoints changed (default {Previous} -> {Endpoint}); resolver pool swapped, the old one retires after its queries finish",
+                    previous, endpoint);
+            }
             run.Tracker.ApplyRules(config.ProcessRules);
 
             // What the filter edit attached and detached has to be in the driver before the two
@@ -425,6 +475,8 @@ public sealed class RedirectEngine : IDisposable
         // VPN that dropped and came back carried TCP again while its UDP stayed dead: the
         // supervisor threw the instance away, and nothing told the forwarder.
         _run?.UdpForwarder.InvalidateOutbound(outboundId);
+        // And its DoH resolvers dial through that instance; the next query builds fresh ones.
+        _run?.DnsResolvers.Invalidate(outboundId);
     }
 
     // ---- process scope ----------------------------------------------------------------------
@@ -456,8 +508,16 @@ public sealed class RedirectEngine : IDisposable
     // the next save. The process half is not in it — the resolver asks the tracker for that.
     private RoutingPolicyResolver BuildResolver(AppConfig config, IProcessPolicySource processes)
     {
+        // Reads the VPN profile files: here, on Start and Save, never on the packet path.
+        IReadOnlyCollection<string> vpnServerHosts = VpnServerHostReader.Read(config.Outbounds, _logger);
         var resolver = new RoutingPolicyResolver(
-            CompiledRuleSet.Compile(config.Policies), config.Outbounds, processes);
+            CompiledRuleSet.Compile(config.Policies), config.Outbounds, processes,
+            processRules: config.ProcessRules,
+            dohEndpoint: config.Dns.DohEndpoint,
+            extraDnsPassThroughHosts: vpnServerHosts);
+        if (_logger.IsEnabled(LogLevel.Debug))
+            _logger.LogDebug("routing table built; {Count} VPN server name(s) are kept out of secure DNS: {Hosts}",
+                vpnServerHosts.Count, string.Join(", ", vpnServerHosts));
 
         // A pattern nobody can parse matches nothing, on every connection, for as long as it stays
         // in the list — and inverted it claims everything instead. Compiling is the one moment
@@ -468,8 +528,23 @@ public sealed class RedirectEngine : IDisposable
         return resolver;
     }
 
-    private static Uri ParseDohEndpoint(string? raw)
-        => Uri.TryCreate(raw, UriKind.Absolute, out Uri? uri) ? uri : new Uri("https://1.1.1.1/dns-query");
+    private OutboundDnsResolverPool BuildDnsResolverPool(AppConfig config)
+    {
+        Uri endpoint = ParseDohEndpoint(config.Dns.DohEndpoint);
+        return BuildDnsResolverPool(endpoint, DohEndpointParser.Signature(endpoint, config.Policies));
+    }
+
+    private OutboundDnsResolverPool BuildDnsResolverPool(Uri endpoint, string signature)
+        => new OutboundDnsResolverPool(endpoint, _outbounds, _loggerFactory) { EndpointSignature = signature };
+
+    // Settings validates the box, but a hand-edited file can say anything; a resolver with no
+    // endpoint would fail every query it takes over.
+    private Uri ParseDohEndpoint(string? raw)
+    {
+        if (DohEndpointParser.TryParse(raw, out Uri uri)) return uri;
+        _logger.LogWarning("DoH endpoint {Endpoint} is not an http(s) URL; using {Default}", raw, DohResolver.DefaultEndpoint);
+        return DohResolver.DefaultEndpoint;
+    }
 
     // ---- the handlers the redirect options name -----------------------------------------------
 

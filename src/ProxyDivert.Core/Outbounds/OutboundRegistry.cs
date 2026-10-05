@@ -105,6 +105,47 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
             _ => new Entry(SignatureOf(outbound), () => Build(outbound))).Instance;
     }
 
+    // How often GetReadyAsync looks again. Short enough that a connection made while the tunnel was
+    // still coming up starts within a blink of it being up, long enough to cost nothing.
+    private static readonly TimeSpan TunnelPollInterval = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>
+    /// The outbound's instance, once it is in a state to carry a connection: for a VPN kept up by
+    /// its supervisor, that is once its tunnel is running. Waits for as long as
+    /// <paramref name="ct"/> allows.
+    /// </summary>
+    /// <param name="onWaiting">Called once, when the wait actually begins. For logging.</param>
+    /// <remarks>
+    /// The instance is asked for again on every pass rather than held: a tunnel that fails is
+    /// thrown away by its supervisor and rebuilt, so the object this started with can be one nobody
+    /// is dialling any more. Shared by the TCP router and the DoH resolvers dialling through an
+    /// outbound, so both wait the same way.
+    /// </remarks>
+    public async Task<IOutboundInstance> GetReadyAsync(
+        Outbound outbound, Action? onWaiting, CancellationToken ct)
+    {
+        IOutboundInstance instance = GetOrCreate(outbound);
+
+        // Not supervised: nothing else is going to bring this up, so the source dials it itself on
+        // the way through, exactly as it always has.
+        if (!outbound.KeepConnected || instance.Tunnel is null) return instance;
+
+        bool waited = false;
+        while (instance.Tunnel is { IsRunning: false })
+        {
+            if (!waited)
+            {
+                waited = true;
+                onWaiting?.Invoke();
+            }
+
+            await Task.Delay(TunnelPollInterval, ct).ConfigureAwait(false);
+            instance = GetOrCreate(outbound);
+        }
+
+        return instance;
+    }
+
     /// <summary>
     /// The live instance of an outbound, or null when nothing has needed it yet. Does not build
     /// one — a caller that wants it built asks <see cref="GetOrCreate"/>.

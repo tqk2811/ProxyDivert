@@ -258,6 +258,8 @@ public sealed class AppConfig
 
         policy.Name = RoutingPolicy.DefaultName;
         policy.Rules = new List<RoutingRule> { RoutingPolicy.CreateDefaultRule() };
+        // Its one rule is not a domain rule, so machine-wide secure DNS has nothing to read here.
+        policy.SecureDnsSystem = false;
         Policies.Insert(0, policy);
     }
 

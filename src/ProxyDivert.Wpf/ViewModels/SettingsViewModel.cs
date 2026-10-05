@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
@@ -6,23 +7,23 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
-using ProxyDivert.Core.Configuration.Enums;
 using ProxyDivert.Core.Processes.Enums;
 using TqkLibrary.WinDivert.Redirect.Enums;
 using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.Services;
 using ProxyDivert.Wpf.Themes;
+using ProxyDivert.Wpf.ViewModels.Models;
 
 namespace ProxyDivert.Wpf.ViewModels;
 
 // The Settings tab. Everything here writes straight into AppConfig and saves; the options that
-// live inside the WinDivert handles (DNS mode, the IPv6 mode, log file) only take effect on the
+// live inside the WinDivert handles (DoH endpoint, the IPv6 mode, log file) only take effect on the
 // next engine start, which the view says out loud rather than pretending otherwise.
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly AppServices _services;
 
-    public Array DnsModes { get; } = Enum.GetValues(typeof(DnsMode));
+    public IReadOnlyList<DohEndpointPreset> DohEndpointPresets => DohEndpointPreset.All;
 
     public Array Ipv6Modes { get; } = Enum.GetValues(typeof(Ipv6Mode));
 
@@ -41,7 +42,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(AppServices services)
     {
         _services = services;
-        _dnsMode = services.Config.Dns.Mode;
         _dohEndpoint = services.Config.Dns.DohEndpoint;
         _ipv6 = services.Config.Ipv6;
         _wireProxyPath = services.Config.WireProxyPath ?? string.Empty;
@@ -158,9 +158,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     private void ApplyEventSource() => _services.Session.UseDetectionAsync(_services.Config);
 
     [ObservableProperty]
-    private DnsMode _dnsMode;
-
-    [ObservableProperty]
     private string _dohEndpoint;
 
     [ObservableProperty]
@@ -200,13 +197,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     public void ReloadPending()
     {
-        DnsMode = _services.Config.Dns.Mode;
         DohEndpoint = _services.Config.Dns.DohEndpoint;
         Ipv6 = _services.Config.Ipv6;
         WireProxyPath = _services.Config.WireProxyPath ?? string.Empty;
     }
-
-    partial void OnDnsModeChanged(DnsMode value) => _services.Config.Dns.Mode = value;
 
     partial void OnDohEndpointChanged(string value) => _services.Config.Dns.DohEndpoint = value;
 

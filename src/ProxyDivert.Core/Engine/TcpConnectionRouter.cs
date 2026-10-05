@@ -217,10 +217,6 @@ internal sealed class TcpConnectionRouter
         }
     }
 
-    // How often the wait below looks again. Short enough that a connection made while the tunnel
-    // was still coming up starts within a blink of it being up, long enough to cost nothing.
-    private static readonly TimeSpan TunnelPollInterval = TimeSpan.FromMilliseconds(200);
-
     /// <summary>
     /// The outbound's instance, once it is in a state to carry this connection.
     /// </summary>
@@ -248,38 +244,19 @@ internal sealed class TcpConnectionRouter
     /// The wait ends with the connection's token — the engine stopping, or a configuration change
     /// that re-routes it — so nothing is held past the run it belongs to.
     /// <para>
-    /// The instance is asked for again on every pass rather than held: a tunnel that fails is
-    /// thrown away by its supervisor and rebuilt, so the object this started with can be one nobody
-    /// is dialling any more.
+    /// The waiting itself is <see cref="OutboundRegistry.GetReadyAsync"/>, shared with the DoH
+    /// resolvers that dial through an outbound.
     /// </para>
     /// </remarks>
-    private async Task<IOutboundInstance> ReadyOutboundAsync(
+    private Task<IOutboundInstance> ReadyOutboundAsync(
         Outbound outbound, RedirectedTcpConnection connection, CancellationToken ct)
-    {
-        IOutboundInstance instance = _outbounds.GetOrCreate(outbound);
-
-        // Not supervised: nothing else is going to bring this up, so the source dials it itself on
-        // the way through, exactly as it always has.
-        if (!outbound.KeepConnected || instance.Tunnel is null) return instance;
-
-        bool waited = false;
-        while (instance.Tunnel is { IsRunning: false })
-        {
-            if (!waited)
-            {
-                waited = true;
-                _logger.LogInformation(
-                    "tcp pid={Pid} -> {Destination} is waiting for {Outbound} to come up; it will go "
-                    + "through as soon as the tunnel is up, or the application will time out first",
-                    connection.ProcessId, connection.OriginalDestination, outbound.Name);
-            }
-
-            await Task.Delay(TunnelPollInterval, ct).ConfigureAwait(false);
-            instance = _outbounds.GetOrCreate(outbound);
-        }
-
-        return instance;
-    }
+        => _outbounds.GetReadyAsync(
+            outbound,
+            () => _logger.LogInformation(
+                "tcp pid={Pid} -> {Destination} is waiting for {Outbound} to come up; it will go "
+                + "through as soon as the tunnel is up, or the application will time out first",
+                connection.ProcessId, connection.OriginalDestination, outbound.Name),
+            ct);
 
     // Direct is the machine's own stack: if it had no IPv6 the process could not have opened an
     // IPv6 connection in the first place, so one unreachable destination says nothing about it.

@@ -140,7 +140,7 @@ Bước 1 không dùng được trong mấy trường hợp, lúc đó phải ch
   tự chuyển sang IPv4 ([Happy Eyeballs](docs/Glossary-vi.md#L81)). Mỗi đường ra có thiết lập
   [Ipv6Support](docs/Glossary-vi.md#L89): `Auto` (thử một lần rồi tự nhớ), `Enabled`, `Disabled`.
   SOCKS4 không có IPv6 trong giao thức nên luôn coi là không hỗ trợ.
-- DoH chỉ xử lý DNS/53 trên IPv4; DNS/53 IPv6 của tiến trình đích đi theo luật UDP thông thường.
+- Secure DNS (xem mục [DNS bảo mật theo policy](#dns-bảo-mật-theo-policy)) xử lý DNS/53 qua UDP, cả IPv4 lẫn IPv6; DNS qua TCP/53 (hỏi lại khi câu trả lời quá dài) vẫn đi DNS thường.
 - Kết nối IPv6 đang mở sẵn lúc bật engine cũng rơi vào luật "kết nối đã mở trước" bên dưới.
 - Kết nối đã mở TRƯỚC khi tiến trình được gắn sẽ **đi thẳng** (không chuyển hướng) và ghi rõ trong log:
   chuyển hướng nửa chừng một kết nối đang chạy sẽ làm hỏng hẳn kết nối đó. Muốn không lọt gói nào
@@ -313,6 +313,28 @@ thêm gì. Đường ra VPN và SSH không có tuỳ chọn này — dữ liệu
 theo outbound. Ô *Số byte DPI* riêng của policy để trống thì dùng của outbound. Policy thắng
 outbound, nên cùng một proxy có thể chỉ cắt cho những trang cần. Các ô bị mờ khi outbound của policy
 không hỗ trợ. UDP không bao giờ bị cắt.
+
+## DNS bảo mật theo policy
+
+Mỗi policy ở tab **Rules** có ba công tắc đưa DNS qua DoH bằng chính đường ra của policy, để việc
+tra tên đi cùng đường với dữ liệu. Máy chủ DoH là endpoint trong **Settings** (*DoH endpoint*),
+trừ khi policy tự chọn máy chủ riêng ở ô *DoH server* cạnh các công tắc (để trống = dùng máy chủ trong Settings).
+
+| Công tắc | Tác dụng |
+|---|---|
+| **Secure DNS: app's own DNS** | Các truy vấn DNS do chính ứng dụng khớp tự gửi đi qua DoH bằng đường ra của policy. |
+| **Secure DNS: system DNS** | DNS do Windows hỏi thay cho ứng dụng (dịch vụ DNS Client): nếu tên được hỏi khớp một luật tên miền của policy thì phân giải qua DoH bằng đường ra của policy. Chỉ tính luật tên miền dạng khẳng định; luật IP, cổng, giao thức, Any và luật NOT bị bỏ qua. Xét theo thứ tự bộ lọc trong danh sách, rồi các policy được tick trong mỗi bộ lọc theo thứ tự của bộ lọc đó. Không dùng được với policy Default dựng sẵn. |
+| **Allow plain DNS if DoH fails** | Khi DoH lỗi, truy vấn đi ra như DNS thường thay vì trả lỗi. Cách này làm lộ tên miền. Chỉ có nghĩa khi một trong hai công tắc trên đang bật. |
+
+Các ô bị mờ khi đường ra của policy là Block. Chúng chỉ có tác dụng khi engine đang chạy, và đổi
+endpoint DoH thì có hiệu lực ngay khi bấm Apply & Save. Tên máy chủ của chính các outbound (proxy, VPN,
+SSH) luôn được phân giải bằng DNS thường, vì bản thân yêu cầu DoH cần chúng.
+
+Giới hạn:
+- Phần mềm có driver lọc mạng riêng có thể lấy DNS/53 trước khi WinDivert thấy, khi đó không truy vấn
+  nào bị chuyển hướng. ExitLag ở chế độ mặc định (WFP) là một ví dụ; chuyển ExitLag sang chế độ driver NDIS thì truy vấn lại tới được ProxyDivert.
+- Trình duyệt bật DNS bảo mật riêng (*Use secure DNS* của Chrome, DNS over HTTPS của Firefox) không hỏi
+  DNS của Windows, nên các công tắc này không thấy truy vấn của chúng. Tắt cài đặt đó để chúng đi qua đây.
 
 ## Công cụ dòng lệnh (`ProxyDivert.Cli`)
 

@@ -10,6 +10,7 @@ using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.Services;
+using ProxyDivert.Wpf.ViewModels.Models;
 
 namespace ProxyDivert.Wpf.ViewModels;
 
@@ -120,6 +121,26 @@ public sealed partial class RulesViewModel : ObservableObject
 
     public bool SelectedPolicySupportsAntiDpiConnect => SelectedPolicyOutbound()?.SupportsAntiDpiConnect == true;
 
+    // ==== the policy's secure DNS boxes ====
+    //
+    // A Block outbound has nothing to carry a DoH request, so both are greyed out; the built-in
+    // Default policy has no domain rules, so it cannot take the system switch either. The
+    // fallback only means something while one of the two is on.
+
+    // Suggestions for the policy's own DoH server box; empty keeps the one in Settings.
+    public IReadOnlyList<DohEndpointPreset> DohEndpointPresets => DohEndpointPreset.All;
+
+    public bool SelectedPolicyAllowsSecureDnsProcess
+        => SelectedPolicy is not null && SelectedPolicyOutbound()?.Kind != OutboundKind.Block;
+
+    public bool SelectedPolicyAllowsSecureDnsSystem
+        => SelectedPolicyAllowsSecureDnsProcess && SelectedPolicy is { IsBuiltIn: false };
+
+    public bool SelectedPolicyAllowsSecureDnsFallback
+        => SelectedPolicy is not null
+           && ((SelectedPolicyAllowsSecureDnsProcess && SelectedPolicy.SecureDnsProcess)
+               || (SelectedPolicyAllowsSecureDnsSystem && SelectedPolicy.SecureDnsSystem));
+
     private Outbound? SelectedPolicyOutbound()
         => SelectedPolicy is null ? null : Outbounds.FirstOrDefault(o => o.Id == SelectedPolicy.OutboundId);
 
@@ -127,11 +148,21 @@ public sealed partial class RulesViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(SelectedPolicySupportsAntiDpi));
         OnPropertyChanged(nameof(SelectedPolicySupportsAntiDpiConnect));
+        RaiseSecureDnsSupport();
+    }
+
+    private void RaiseSecureDnsSupport()
+    {
+        OnPropertyChanged(nameof(SelectedPolicyAllowsSecureDnsProcess));
+        OnPropertyChanged(nameof(SelectedPolicyAllowsSecureDnsSystem));
+        OnPropertyChanged(nameof(SelectedPolicyAllowsSecureDnsFallback));
     }
 
     private void OnSelectedPolicyPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(PolicyRowViewModel.OutboundId)) RaiseAntiDpiSupport();
+        else if (e.PropertyName is nameof(PolicyRowViewModel.SecureDnsProcess) or nameof(PolicyRowViewModel.SecureDnsSystem))
+            RaiseSecureDnsSupport();
     }
 
     partial void OnSelectedPolicyChanging(PolicyRowViewModel? value)

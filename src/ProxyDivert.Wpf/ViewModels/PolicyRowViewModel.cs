@@ -121,5 +121,56 @@ public sealed partial class PolicyRowViewModel : ObservableObject
         }
     }
 
+    /// <summary>Secure DNS for the DNS queries the matched app sends itself.</summary>
+    public bool SecureDnsProcess
+    {
+        get => Model.SecureDnsProcess;
+        set
+        {
+            if (value == Model.SecureDnsProcess) return;
+            Model.SecureDnsProcess = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Secure DNS for the names Windows resolves on behalf of apps, when a domain rule of this policy matches.</summary>
+    public bool SecureDnsSystem
+    {
+        get => Model.SecureDnsSystem;
+        set
+        {
+            if (value == Model.SecureDnsSystem) return;
+            Model.SecureDnsSystem = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Send the query as plain DNS when DoH fails, instead of answering an error.</summary>
+    public bool SecureDnsFallbackToPlain
+    {
+        get => Model.SecureDnsFallbackToPlain;
+        set
+        {
+            if (value == Model.SecureDnsFallbackToPlain) return;
+            Model.SecureDnsFallbackToPlain = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>This policy's own DoH server; empty uses the one in Settings.</summary>
+    public string? DohEndpoint
+    {
+        get => Model.DohEndpoint;
+        set
+        {
+            string? normalized = string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+            if (normalized == Model.DohEndpoint) return;
+            Model.DohEndpoint = normalized;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsBuiltIn => Model.IsBuiltIn;
+
     public override string ToString() => Name;
 }

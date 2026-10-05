@@ -77,7 +77,6 @@ public class WpfResourceSmokeTests
             Type[] shown =
             {
                 typeof(ThemeMode),
-                typeof(ProxyDivert.Core.Configuration.Enums.DnsMode),
                 typeof(TqkLibrary.WinDivert.Redirect.Enums.Ipv6Mode),
                 typeof(ProxyDivert.Core.Routing.Enums.UdpMode),
                 typeof(ProxyDivert.Core.Routing.Enums.HostMatcherType),

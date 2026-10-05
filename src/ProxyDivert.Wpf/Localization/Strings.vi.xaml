@@ -112,6 +112,14 @@
     <sys:String x:Key="Str.Rules.Not">Phủ định</sys:String>
     <sys:String x:Key="Str.Rules.UdpMode">UDP</sys:String>
     <sys:String x:Key="Str.Rules.BlockQuic">Chặn QUIC (UDP/443)</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsProcess">DNS bảo mật: DNS riêng của ứng dụng</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsProcessTip">Các truy vấn DNS do chính ứng dụng khớp tự gửi sẽ đi qua DoH bằng đường ra của policy này. Máy chủ DoH là máy chủ trong Cài đặt. Không dùng được khi đường ra là Block.</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsSystem">DNS bảo mật: DNS hệ thống</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsSystemTip">DNS do Windows hỏi thay cho ứng dụng (dịch vụ DNS Client): nếu tên khớp một luật tên miền của policy này thì được phân giải qua DoH bằng đường ra của policy này. Chỉ tính luật tên miền dạng khẳng định; luật IP, cổng, giao thức, Any và luật phủ định (NOT) bị bỏ qua. Thứ tự: các bộ lọc theo thứ tự trong danh sách, rồi các policy được tick trong mỗi bộ lọc theo thứ tự của bộ lọc đó. Không dùng được với policy Default dựng sẵn hoặc đường ra Block.</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsFallback">Cho phép DNS thường nếu DoH lỗi</sys:String>
+    <sys:String x:Key="Str.Rules.SecureDnsFallbackTip">Khi DoH lỗi, truy vấn được gửi như DNS thường thay vì trả lỗi. Cách này làm lộ tên miền. Chỉ có nghĩa khi một trong hai công tắc DNS bảo mật đang bật.</sys:String>
+    <sys:String x:Key="Str.Rules.DohEndpoint">Máy chủ DoH</sys:String>
+    <sys:String x:Key="Str.Rules.DohEndpointTip">Máy chủ DNS qua HTTPS cho policy này. Để trống thì dùng máy chủ đặt trong Cài đặt. Giá trị không phải URL http(s) cũng quay về máy chủ đó.</sys:String>
     <sys:String x:Key="Str.Rules.AntiDpiStateHint">Tick: bật cho bộ luật này. Trống: tắt. Ô vuông đặc: theo outbound.</sys:String>
     <sys:String x:Key="Str.Rules.AntiDpiChunkHint">Số byte tên miền mỗi mảnh cho bộ luật này; để trống thì dùng của outbound.</sys:String>
     <sys:String x:Key="Str.Rules.PatternProblems">Các luật sau không bao giờ khớp được với cách viết hiện tại:</sys:String>
@@ -128,8 +136,8 @@
     <sys:String x:Key="Str.Conn.ShowClosed">Hiện kết nối đã đóng</sys:String>
     <sys:String x:Key="Str.Conn.Filter">Lọc</sys:String>
 
-    <sys:String x:Key="Str.Settings.Dns">DNS</sys:String>
-    <sys:String x:Key="Str.Settings.DnsMode">Chế độ</sys:String>
+    <sys:String x:Key="Str.Settings.SecureDns">DNS bảo mật</sys:String>
+    <sys:String x:Key="Str.Settings.SecureDnsHint">Máy chủ DNS qua HTTPS mà các policy bật DNS bảo mật dùng để phân giải. Chỉ có tác dụng khi engine đang chạy; thay đổi áp dụng ở lần bật engine kế tiếp.</sys:String>
     <sys:String x:Key="Str.Settings.DohEndpoint">Máy chủ DoH</sys:String>
     <sys:String x:Key="Str.Settings.Ipv6">IPv6 của tiến trình đích</sys:String>
     <sys:String x:Key="Str.Settings.Ipv6Hint">Redirect: đưa IPv6 qua luật định tuyến y như IPv4. Block: chặn để ứng dụng tự lùi về IPv4 — dùng khi đường ra không có tuyến IPv6. Ignore: thả cho đi thẳng, tức là lọt ra ngoài proxy.</sys:String>
@@ -198,9 +206,6 @@ Hại: thêm một dịch vụ và một chặng COM nên trễ hơn, và sự k
     <sys:String x:Key="Enum.ThemeMode.System">Theo hệ thống</sys:String>
     <sys:String x:Key="Enum.ThemeMode.Light">Sáng</sys:String>
     <sys:String x:Key="Enum.ThemeMode.Dark">Tối</sys:String>
-
-    <sys:String x:Key="Enum.DnsMode.SystemSniff">Đọc DNS của hệ thống</sys:String>
-    <sys:String x:Key="Enum.DnsMode.DnsOverHttps">DNS qua HTTPS</sys:String>
 
     <sys:String x:Key="Enum.Ipv6Mode.Redirect">Chuyển hướng</sys:String>
     <sys:String x:Key="Enum.Ipv6Mode.Block">Chặn</sys:String>

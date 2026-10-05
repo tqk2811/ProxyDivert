@@ -4,19 +4,29 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="4">
 
-            <!-- ==== DNS ==== -->
+            <!-- ==== secure DNS ==== -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,8">
                 <StackPanel>
-                    <TextBlock Style="{StaticResource Heading}" Text="{DynamicResource Str.Settings.Dns}"
-                               Margin="0,0,0,8"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock Text="{DynamicResource Str.Settings.DnsMode}" VerticalAlignment="Center" MinWidth="120"/>
-                        <ComboBox ItemsSource="{Binding DnsModes}" SelectedItem="{Binding DnsMode}" Width="200"
-                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
-                    </StackPanel>
+                    <TextBlock Style="{StaticResource Heading}" Text="{DynamicResource Str.Settings.SecureDns}"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.SecureDnsHint}"/>
+                    <!-- Free text with suggestions: picking one writes its URL (TextPath) into the
+                         box, while the list shows who runs it. -->
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{DynamicResource Str.Settings.DohEndpoint}" VerticalAlignment="Center" MinWidth="120"/>
-                        <TextBox Text="{Binding DohEndpoint, UpdateSourceTrigger=PropertyChanged}" Width="320"/>
+                        <ComboBox IsEditable="True" IsTextSearchEnabled="False" TextSearch.TextPath="Url" Width="320"
+                                  ItemsSource="{Binding DohEndpointPresets}"
+                                  Text="{Binding DohEndpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Provider}" MinWidth="70" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Url}" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                     </StackPanel>
                 </StackPanel>
             </Border>
