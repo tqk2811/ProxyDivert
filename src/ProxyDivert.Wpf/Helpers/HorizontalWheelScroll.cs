@@ -6,7 +6,7 @@ using System.Windows.Media;
 namespace ProxyDivert.Wpf.Helpers;
 
 /// <summary>
-/// Shift + mouse wheel scrolls every DataGrid and ListBox/ListView sideways, as it does in most
+/// Shift + mouse wheel scrolls every DataGrid, ListBox/ListView and TreeView sideways, as it does in most
 /// Windows applications. WPF's ScrollViewer has no such gesture, so a class handler adds it once
 /// for the whole application.
 /// </summary>
@@ -19,6 +19,7 @@ public static class HorizontalWheelScroll
     {
         EventManager.RegisterClassHandler(typeof(DataGrid), UIElement.PreviewMouseWheelEvent, new MouseWheelEventHandler(OnPreviewMouseWheel));
         EventManager.RegisterClassHandler(typeof(ListBox), UIElement.PreviewMouseWheelEvent, new MouseWheelEventHandler(OnPreviewMouseWheel));
+        EventManager.RegisterClassHandler(typeof(TreeView), UIElement.PreviewMouseWheelEvent, new MouseWheelEventHandler(OnPreviewMouseWheel));
     }
 
     private static void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
