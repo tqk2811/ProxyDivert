@@ -163,11 +163,6 @@
                     </Style>
                 </Button.Style>
             </Button>
-            <ComboBox Width="150" VerticalAlignment="Center"
-                      ItemsSource="{Binding Settings.Languages}"
-                      SelectedItem="{Binding Settings.Language}"
-                      ItemTemplate="{StaticResource LanguageItemTemplate}"
-                      ToolTip="{DynamicResource Str.Settings.Language}"/>
             <Button Style="{StaticResource IconButton}" Margin="6,0,4,0" VerticalAlignment="Center"
                     Command="{Binding ToggleThemeCommand}" ToolTip="{Binding ThemeTooltip}">
                 <TextBlock Text="{Binding ThemeGlyph}" FontFamily="Segoe MDL2 Assets" FontSize="15"/>
