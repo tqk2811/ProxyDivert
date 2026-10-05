@@ -140,12 +140,14 @@
                         <CheckBox Content="{DynamicResource Str.Rules.BlockQuic}"
                                   IsChecked="{Binding SelectedPolicy.BlockQuic}"
                                   VerticalAlignment="Center" Margin="20,0,0,0"/>
+                    </WrapPanel>
 
+                    <WrapPanel Margin="0,6,0,0" VerticalAlignment="Center">
                         <CheckBox Content="{DynamicResource Str.Outbound.AntiDpiTls}" IsThreeState="True"
                                   IsChecked="{Binding SelectedPolicy.AntiDpiTls}"
                                   IsEnabled="{Binding SelectedPolicySupportsAntiDpi}"
                                   ToolTip="{DynamicResource Str.Rules.AntiDpiStateHint}"
-                                  VerticalAlignment="Center" Margin="20,0,0,0"/>
+                                  VerticalAlignment="Center"/>
                         <CheckBox Content="{DynamicResource Str.Outbound.AntiDpiConnect}" IsThreeState="True"
                                   IsChecked="{Binding SelectedPolicy.AntiDpiConnect}"
                                   IsEnabled="{Binding SelectedPolicySupportsAntiDpiConnect}"
