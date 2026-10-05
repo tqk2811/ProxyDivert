@@ -6,23 +6,35 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
-using ProxyDivert.Core.Configuration.Enums;
 using ProxyDivert.Core.Processes.Enums;
 using TqkLibrary.WinDivert.Redirect.Enums;
 using ProxyDivert.Wpf.Localization;
 using ProxyDivert.Wpf.Services;
 using ProxyDivert.Wpf.Themes;
+using ProxyDivert.Wpf.ViewModels.Models;
 
 namespace ProxyDivert.Wpf.ViewModels;
 
 // The Settings tab. Everything here writes straight into AppConfig and saves; the options that
-// live inside the WinDivert handles (DNS mode, the IPv6 mode, log file) only take effect on the
+// live inside the WinDivert handles (DoH endpoint, the IPv6 mode, log file) only take effect on the
 // next engine start, which the view says out loud rather than pretending otherwise.
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly AppServices _services;
 
-    public Array DnsModes { get; } = Enum.GetValues(typeof(DnsMode));
+    // Suggestions for the endpoint box, which stays free text. IP-literal URLs first: they need no
+    // lookup of their own, and these providers' certificates name those IPs.
+    public DohEndpointPreset[] DohEndpointPresets { get; } =
+    {
+        new DohEndpointPreset("Cloudflare", "https://1.1.1.1/dns-query"),
+        new DohEndpointPreset("Cloudflare", "https://1.0.0.1/dns-query"),
+        new DohEndpointPreset("Google", "https://8.8.8.8/dns-query"),
+        new DohEndpointPreset("Google", "https://8.8.4.4/dns-query"),
+        new DohEndpointPreset("Google", "https://dns.google/dns-query"),
+        new DohEndpointPreset("Quad9", "https://9.9.9.9/dns-query"),
+        new DohEndpointPreset("Quad9", "https://dns.quad9.net/dns-query"),
+        new DohEndpointPreset("AdGuard", "https://dns.adguard-dns.com/dns-query"),
+    };
 
     public Array Ipv6Modes { get; } = Enum.GetValues(typeof(Ipv6Mode));
 
@@ -41,7 +53,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(AppServices services)
     {
         _services = services;
-        _dnsMode = services.Config.Dns.Mode;
         _dohEndpoint = services.Config.Dns.DohEndpoint;
         _ipv6 = services.Config.Ipv6;
         _wireProxyPath = services.Config.WireProxyPath ?? string.Empty;
@@ -158,9 +169,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     private void ApplyEventSource() => _services.Session.UseDetectionAsync(_services.Config);
 
     [ObservableProperty]
-    private DnsMode _dnsMode;
-
-    [ObservableProperty]
     private string _dohEndpoint;
 
     [ObservableProperty]
@@ -200,13 +208,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     public void ReloadPending()
     {
-        DnsMode = _services.Config.Dns.Mode;
         DohEndpoint = _services.Config.Dns.DohEndpoint;
         Ipv6 = _services.Config.Ipv6;
         WireProxyPath = _services.Config.WireProxyPath ?? string.Empty;
     }
-
-    partial void OnDnsModeChanged(DnsMode value) => _services.Config.Dns.Mode = value;
 
     partial void OnDohEndpointChanged(string value) => _services.Config.Dns.DohEndpoint = value;
 

@@ -6,7 +6,6 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using ProxyDivert.Core.Configuration.Enums;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Engine.Extensions;
 using ProxyDivert.Core.Engine.Interfaces;
@@ -211,8 +210,6 @@ public sealed class RedirectEngine : IDisposable
 
             Ipv6Mode = config.Ipv6,
             EnableDnsSniff = true,
-            EnableSecureDns = config.Dns.Mode == DnsMode.DnsOverHttps,
-            DohEndpoint = ParseDohEndpoint(config.Dns.DohEndpoint),
             TcpConnectionHandler = HandleTcpAsync,
             UdpDatagramHandler = HandleUdpDatagram,
             ShouldRedirectUdp = ShouldRedirectUdpFlow,
@@ -467,9 +464,6 @@ public sealed class RedirectEngine : IDisposable
 
         return resolver;
     }
-
-    private static Uri ParseDohEndpoint(string? raw)
-        => Uri.TryCreate(raw, UriKind.Absolute, out Uri? uri) ? uri : new Uri("https://1.1.1.1/dns-query");
 
     // ---- the handlers the redirect options name -----------------------------------------------
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using ProxyDivert.Core.Routing.Compiled;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
@@ -28,11 +29,28 @@ public sealed class RoutingPolicyResolver
     private readonly IProcessPolicySource _policiesByProcessId;
     private readonly CompiledPolicy _fallbackPolicy;
 
+    // Machine-side secure DNS, worked out once: the policies that turned it on, each with only its
+    // domain rules, in the order the user put them (see BuildSystemDnsPolicies).
+    private readonly IReadOnlyList<CompiledPolicy> _systemDnsPolicies;
+
+    // Names whose lookup is never taken over: see IsDnsPassThrough.
+    private readonly HashSet<string> _dnsPassThroughHosts;
+
+    /// <param name="processRules">
+    /// The filters, in the user's order. Only machine-side secure DNS reads them; without them no
+    /// query from an untracked process is ever taken over.
+    /// </param>
+    /// <param name="dohEndpoint">
+    /// The DNS over HTTPS server the taken-over queries go to. Its host name joins the names that
+    /// are never taken over.
+    /// </param>
     public RoutingPolicyResolver(
         CompiledRuleSet ruleSet,
         IEnumerable<Outbound> outbounds,
         IProcessPolicySource policiesByProcessId,
-        RoutingPolicy? fallbackPolicy = null)
+        RoutingPolicy? fallbackPolicy = null,
+        IEnumerable<ProcessRule>? processRules = null,
+        string? dohEndpoint = null)
     {
         _ruleSet = ruleSet ?? throw new ArgumentNullException(nameof(ruleSet));
         if (outbounds is null) throw new ArgumentNullException(nameof(outbounds));
@@ -56,6 +74,9 @@ public sealed class RoutingPolicyResolver
             Name = "Untracked",
             OutboundId = Outbound.DirectId,
         });
+
+        _systemDnsPolicies = BuildSystemDnsPolicies(ruleSet, processRules);
+        _dnsPassThroughHosts = BuildDnsPassThroughHosts(_outbounds.Values, dohEndpoint);
     }
 
     /// <summary>
@@ -67,12 +88,16 @@ public sealed class RoutingPolicyResolver
         IEnumerable<RoutingPolicy> policies,
         IEnumerable<Outbound> outbounds,
         IReadOnlyDictionary<uint, IReadOnlyList<Guid>>? policiesByProcessId,
-        RoutingPolicy? fallbackPolicy = null)
+        RoutingPolicy? fallbackPolicy = null,
+        IEnumerable<ProcessRule>? processRules = null,
+        string? dohEndpoint = null)
         : this(
             CompiledRuleSet.Compile(policies ?? throw new ArgumentNullException(nameof(policies))),
             outbounds,
             ProcessPolicyMap.From(policiesByProcessId),
-            fallbackPolicy)
+            fallbackPolicy,
+            processRules,
+            dohEndpoint)
     {
     }
 
@@ -189,6 +214,173 @@ public sealed class RoutingPolicyResolver
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(target), policy.UdpMode, "Unknown UdpMode");
+        }
+    }
+
+    // ---- secure DNS --------------------------------------------------------------------------
+    //
+    // Called on the packet pump for every DNS query, so everything below reads the immutable
+    // snapshot built in the constructor: no locks, no I/O, nothing allocated beyond the decision.
+
+    /// <summary>
+    /// Whether a DNS query is taken over and resolved over DNS over HTTPS, and through which
+    /// outbound. Null means leave it alone: it goes out as plain DNS.
+    /// </summary>
+    /// <param name="processId">The process that sent it, or null when the socket is not known.</param>
+    /// <param name="queryName">The name asked about, lower case, without the trailing dot.</param>
+    /// <remarks>
+    /// A process under redirection is answered by its own policies (<see cref="ResolveProcessDns"/>);
+    /// anything else — no pid, or a pid no filter caught, which is where the Windows DNS client
+    /// service asking for everyone ends up — by the policies that turned machine-side secure DNS on
+    /// (<see cref="ResolveSystemDns"/>). A tracked process whose policies decline is NOT handed on
+    /// to the machine side: its filter has spoken.
+    /// </remarks>
+    public DnsRouteDecision? ResolveDns(uint? processId, string queryName, bool isIpv6 = false)
+    {
+        if (string.IsNullOrEmpty(queryName) || IsDnsPassThrough(queryName)) return null;
+
+        return processId is uint pid && IsTracked(pid)
+            ? ResolveProcessDns(pid, queryName, isIpv6)
+            : ResolveSystemDns(queryName);
+    }
+
+    /// <summary>
+    /// The process side: the query is judged exactly like a UDP connection to port 53 of that name
+    /// would be, and taken over only when the policy that claims it turned SecureDnsProcess on.
+    /// Nothing claiming it means the process's first policy, sending it Direct — again only if that
+    /// policy turned it on. A Block outbound takes nothing over: there is no path to resolve on.
+    /// </summary>
+    public DnsRouteDecision? ResolveProcessDns(uint processId, string queryName, bool isIpv6 = false)
+    {
+        if (string.IsNullOrEmpty(queryName) || IsDnsPassThrough(queryName)) return null;
+
+        var target = new RouteTarget(
+            processId, isIpv6 ? IPAddress.IPv6Any : IPAddress.Any, 53, queryName, isUdp: true);
+        RouteDecision decision = Resolve(target, GetCompiledPolicies(processId), applyAntiDpi: false);
+
+        if (!decision.Policy.SecureDnsProcess || decision.IsBlocked) return null;
+        return new DnsRouteDecision(decision.Outbound, decision.Policy, decision.MatchedRule);
+    }
+
+    /// <summary>
+    /// The machine side: the policies that turned SecureDnsSystem on, read in the user's order —
+    /// filter by filter as the list shows them, each filter's ticked policies in its own order, a
+    /// policy already read skipped — and within each only its domain rules, in Order. The first
+    /// rule that claims the name decides. Nothing claiming it leaves it alone.
+    /// </summary>
+    public DnsRouteDecision? ResolveSystemDns(string queryName)
+    {
+        if (string.IsNullOrEmpty(queryName) || IsDnsPassThrough(queryName)) return null;
+        if (_systemDnsPolicies.Count == 0) return null;
+
+        var target = new RouteTarget(0, IPAddress.Any, 53, queryName, isUdp: true);
+        foreach (CompiledPolicy policy in _systemDnsPolicies)
+        {
+            foreach (CompiledRule rule in policy.Rules)
+            {
+                if (!rule.IsMatch(target)) continue;
+
+                // Same as a connection: a policy whose way out is gone or switched off is passed
+                // over rather than resolving under its name some other way.
+                if (!TryGetUsableOutbound(policy.Source.OutboundId, out Outbound? outbound)) continue;
+                if (outbound!.IsBlocked) return null;
+                return new DnsRouteDecision(outbound, policy.Source, rule.Source);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The names whose lookup must always go out as plain DNS: the DoH server itself and every
+    /// enabled outbound's server. Taking those over would resolve the way out through the way out,
+    /// which cannot work before it is up.
+    /// </summary>
+    public bool IsDnsPassThrough(string queryName)
+        => _dnsPassThroughHosts.Count > 0 && _dnsPassThroughHosts.Contains(NormalizeDnsName(queryName));
+
+    private bool IsTracked(uint processId)
+        => _policiesByProcessId.TryGetPolicyIds(processId, out IReadOnlyList<Guid> ids) && ids.Count > 0;
+
+    // Filters top to bottom, a disabled filter skipped; each filter's ticked policies in its order;
+    // a policy listed by an earlier filter already has its place. The built-in Default policy is
+    // left out whatever its flag says: its one rule matches everything, which for the machine side
+    // would mean every lookup on the machine.
+    private static IReadOnlyList<CompiledPolicy> BuildSystemDnsPolicies(
+        CompiledRuleSet ruleSet, IEnumerable<ProcessRule>? processRules)
+    {
+        if (processRules is null) return Array.Empty<CompiledPolicy>();
+
+        var seen = new HashSet<Guid>();
+        var result = new List<CompiledPolicy>();
+        foreach (ProcessRule filter in processRules)
+        {
+            if (filter is null || !filter.IsEnabled) continue;
+            foreach (Guid id in filter.PolicyIds)
+            {
+                if (!seen.Add(id)) continue;
+                if (!ruleSet.TryGetPolicy(id, out CompiledPolicy? policy)) continue;
+                if (policy!.Source.IsBuiltIn || !policy.Source.SecureDnsSystem) continue;
+
+                // A negated rule ("not x") says nothing about one name: it would claim nearly every
+                // lookup on the machine, so only plain domain rules count here.
+                var domainRules = policy.Rules
+                    .Where(r => !r.Source.IsNot && IsDomainMatcher(r.Source.Matcher))
+                    .ToList();
+                if (domainRules.Count > 0) result.Add(new CompiledPolicy(policy.Source, domainRules));
+            }
+        }
+        return result;
+    }
+
+    private static bool IsDomainMatcher(HostMatcherType matcher) => matcher switch
+    {
+        HostMatcherType.Wildcard or HostMatcherType.Equals or HostMatcherType.DomainSuffix
+            or HostMatcherType.StartsWith or HostMatcherType.EndsWith or HostMatcherType.Contains
+            or HostMatcherType.Regex => true,
+        _ => false,
+    };
+
+    // Only names: an IP literal is never looked up. A VPN outbound pointing at a configuration file
+    // names its server inside the file, which is not read here (no I/O on this path).
+    private static HashSet<string> BuildDnsPassThroughHosts(IEnumerable<Outbound> outbounds, string? dohEndpoint)
+    {
+        var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (Uri.TryCreate(dohEndpoint, UriKind.Absolute, out Uri? endpoint))
+            AddHostName(hosts, endpoint.IdnHost);
+
+        foreach (Outbound outbound in outbounds)
+        {
+            if (!outbound.IsEnabled) continue;
+            AddHostName(hosts, outbound.Address?.Host);
+        }
+        return hosts;
+    }
+
+    private static void AddHostName(HashSet<string> hosts, string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host)) return;
+        string name = NormalizeDnsName(host!);
+        if (name.Length == 0) return;
+        hosts.Add(name);
+    }
+
+    // Lower-case ASCII (punycode) form without the root dot; empty for an IP literal, which is never
+    // looked up by name.
+    private static string NormalizeDnsName(string name)
+    {
+        string trimmed = name.Trim().Trim('[', ']');
+        if (trimmed.Length == 0 || IPAddress.TryParse(trimmed, out _)) return string.Empty;
+
+        string lowered = trimmed.ToLowerInvariant().TrimEnd('.');
+        try
+        {
+            return new System.Globalization.IdnMapping().GetAscii(lowered);
+        }
+        catch (ArgumentException)
+        {
+            return lowered;
         }
     }
 

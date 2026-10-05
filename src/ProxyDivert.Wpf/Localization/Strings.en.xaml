@@ -128,8 +128,8 @@
     <sys:String x:Key="Str.Conn.ShowClosed">Show closed</sys:String>
     <sys:String x:Key="Str.Conn.Filter">Filter</sys:String>
 
-    <sys:String x:Key="Str.Settings.Dns">DNS</sys:String>
-    <sys:String x:Key="Str.Settings.DnsMode">Mode</sys:String>
+    <sys:String x:Key="Str.Settings.SecureDns">Secure DNS</sys:String>
+    <sys:String x:Key="Str.Settings.SecureDnsHint">The DNS over HTTPS server used by the policies that turn secure DNS on. Only active while the engine is running; a change takes effect on the next engine start.</sys:String>
     <sys:String x:Key="Str.Settings.DohEndpoint">DoH endpoint</sys:String>
     <sys:String x:Key="Str.Settings.Ipv6">IPv6 of the target</sys:String>
     <sys:String x:Key="Str.Settings.Ipv6Hint">Redirect sends the IPv6 traffic through the rules like IPv4. Block drops it so the application falls back to IPv4 — use it when the way out has no IPv6 route. Ignore lets it leave untouched, bypassing the proxy.</sys:String>
@@ -198,9 +198,6 @@ Downside: an extra service and a COM hop add latency, and the events of one watc
     <sys:String x:Key="Enum.ThemeMode.System">Follow the system</sys:String>
     <sys:String x:Key="Enum.ThemeMode.Light">Light</sys:String>
     <sys:String x:Key="Enum.ThemeMode.Dark">Dark</sys:String>
-
-    <sys:String x:Key="Enum.DnsMode.SystemSniff">Read the system DNS</sys:String>
-    <sys:String x:Key="Enum.DnsMode.DnsOverHttps">DNS over HTTPS</sys:String>
 
     <sys:String x:Key="Enum.Ipv6Mode.Redirect">Redirect</sys:String>
     <sys:String x:Key="Enum.Ipv6Mode.Block">Block</sys:String>

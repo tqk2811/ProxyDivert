@@ -76,5 +76,21 @@ public sealed class RoutingPolicy
     // Bytes of the name per piece for this policy; null follows the outbound.
     public int? AntiDpiChunkSize { get; set; }
 
+    // Secure DNS, process side: a DNS query from a process this policy is applied to, whose name
+    // the policy claims, is answered over DNS over HTTPS through the policy's outbound instead of
+    // leaving as plain UDP/53. Like anti-DPI, only the policy whose rule matched has a say.
+    public bool SecureDnsProcess { get; set; }
+
+    // Secure DNS, machine side: a query nobody tracked asked — the Windows DNS client service
+    // answering for everyone, or any process no filter caught — whose name one of this policy's
+    // DOMAIN rules claims is resolved over HTTPS through this policy's outbound. Rules on IPs, ports,
+    // protocol or "any" say nothing about a name and are not read for it. Always off on the
+    // built-in Default policy, whose one rule matches everything.
+    public bool SecureDnsSystem { get; set; }
+
+    // When DNS over HTTPS fails for a query this policy took over, let the original plain query go
+    // out instead of answering with a failure.
+    public bool SecureDnsFallbackToPlain { get; set; }
+
     public override string ToString() => Name;
 }
