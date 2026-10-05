@@ -44,13 +44,18 @@ public sealed class RoutingPolicyResolver
     /// The DNS over HTTPS server the taken-over queries go to. Its host name joins the names that
     /// are never taken over.
     /// </param>
+    /// <param name="extraDnsPassThroughHosts">
+    /// More names never taken over: the servers of VPN outbounds configured from a file, which this
+    /// class cannot see without reading the file (see VpnServerHostReader).
+    /// </param>
     public RoutingPolicyResolver(
         CompiledRuleSet ruleSet,
         IEnumerable<Outbound> outbounds,
         IProcessPolicySource policiesByProcessId,
         RoutingPolicy? fallbackPolicy = null,
         IEnumerable<ProcessRule>? processRules = null,
-        string? dohEndpoint = null)
+        string? dohEndpoint = null,
+        IEnumerable<string>? extraDnsPassThroughHosts = null)
     {
         _ruleSet = ruleSet ?? throw new ArgumentNullException(nameof(ruleSet));
         if (outbounds is null) throw new ArgumentNullException(nameof(outbounds));
@@ -77,6 +82,8 @@ public sealed class RoutingPolicyResolver
 
         _systemDnsPolicies = BuildSystemDnsPolicies(ruleSet, processRules);
         _dnsPassThroughHosts = BuildDnsPassThroughHosts(_outbounds.Values, dohEndpoint);
+        if (extraDnsPassThroughHosts != null)
+            foreach (string host in extraDnsPassThroughHosts) AddHostName(_dnsPassThroughHosts, host);
     }
 
     /// <summary>
@@ -342,7 +349,8 @@ public sealed class RoutingPolicyResolver
     };
 
     // Only names: an IP literal is never looked up. A VPN outbound pointing at a configuration file
-    // names its server inside the file, which is not read here (no I/O on this path).
+    // names its server inside the file, which is not read here (no I/O on this path); the engine
+    // reads those and hands them in as extraDnsPassThroughHosts.
     private static HashSet<string> BuildDnsPassThroughHosts(IEnumerable<Outbound> outbounds, string? dohEndpoint)
     {
         var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

@@ -28,6 +28,8 @@ internal sealed class EngineRun : IAsyncDisposable
 {
     private readonly ResolverSlot _resolvers;
     private readonly CancellationTokenSource _cts;
+    // Swapped when a save changes the DoH endpoint, read by the decider on the pump thread.
+    private volatile OutboundDnsResolverPool _dnsResolvers;
 
     public EngineRun(
         IProcessRedirector redirector,
@@ -38,6 +40,7 @@ internal sealed class EngineRun : IAsyncDisposable
         UdpFlowRouter udp,
         ResolverSlot resolvers,
         TrackedPidQueue pids,
+        OutboundDnsResolverPool dnsResolvers,
         CancellationTokenSource cts)
     {
         Redirector = redirector ?? throw new ArgumentNullException(nameof(redirector));
@@ -48,6 +51,7 @@ internal sealed class EngineRun : IAsyncDisposable
         Udp = udp ?? throw new ArgumentNullException(nameof(udp));
         _resolvers = resolvers ?? throw new ArgumentNullException(nameof(resolvers));
         Pids = pids ?? throw new ArgumentNullException(nameof(pids));
+        _dnsResolvers = dnsResolvers ?? throw new ArgumentNullException(nameof(dnsResolvers));
         _cts = cts ?? throw new ArgumentNullException(nameof(cts));
     }
 
@@ -78,6 +82,20 @@ internal sealed class EngineRun : IAsyncDisposable
     /// <summary>Publishes a freshly built routing table. Called under the engine's lock.</summary>
     public void UseResolver(RoutingPolicyResolver resolver) => _resolvers.Use(resolver);
 
+    /// <summary>The DoH resolvers secure DNS answers through, one per outbound.</summary>
+    public OutboundDnsResolverPool DnsResolvers => _dnsResolvers;
+
+    /// <summary>
+    /// Publishes a pool for a new DoH endpoint and retires the old one, whose resolvers live on until
+    /// the queries in flight on them have had their time.
+    /// </summary>
+    public void UseDnsResolvers(OutboundDnsResolverPool pool)
+    {
+        OutboundDnsResolverPool old = _dnsResolvers;
+        _dnsResolvers = pool ?? throw new ArgumentNullException(nameof(pool));
+        old.Retire();
+    }
+
     /// <summary>
     /// Tells everything running on this run's token to stop. Separate from disposal because the
     /// engine cancels while it still holds its lock — that part is cheap — and then waits for the
@@ -103,6 +121,8 @@ internal sealed class EngineRun : IAsyncDisposable
         await Pids.DisposeAsync().ConfigureAwait(false);
         await UdpForwarder.DisposeAsync().ConfigureAwait(false);
         Redirector.Dispose();
+        // After the redirector: no query is in flight any more, so the resolvers can go at once.
+        _dnsResolvers.Dispose();
         _cts.Dispose();
     }
 }
