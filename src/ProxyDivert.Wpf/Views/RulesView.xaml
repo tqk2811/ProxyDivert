@@ -155,6 +155,7 @@
                                   VerticalAlignment="Center" Margin="20,0,0,0"/>
                         <TextBlock Text="{DynamicResource Str.Outbound.AntiDpiChunk}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                         <TextBox Text="{Binding SelectedPolicy.AntiDpiChunkSize, UpdateSourceTrigger=LostFocus}"
+                                 b:PositiveIntegerInput.IsEnabled="True"
                                  IsEnabled="{Binding SelectedPolicySupportsAntiDpi}"
                                  ToolTip="{DynamicResource Str.Rules.AntiDpiChunkHint}"
                                  Width="50" Margin="8,0,0,0" VerticalContentAlignment="Center"/>

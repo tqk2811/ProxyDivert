@@ -261,7 +261,13 @@
                                             CellStyle="{StaticResource AntiDpiCell}" Width="120"/>
                     <DataGridTextColumn Header="{b:LocalizedBinding Str.Outbound.AntiDpiChunk}" b:ColumnLayoutBehavior.ColumnKey="antiDpiChunk"
                                         Binding="{Binding AntiDpiChunkSize, UpdateSourceTrigger=LostFocus}"
-                                        CellStyle="{StaticResource AntiDpiCell}" Width="90"/>
+                                        CellStyle="{StaticResource AntiDpiCell}" Width="90">
+                                        <DataGridTextColumn.EditingElementStyle>
+                                            <Style TargetType="TextBox" BasedOn="{x:Static DataGridTextColumn.DefaultEditingElementStyle}">
+                                                <Setter Property="b:PositiveIntegerInput.IsEnabled" Value="True"/>
+                                            </Style>
+                                        </DataGridTextColumn.EditingElementStyle>
+                                        </DataGridTextColumn>
                     <!-- The tunnel switch. A VPN's connection is the user's session with their
                          provider, not part of a redirection run: this connects and disconnects it
                          on its own, WinDivert on or off. Switching WinDivert ON connects whatever
