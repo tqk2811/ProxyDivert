@@ -37,7 +37,7 @@
                                 <ColumnDefinition Width="*"/>
                                 <!-- Kept clear for the buttons overlaid on top; they are outside
                                      this template so they can sit above the tab strip. -->
-                                <ColumnDefinition Width="470"/>
+                                <ColumnDefinition Width="590"/>
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" Orientation="Horizontal"
@@ -130,6 +130,11 @@
         <!-- ==== overlaid top-right: appearance switches, then the window buttons ==== -->
         <StackPanel Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right"
                     Height="44" WindowChrome.IsHitTestVisibleInChrome="True">
+            <!-- Only offered while there is something to put back. -->
+            <Button Content="{DynamicResource Str.App.DiscardChanges}" Command="{Binding DiscardChangesCommand}"
+                    Margin="0,0,6,0" VerticalAlignment="Center"
+                    Visibility="{Binding HasPendingChanges, Converter={StaticResource TrueToVisible}}"/>
+
             <!-- Plain surface colours while everything is applied; accent and a slow pulse once the
                  configuration holds edits the engine has not taken yet. -->
             <Button Content="{DynamicResource Str.App.ApplyAndSave}" Command="{Binding ApplyAndSaveCommand}"

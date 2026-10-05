@@ -13,6 +13,7 @@
     <sys:String x:Key="Str.App.RestoreNeedsAdmin">Redirection was on when the tool last closed, but it cannot be switched back on without administrator rights.</sys:String>
     <sys:String x:Key="Str.App.Save">Save</sys:String>
     <sys:String x:Key="Str.App.ApplyAndSave">Apply &amp; Save</sys:String>
+    <sys:String x:Key="Str.App.DiscardChanges">Discard changes</sys:String>
     <sys:String x:Key="Str.App.Add">Add</sys:String>
     <sys:String x:Key="Str.App.Remove">Remove</sys:String>
     <sys:String x:Key="Str.App.Up">Up</sys:String>

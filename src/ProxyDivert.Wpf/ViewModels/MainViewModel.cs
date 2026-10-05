@@ -127,6 +127,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private void DiscardChanges()
+    {
+        _services.DiscardChanges();
+        ReloadAll();
+        Settings.ReloadPending();
+        Rules.CheckPatterns();
+        HasPendingChanges = false;
+    }
+
+    [RelayCommand]
     private void ToggleTheme()
     {
         // Assigning through the Settings tab rather than calling ThemeManager directly: that setter

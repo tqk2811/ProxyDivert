@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -125,7 +126,7 @@ public sealed class AppServices : IAsyncDisposable
         ConfigStore = new ConfigStore(configPath);
         Config = ConfigStore.Load();
         _autoSaveLog = Config.AutoSaveLog;
-        _appliedSnapshot = TakeSnapshot();
+        RememberApplied();
 
         // The store is handed to the container rather than built by it — it already exists, it was
         // needed to read the file — and registering it is what gives the session a file to write.
@@ -216,7 +217,7 @@ public sealed class AppServices : IAsyncDisposable
     /// </summary>
     public Task SaveAndApply()
     {
-        _appliedSnapshot = TakeSnapshot();
+        RememberApplied();
 
         // The log path is the one setting the engine does not own, because logging is set up before
         // the engine exists. Applying it here is what makes it take effect without a restart.
@@ -238,10 +239,46 @@ public sealed class AppServices : IAsyncDisposable
         nameof(AppConfig.AutoSaveLog), nameof(AppConfig.FileLogLevel),
     };
 
-    private string _appliedSnapshot;
+    private string _appliedSnapshot = string.Empty;
+
+    // The whole configuration as last applied, kept to put the edits back. The snapshot above
+    // leaves fields out, so it cannot be read back. Copied through ConfigStore.Clone, the same
+    // serialiser the file and the engine use.
+    private AppConfig _applied = new AppConfig();
 
     /// <summary>True when the configuration differs from what was last applied.</summary>
     public bool HasPendingChanges => TakeSnapshot() != _appliedSnapshot;
+
+    /// <summary>
+    /// Puts the configuration back to what was last applied, in place: the view models hold this
+    /// instance, so its properties are replaced rather than the instance itself. The settings that
+    /// apply themselves, and each tunnel's KeepConnected, are what they are now, not what they were.
+    /// The tabs have to be reloaded afterwards.
+    /// </summary>
+    public void DiscardChanges()
+    {
+        AppConfig applied = ConfigStore.Clone(_applied);
+        foreach (Outbound outbound in applied.Outbounds)
+        {
+            Outbound? current = Config.Outbounds.FirstOrDefault(o => o.Id == outbound.Id);
+            if (current is not null) outbound.KeepConnected = current.KeepConnected;
+        }
+
+        foreach (PropertyInfo property in typeof(AppConfig).GetProperties())
+        {
+            if (!property.CanRead || !property.CanWrite) continue;
+            if (SelfAppliedSettings.Contains(property.Name)) continue;
+            property.SetValue(Config, property.GetValue(applied));
+        }
+
+        _appliedSnapshot = TakeSnapshot();
+    }
+
+    private void RememberApplied()
+    {
+        _applied = ConfigStore.Clone(Config);
+        _appliedSnapshot = TakeSnapshot();
+    }
 
     private string TakeSnapshot()
     {

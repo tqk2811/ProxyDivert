@@ -194,6 +194,18 @@ public sealed partial class SettingsViewModel : ObservableObject
         _services.Save();
     }
 
+    /// <summary>
+    /// Re-reads the settings that wait for Apply &amp; Save, after the configuration has been put
+    /// back to what was last applied. The rest take effect when changed and are never pending.
+    /// </summary>
+    public void ReloadPending()
+    {
+        DnsMode = _services.Config.Dns.Mode;
+        DohEndpoint = _services.Config.Dns.DohEndpoint;
+        Ipv6 = _services.Config.Ipv6;
+        WireProxyPath = _services.Config.WireProxyPath ?? string.Empty;
+    }
+
     partial void OnDnsModeChanged(DnsMode value) => _services.Config.Dns.Mode = value;
 
     partial void OnDohEndpointChanged(string value) => _services.Config.Dns.DohEndpoint = value;
