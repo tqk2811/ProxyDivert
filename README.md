@@ -348,7 +348,7 @@ DoH request itself needs them.
 
 Limits:
 - Software with its own network filter driver can take DNS/53 before WinDivert sees it, and then
-  nothing is taken over. ExitLag does this: with it running, no query reaches ProxyDivert.
+  nothing is taken over. ExitLag does this in its default (WFP) mode; switching ExitLag to its NDIS driver mode lets the queries through again.
 - Browsers with their own secure DNS (Chrome's *Use secure DNS*, Firefox's DNS over HTTPS) never ask
   the system resolver, so these switches do not see their lookups. Turn that setting off to route
   them here.

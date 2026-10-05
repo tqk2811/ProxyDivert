@@ -39,7 +39,7 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 
 ### Secure DNS: chế độ máy chủ DNS cục bộ
 
-- **Vấn đề:** Secure DNS hiện bắt gói UDP/53 bằng WinDivert. Phần mềm có driver lọc mạng riêng (ExitLag đã thấy trên máy thật ngày 2026-10-05) lấy gói trước, nên không truy vấn nào tới app và không bắt lại được: thứ tự giữa WinDivert và driver khác do trọng số sublayer WFP quyết định, app không đổi được.
+- **Vấn đề:** Secure DNS hiện bắt gói UDP/53 bằng WinDivert. Phần mềm có driver lọc mạng riêng (ExitLag chế độ WFP, thấy trên máy thật ngày 2026-10-05; chuyển ExitLag sang NDIS thì hết) lấy gói trước, nên không truy vấn nào tới app và không bắt lại được: thứ tự giữa WinDivert và driver khác do trọng số sublayer WFP quyết định, app không đổi được.
 - **Hướng làm:** thêm chế độ thứ hai, app mở DNS server tại `127.0.0.1:53` và `[::1]:53`, đặt DNS của card mạng về đó khi bật engine và khôi phục khi tắt (kèm tự khôi phục lúc khởi động nếu lần trước app chết giữa chừng). Quyết định theo tên miền giữ như `RoutingPolicyResolver.ResolveDns`; câu không khớp chuyển tới DNS gốc. Mất pid người hỏi, nên checkbox "DNS của chính tiến trình" chỉ còn tác dụng ở chế độ bắt gói. Chưa kiểm ExitLag có để yên traffic loopback không.
 - **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.SecureDns/DnsOverHttpsMiddleware.cs`, `src/ProxyDivert.Core/Engine/SecureDnsQueryDecider.cs`, `src/ProxyDivert.Core/Routing/RoutingPolicyResolver.cs`.
 - **Vì sao:** người dùng game hay chạy ExitLag hoặc phần mềm tương tự song song.

@@ -332,7 +332,7 @@ SSH) luôn được phân giải bằng DNS thường, vì bản thân yêu cầ
 
 Giới hạn:
 - Phần mềm có driver lọc mạng riêng có thể lấy DNS/53 trước khi WinDivert thấy, khi đó không truy vấn
-  nào bị chuyển hướng. ExitLag là một ví dụ: khi nó đang chạy, không truy vấn nào tới được ProxyDivert.
+  nào bị chuyển hướng. ExitLag ở chế độ mặc định (WFP) là một ví dụ; chuyển ExitLag sang chế độ driver NDIS thì truy vấn lại tới được ProxyDivert.
 - Trình duyệt bật DNS bảo mật riêng (*Use secure DNS* của Chrome, DNS over HTTPS của Firefox) không hỏi
   DNS của Windows, nên các công tắc này không thấy truy vấn của chúng. Tắt cài đặt đó để chúng đi qua đây.
 
