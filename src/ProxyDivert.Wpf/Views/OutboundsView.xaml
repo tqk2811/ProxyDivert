@@ -153,8 +153,6 @@
                             Margin="8,0,0,0" MinWidth="80"/>
                     <Button Content="{DynamicResource Str.App.Test}" Command="{Binding TestCommand}"
                             Margin="8,0,0,0" MinWidth="80" IsEnabled="{Binding IsTesting, Converter={StaticResource InverseBool}}"/>
-                    <Button Content="{DynamicResource Str.App.Save}" Command="{Binding SaveCommand}"
-                            Style="{StaticResource AccentButton}" Margin="8,0,0,0" MinWidth="80"/>
                 </StackPanel>
                 <TextBlock Style="{StaticResource Subtle}" Margin="0,8,0,0" TextWrapping="Wrap"
                            Text="{Binding TestResult}"/>

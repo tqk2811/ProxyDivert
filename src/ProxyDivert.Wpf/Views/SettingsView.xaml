@@ -137,9 +137,7 @@
             </Border>
 
             <StackPanel Orientation="Horizontal">
-                <Button Content="{DynamicResource Str.App.Save}" Command="{Binding SaveCommand}"
-                        Style="{StaticResource AccentButton}" MinWidth="100"/>
-                <TextBlock Style="{StaticResource Subtle}" VerticalAlignment="Center" Margin="12,0,0,0"
+                <TextBlock Style="{StaticResource Subtle}" VerticalAlignment="Center"
                            TextWrapping="Wrap" Text="{DynamicResource Str.Settings.RestartHint}"/>
             </StackPanel>
 

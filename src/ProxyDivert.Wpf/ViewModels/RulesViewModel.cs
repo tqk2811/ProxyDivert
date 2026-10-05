@@ -94,7 +94,7 @@ public sealed partial class RulesViewModel : ObservableObject
 
     partial void OnPatternProblemsChanged(string? value) => OnPropertyChanged(nameof(HasPatternProblems));
 
-    private void CheckPatterns()
+    internal void CheckPatterns()
     {
         // The same compile the engine does, so what is shown here is what the engine will use — not
         // a second opinion written to agree with it.
@@ -296,7 +296,4 @@ public sealed partial class RulesViewModel : ObservableObject
         SelectedRule = rule;
         SaveAndApply();
     }
-
-    [RelayCommand]
-    private void Save() => SaveAndApply();
 }

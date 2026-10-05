@@ -263,9 +263,6 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
         _services.SaveAndApply();
     }
 
-    [RelayCommand]
-    private void Save() => _services.SaveAndApply();
-
     // ==== arranging the filters ====
     //
     // The order of the list is not decoration: a process is caught by the FIRST filter that matches

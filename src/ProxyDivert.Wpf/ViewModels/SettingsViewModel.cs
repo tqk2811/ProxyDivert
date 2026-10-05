@@ -267,9 +267,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void Save() => _services.SaveAndApply();
-
     /// <summary>
     /// Opens the folder the trace is written into, with this run's file selected when there is
     /// one — what the user wants after ticking the box is the file, and the folder holds every

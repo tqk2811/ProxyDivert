@@ -124,8 +124,6 @@
                                 Margin="8,0,0,0" MinWidth="60"/>
                         <Button Content="{DynamicResource Str.App.Down}" Command="{Binding MoveDownCommand}"
                                 Margin="8,0,0,0" MinWidth="60"/>
-                        <Button Content="{DynamicResource Str.App.Save}" Command="{Binding SaveCommand}"
-                                Style="{StaticResource AccentButton}" Margin="8,0,0,0" MinWidth="70"/>
                     </StackPanel>
 
                     <WrapPanel Margin="0,10,0,0" VerticalAlignment="Center">

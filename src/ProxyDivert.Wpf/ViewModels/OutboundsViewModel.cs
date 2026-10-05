@@ -195,9 +195,6 @@ public sealed partial class OutboundsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Save() => _services.SaveAndApply();
-
-    [RelayCommand]
     private async Task TestAsync()
     {
         OutboundRowViewModel? row = Selected;

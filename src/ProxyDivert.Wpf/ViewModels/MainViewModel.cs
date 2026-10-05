@@ -2,6 +2,7 @@
 using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ProxyDivert.Wpf.Localization;
@@ -14,6 +15,13 @@ namespace ProxyDivert.Wpf.ViewModels;
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly AppServices _services;
+
+    // Polled rather than raised: edits reach the configuration from every grid and dialog, and
+    // comparing it with what was applied is one cheap check instead of a hook in each of them.
+    private readonly DispatcherTimer _pendingChangesTimer;
+
+    [ObservableProperty]
+    private bool _hasPendingChanges;
 
     public ProcessesViewModel Processes { get; }
     public OutboundsViewModel Outbounds { get; }
@@ -102,6 +110,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // few things a dictionary swap does not reach on its own.
         LocalizationManager.LanguageChanged += UpdateThemeButton;
         UpdateThemeButton();
+
+        _pendingChangesTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _pendingChangesTimer.Tick += (_, _) => HasPendingChanges = _services.HasPendingChanges;
+        _pendingChangesTimer.Start();
+    }
+
+    // One button for every tab: they all edit the same configuration, so a save from any of them
+    // always wrote all of it anyway.
+    [RelayCommand]
+    private void ApplyAndSave()
+    {
+        _services.SaveAndApply();
+        Rules.CheckPatterns();
+        HasPendingChanges = false;
     }
 
     [RelayCommand]
@@ -270,6 +292,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         LocalizationManager.LanguageChanged -= UpdateThemeButton;
+        _pendingChangesTimer.Stop();
         Connections.Dispose();
         Log.Dispose();
     }

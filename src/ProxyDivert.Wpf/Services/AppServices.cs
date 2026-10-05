@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -122,6 +125,7 @@ public sealed class AppServices : IAsyncDisposable
         ConfigStore = new ConfigStore(configPath);
         Config = ConfigStore.Load();
         _autoSaveLog = Config.AutoSaveLog;
+        _appliedSnapshot = TakeSnapshot();
 
         // The store is handed to the container rather than built by it — it already exists, it was
         // needed to read the file — and registering it is what gives the session a file to write.
@@ -212,10 +216,43 @@ public sealed class AppServices : IAsyncDisposable
     /// </summary>
     public Task SaveAndApply()
     {
+        _appliedSnapshot = TakeSnapshot();
+
         // The log path is the one setting the engine does not own, because logging is set up before
         // the engine exists. Applying it here is what makes it take effect without a restart.
         _loggerProvider.SetFilePath(EffectiveLogPath);
         return Session.ApplyAsync(Config);
+    }
+
+    // ==== pending changes ====
+    //
+    // What the window has edited but not yet applied, found by comparing the configuration with
+    // the one last handed to SaveAndApply. Settings that take effect the moment they are changed
+    // (and save themselves) are left out, as is KeepConnected, which the tunnels flip on their own.
+
+    private static readonly string[] SelfAppliedSettings =
+    {
+        nameof(AppConfig.EngineEnabled), nameof(AppConfig.StartWithWindows),
+        nameof(AppConfig.ProcessDetection), nameof(AppConfig.ProcessEventSource),
+        nameof(AppConfig.MinimizeToTrayOnClose), nameof(AppConfig.Theme), nameof(AppConfig.Language),
+        nameof(AppConfig.AutoSaveLog), nameof(AppConfig.FileLogLevel),
+    };
+
+    private string _appliedSnapshot;
+
+    /// <summary>True when the configuration differs from what was last applied.</summary>
+    public bool HasPendingChanges => TakeSnapshot() != _appliedSnapshot;
+
+    private string TakeSnapshot()
+    {
+        var node = (JsonObject)JsonSerializer.SerializeToNode(Config)!;
+        foreach (string key in SelfAppliedSettings) node.Remove(key);
+        if (node[nameof(AppConfig.Outbounds)] is JsonArray outbounds)
+        {
+            foreach (JsonObject outbound in outbounds.OfType<JsonObject>())
+                outbound.Remove(nameof(Outbound.KeepConnected));
+        }
+        return node.ToJsonString();
     }
 
     /// <inheritdoc cref="ProxyDivertSession.StartAsync"/>

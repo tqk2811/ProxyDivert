@@ -50,8 +50,6 @@
                     <Button Content="{DynamicResource Str.App.Add}" Command="{Binding AddRuleCommand}" MinWidth="80"/>
                     <Button Content="{DynamicResource Str.App.Remove}" Command="{Binding RemoveRuleCommand}"
                             Margin="8,0,0,0" MinWidth="80"/>
-                    <Button Content="{DynamicResource Str.App.Save}" Command="{Binding SaveCommand}"
-                            Style="{StaticResource AccentButton}" Margin="8,0,0,0" MinWidth="80"/>
                 </StackPanel>
 
                 <!-- Sorting is off on purpose. The row order IS the priority, so a column sort
