@@ -96,3 +96,9 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 - **Vấn đề:** `UntrackedEgressBypass` lặp lại điều kiện của `NatRedirectMiddleware` (mask giao thức, cổng relay, FlowKey, kiểm lại). NAT đổi mà quên sửa bypass thì gói bị thả sai; thêm middleware built-in mới vào `AddTrailingMiddlewares` cũng không tự tắt bypass. Nên chuyển quyết định vào NAT (vd `CanPassUntouched`) hoặc thêm test chạy pipeline thật để kiểm hai bên khớp nhau; thiếu cả test cổng relay = 0 và bypass ném exception.
 - **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/UntrackedEgressBypass.cs`, `ProcessRedirector.cs` (`CreateBypass`).
 - **Ngày ghi:** 2026-10-08 (finding review đợt fast path).
+
+### Một nửa cặp pump chết thì cả đường chuyển hướng hỏng mà không ai dừng engine
+
+- **Vấn đề:** sau khi tách handle chiều đi / chiều về, nếu riêng pump `*-reply` dừng bất thường thì chiều đi vẫn đổi SYN sang relay nhưng không ai đổi gói trả về, mọi kết nối được chuyển hướng treo; log chỉ nói "traffic on this handle is no longer redirected". ProxyDivert.Core cũng không xử lý `PumpStopped`. Nên dừng/báo cả redirector khi một nửa cặp chết. Kèm ràng buộc ngầm: pipeline chiều về chỉ có NAT, stage mới muốn thấy gói trả về sẽ không thấy.
+- **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/ProcessRedirector.cs` (`OnPumpStopped`, `StartRelayReplyPump`).
+- **Ngày ghi:** 2026-10-08 (finding review đợt tách handle).
