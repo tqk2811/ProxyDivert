@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -30,6 +32,13 @@ internal sealed class UdpFlowRouter
     private readonly OutboundRegistry _outbounds;
     private readonly OutboundIpv6Capability _ipv6Capability;
     private readonly ILogger _logger;
+
+    // When each Direct flow was last logged. ShouldRedirect runs for every datagram of a flow left
+    // direct (nothing remembers it), on the pump thread: a QUIC download logged thousands of lines a
+    // second. Once per flow per interval says the same thing.
+    private static readonly long DirectLogIntervalTicks = Stopwatch.Frequency * 60;
+    private const int DirectLogCapacity = 4096;
+    private readonly ConcurrentDictionary<(uint Pid, IPAddress Address, ushort Port), long> _directLogged = new();
 
     public UdpFlowRouter(
         IResolverSource resolvers,
@@ -70,9 +79,21 @@ internal sealed class UdpFlowRouter
         RouteDecision decision = _resolvers.Resolver.ResolveUdp(target);
         if (!decision.IsDirect) return true;
 
-        _logger.LogDebug("udp pid={Pid} -> {Target} left direct, unredirected ({Reason})",
-            processId, target, decision.Reason);
+        if (_logger.IsEnabled(LogLevel.Debug) && ShouldLogDirect(processId, destination, destinationPort))
+            _logger.LogDebug("udp pid={Pid} -> {Target} left direct, unredirected ({Reason})",
+                processId, target, decision.Reason);
         return false;
+    }
+
+    private bool ShouldLogDirect(uint processId, IPAddress destination, ushort destinationPort)
+    {
+        long now = Stopwatch.GetTimestamp();
+        var key = (processId, destination, destinationPort);
+        if (_directLogged.TryGetValue(key, out long last) && now - last < DirectLogIntervalTicks) return false;
+        // Bounded the blunt way: the cost of forgetting is one repeated log line per flow.
+        if (_directLogged.Count >= DirectLogCapacity) _directLogged.Clear();
+        _directLogged[key] = now;
+        return true;
     }
 
     // Returning the payload lets the relay send it out directly; returning null means "handled or

@@ -99,6 +99,6 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 
 ### Một nửa cặp pump chết thì cả đường chuyển hướng hỏng mà không ai dừng engine
 
-- **Vấn đề:** sau khi tách handle chiều đi / chiều về, nếu riêng pump `*-reply` dừng bất thường thì chiều đi vẫn đổi SYN sang relay nhưng không ai đổi gói trả về, mọi kết nối được chuyển hướng treo; log chỉ nói "traffic on this handle is no longer redirected". ProxyDivert.Core cũng không xử lý `PumpStopped`. Nên dừng/báo cả redirector khi một nửa cặp chết. Kèm ràng buộc ngầm: pipeline chiều về chỉ có NAT, stage mới muốn thấy gói trả về sẽ không thấy.
+- **Vấn đề:** sau khi tách handle chiều đi / chiều về, nếu riêng pump `*-reply` dừng bất thường (hoặc một trong hai pump chiều đi `*-tcp` / `*-udp` sau đợt tách theo giao thức, khi đó cả giao thức đó mất chuyển hướng) thì chiều đi vẫn đổi SYN sang relay nhưng không ai đổi gói trả về, mọi kết nối được chuyển hướng treo; log chỉ nói "traffic on this handle is no longer redirected". ProxyDivert.Core cũng không xử lý `PumpStopped`. Nên dừng/báo cả redirector khi một nửa cặp chết. Kèm ràng buộc ngầm: pipeline chiều về chỉ có NAT, stage mới muốn thấy gói trả về sẽ không thấy.
 - **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/ProcessRedirector.cs` (`OnPumpStopped`, `StartRelayReplyPump`).
 - **Ngày ghi:** 2026-10-08 (finding review đợt tách handle).

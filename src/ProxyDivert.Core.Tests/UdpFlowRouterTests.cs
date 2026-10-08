@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Engine.Interfaces;
@@ -73,6 +74,18 @@ public class UdpFlowRouterTests
         Order = 0,
     };
 
+    private sealed class CapturingLogger : ILogger<UdpFlowRouter>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception)));
+    }
+
     private sealed class Fixture : IDisposable
     {
         public Fixture(RoutingPolicy policy, params Outbound[] outbounds)
@@ -89,8 +102,10 @@ public class UdpFlowRouterTests
 
             Router = new UdpFlowRouter(
                 Slots, Redirector.ReverseDns, Forwarder, Registry, new OutboundIpv6Capability(),
-                NullLogger<UdpFlowRouter>.Instance);
+                Log);
         }
+
+        public CapturingLogger Log { get; } = new CapturingLogger();
 
         public FakeProcessRedirector Redirector { get; }
         public UdpProxyForwarder Forwarder { get; }
@@ -148,6 +163,19 @@ public class UdpFlowRouterTests
 
         Assert.Null(forwarded);
         Assert.Empty(f.Builder.Builds);
+    }
+
+    [Fact]
+    public void AFlowGoingDirect_IsLoggedOncePerFlow_NotPerDatagram()
+    {
+        // Every datagram of a Direct flow asks again, on the pump thread; a QUIC download used to
+        // write a log line for each one.
+        using var f = new Fixture(Policy(Outbound.DirectId, UdpMode.ThroughOutbound), Socks5());
+
+        for (int i = 0; i < 5; i++) f.Router.ShouldRedirect(Pid, IPAddress.Parse("8.8.8.8"), 443, isIpv6: false);
+        f.Router.ShouldRedirect(Pid, IPAddress.Parse("8.8.4.4"), 443, isIpv6: false);
+
+        Assert.Equal(2, f.Log.Entries.Count(e => e.Message.Contains("left direct")));
     }
 
     [Fact]
