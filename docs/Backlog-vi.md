@@ -90,3 +90,9 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 - **Vấn đề:** `DisposingTheRelayResetsAConnectionItHasAccepted` rớt một lần (15s) khi chạy cả bộ lúc máy bận, chạy lại thì xanh.
 - **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Tests/RelayTeardownTests.cs:64`.
 - **Ngày ghi:** 2026-10-08.
+
+### Lối tắt pump là bản chép tay quyết định của NAT
+
+- **Vấn đề:** `UntrackedEgressBypass` lặp lại điều kiện của `NatRedirectMiddleware` (mask giao thức, cổng relay, FlowKey, kiểm lại). NAT đổi mà quên sửa bypass thì gói bị thả sai; thêm middleware built-in mới vào `AddTrailingMiddlewares` cũng không tự tắt bypass. Nên chuyển quyết định vào NAT (vd `CanPassUntouched`) hoặc thêm test chạy pipeline thật để kiểm hai bên khớp nhau; thiếu cả test cổng relay = 0 và bypass ném exception.
+- **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/UntrackedEgressBypass.cs`, `ProcessRedirector.cs` (`CreateBypass`).
+- **Ngày ghi:** 2026-10-08 (finding review đợt fast path).
