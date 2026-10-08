@@ -129,7 +129,34 @@ Bước 1 không dùng được trong mấy trường hợp, lúc đó phải ch
 - **Giao thức server nói trước** (SMTP, FTP, SSH) — chờ 3 giây không thấy gì thì bỏ qua.
 - **[ECH](docs/Glossary-vi.md#L518)** — trình duyệt mã hoá luôn ClientHello, SNI biến mất.
 
+## Độ trễ với traffic không chuyển hướng
+
+WinDivert ở tầng NETWORK không biết gói thuộc tiến trình nào, nên khi engine chạy thì **mọi** gói
+TCP/UDP đi ra của cả máy đều phải vòng lên user mode, kể cả gói của game không dính luật nào. Mỗi gói
+như vậy chờ một thread của ProxyDivert thả đi. Để thời gian chờ ngắn nhất:
+
+- Traffic chia ra **sáu handle**, mỗi handle một thread riêng: TCP đi ra, UDP đi ra và chiều về từ
+  relay, cho cả IPv4 lẫn IPv6. Một đợt QUIC của trình duyệt hay một lượt tải lớn qua proxy không
+  còn bắt gói TCP của game xếp hàng phía sau.
+- Gói không stage nào cần xử lý được thả theo **đường tắt**, trước khi parse hay cấp phát gì.
+- Thread pump chạy ở mức `TimeCritical` và đăng ký [MMCSS](docs/Glossary-vi.md#L635) ("Pro Audio"),
+  bên trên mức ưu tiên tiến trình chọn ở mục *Ưu tiên CPU* trong Cài đặt (mặc định High).
+- Mức log Debug ghi độ trễ pump mỗi 10 giây (`capture-to-release fast/full … avg p99 max`) để tự
+  xem engine tốn bao nhiêu trên máy mình.
+
+Đo trên máy 32 lõi (bản Debug): trung bình mỗi gói chờ khoảng 0,1–0,3 ms. Khi vắt hết CPU, thỉnh
+thoảng một gói TCP vẫn chờ vài ms, gói UDP có lúc tới ~30 ms.
+
 ## Giới hạn hiện tại
+
+- **Mọi gói đi ra của cả máy đều qua engine**, không riêng tiến trình bị chuyển hướng (xem mục
+  trên). Trung bình chỉ tốn chưa tới 1 ms, nhưng khi CPU bị vắt hết thì thỉnh thoảng một gói phải
+  chờ thread pump vài tới vài chục ms — game giật ping thoáng qua dù game không bị chuyển hướng.
+  Code ở user mode không thể nhanh bằng đường xử lý gói của kernel; muốn hết hẳn thì tắt engine
+  khi chơi game.
+- Thread pump đăng ký MMCSS suốt lúc engine chạy. Cơ chế `NetworkThrottlingIndex` của Windows bóp
+  xử lý mạng của ứng dụng không phải đa phương tiện khi có tác vụ MMCSS; chưa đo xem nó có ảnh hưởng
+  tới các gói này không.
 
 - IPv6 được chuyển hướng như IPv4 (mặc định `Redirect`, xem [Ipv6Mode](docs/Glossary-vi.md#L89) trong Cài đặt).
   Chọn `Block` nếu muốn hành vi cũ — chặn để ứng dụng lùi về IPv4; `Ignore` thì IPv6 đi thẳng, **lọt ra ngoài proxy**.

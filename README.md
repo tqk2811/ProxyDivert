@@ -134,7 +134,37 @@ Step 1 is unavailable in a few cases, and step 2's guess is what remains:
 - **Server-speaks-first protocols** (SMTP, FTP, SSH) — the peek gives up after 3 seconds.
 - **[ECH](docs/Glossary-vi.md#L518)** — the browser encrypts the ClientHello and the SNI is gone.
 
+## Latency for traffic that is not redirected
+
+WinDivert cannot tell which process a packet at the NETWORK layer belongs to, so while the engine runs
+**every** outbound TCP/UDP packet of the machine makes a round trip through user mode — including a
+game's that no rule touches. Each such packet waits for a ProxyDivert thread to release it. To keep
+that wait short:
+
+- Traffic is split over **six handles**, each with its own thread: TCP egress, UDP egress and relay
+  replies, for IPv4 and IPv6. A browser's QUIC burst or a large redirected download no longer
+  queues a game's TCP packets behind it.
+- A packet no stage would act on is released on a **fast path** before anything is parsed or
+  allocated.
+- The pump threads run at `TimeCritical` and are registered with
+  [MMCSS](docs/Glossary-vi.md#L635) ("Pro Audio"), on top of the process priority chosen under *CPU
+  priority* in Settings (default High).
+- Log level Debug writes the pump latency every 10 s (`capture-to-release fast/full … avg p99 max`),
+  to check what the engine costs on your machine.
+
+Measured on a 32-core machine (Debug build): the average wait is about 0.1–0.3 ms per packet. With
+every core busy, a TCP packet now and then still waits a few ms, and a UDP one up to ~30 ms.
+
 ## Current limits
+
+- **Every outbound packet of the machine passes through the engine**, not only the redirected
+  processes' (see above). Average cost is a fraction of a millisecond, but when the CPU is
+  saturated the occasional packet waits several to tens of ms for the pump thread — a short ping
+  spike in a game even if the game is not redirected. Nothing in user mode can match the kernel's
+  own packet path; the only complete cure is not running the engine while playing.
+- The pump threads stay registered with MMCSS for the life of the engine. Windows'
+  `NetworkThrottlingIndex` throttles non-multimedia network processing while an MMCSS task is
+  active; whether it affects these packets has not been measured.
 
 - IPv6 is redirected like IPv4 (default `Redirect`, see [Ipv6Mode](docs/Glossary-vi.md#L89) in
   Settings). `Block` gives the old behaviour — drop it so the application falls back to IPv4;
