@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using ProxyDivert.Core.Processes;
@@ -43,6 +44,12 @@ public sealed class AppConfig
     // existed — Trace adds the per-packet lines, and is for reproducing one bug rather than for
     // leaving on.
     public LogLevel FileLogLevel { get; set; } = LogLevel.Debug;
+
+    // CPU priority class of this process. Every packet of a redirected application waits on our
+    // pump threads, so when the machine is busy a Normal-priority ProxyDivert adds the scheduler's
+    // queueing delay to every round trip (a game's ping spikes). High by default; Realtime is not
+    // offered — a busy realtime thread can starve input and system threads and freeze the machine.
+    public ProcessPriorityClass CpuPriority { get; set; } = ProcessPriorityClass.High;
 
     // What happens to the target's IPv6 traffic: Redirect (default) sends it through the relay and
     // the routing rules exactly like IPv4; Block drops it so the application falls back to IPv4;

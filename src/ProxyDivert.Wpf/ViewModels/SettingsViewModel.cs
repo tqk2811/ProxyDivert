@@ -39,8 +39,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         LogLevel.Warning, LogLevel.Error, LogLevel.Critical,
     };
 
+    // Realtime is left out on purpose: see AppConfig.CpuPriority.
+    public ProcessPriorityClass[] CpuPriorities { get; } =
+    {
+        ProcessPriorityClass.Normal, ProcessPriorityClass.AboveNormal, ProcessPriorityClass.High,
+    };
+
     public SettingsViewModel(AppServices services)
     {
+        _cpuPriority = services.Config.CpuPriority;
         _services = services;
         _dohEndpoint = services.Config.Dns.DohEndpoint;
         _ipv6 = services.Config.Ipv6;
@@ -216,6 +223,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     // Same reasoning, and it takes effect on the next line rather than on the next run: the level
     // is lowered precisely to catch something that is happening now.
     partial void OnFileLogLevelChanged(LogLevel value) => _services.SetFileLogLevel(value);
+
+    /// <summary>CPU priority class of the process; applied the moment it is picked.</summary>
+    [ObservableProperty]
+    private ProcessPriorityClass _cpuPriority;
+
+    partial void OnCpuPriorityChanged(ProcessPriorityClass value) => _services.SetCpuPriority(value);
 
     // Appearance is the one pair of settings that takes effect the moment it is picked, so it is
     // also written out at once: a theme that reverts on the next launch because Save was never

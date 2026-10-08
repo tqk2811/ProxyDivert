@@ -179,6 +179,11 @@ Hại: thêm một dịch vụ và một chặng COM nên trễ hơn, và sự k
     <sys:String x:Key="Enum.LogLevel.Warning">Warning</sys:String>
     <sys:String x:Key="Enum.LogLevel.Error">Error</sys:String>
     <sys:String x:Key="Enum.LogLevel.Critical">Critical</sys:String>
+    <sys:String x:Key="Str.Settings.CpuPriority">Ưu tiên CPU</sys:String>
+    <sys:String x:Key="Str.Settings.CpuPriorityHint">Mọi gói tin của ứng dụng được chuyển hướng đều đi qua chương trình này. Mức High giữ game và cuộc gọi mượt khi CPU bận. Áp dụng ngay.</sys:String>
+    <sys:String x:Key="Enum.ProcessPriorityClass.Normal">Normal</sys:String>
+    <sys:String x:Key="Enum.ProcessPriorityClass.AboveNormal">Above normal</sys:String>
+    <sys:String x:Key="Enum.ProcessPriorityClass.High">High</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Giao diện</sys:String>
     <sys:String x:Key="Str.Settings.Language">Ngôn ngữ</sys:String>
     <sys:String x:Key="Str.Settings.Theme">Chủ đề</sys:String>

@@ -179,6 +179,11 @@ Downside: an extra service and a COM hop add latency, and the events of one watc
     <sys:String x:Key="Enum.LogLevel.Warning">Warning</sys:String>
     <sys:String x:Key="Enum.LogLevel.Error">Error</sys:String>
     <sys:String x:Key="Enum.LogLevel.Critical">Critical</sys:String>
+    <sys:String x:Key="Str.Settings.CpuPriority">CPU priority</sys:String>
+    <sys:String x:Key="Str.Settings.CpuPriorityHint">Every packet of a redirected application passes through this program. High keeps games and calls responsive while the CPU is busy. Applied immediately.</sys:String>
+    <sys:String x:Key="Enum.ProcessPriorityClass.Normal">Normal</sys:String>
+    <sys:String x:Key="Enum.ProcessPriorityClass.AboveNormal">Above normal</sys:String>
+    <sys:String x:Key="Enum.ProcessPriorityClass.High">High</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Appearance</sys:String>
     <sys:String x:Key="Str.Settings.Language">Language</sys:String>
     <sys:String x:Key="Str.Settings.Theme">Theme</sys:String>

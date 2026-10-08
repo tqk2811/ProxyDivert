@@ -104,6 +104,15 @@
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
                                Text="{DynamicResource Str.Settings.WatermarkHint}"/>
 
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="{DynamicResource Str.Settings.CpuPriority}" Margin="0,0,6,0"
+                                   VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding CpuPriorities}" SelectedItem="{Binding CpuPriority}"
+                                  Width="140" ItemTemplate="{StaticResource EnumItemTemplate}"/>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.CpuPriorityHint}"/>
+
                     <!-- The level and the folder sit on the switch's own line: they are what the
                          user reaches for in the same breath as ticking it, and the level filters
                          the file only — the log pane keeps showing everything. -->

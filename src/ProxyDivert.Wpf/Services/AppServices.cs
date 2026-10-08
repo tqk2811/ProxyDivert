@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -145,6 +146,7 @@ public sealed class AppServices : IAsyncDisposable
         Logs = _provider.GetRequiredService<InMemoryLogStore>();
         _loggerProvider = _provider.GetRequiredService<AppLoggerProvider>();
         _loggerProvider.MinFileLevel = Config.FileLogLevel;
+        ApplyCpuPriority(Config.CpuPriority);
         // Resolved, nothing started: the session brings the process table, the driver and the
         // tunnels up only when redirection is switched on, so opening the window costs a file read.
         Session = _provider.GetRequiredService<ProxyDivertSession>();
@@ -193,6 +195,31 @@ public sealed class AppServices : IAsyncDisposable
         Save();
     }
 
+    /// <summary>Changes the CPU priority class of this process, applied at once and saved.</summary>
+    public void SetCpuPriority(ProcessPriorityClass priority)
+    {
+        Config.CpuPriority = priority;
+        ApplyCpuPriority(priority);
+        Save();
+    }
+
+    // A value hand-edited into the json that Windows refuses (or Realtime, which is never offered)
+    // must not stop the tool from starting: log it and keep whatever priority the process has.
+    private void ApplyCpuPriority(ProcessPriorityClass priority)
+    {
+        try
+        {
+            if (priority == ProcessPriorityClass.RealTime) priority = ProcessPriorityClass.High;
+            using Process self = Process.GetCurrentProcess();
+            self.PriorityClass = priority;
+        }
+        catch (Exception ex)
+        {
+            _loggerProvider.CreateLogger(nameof(AppServices))
+                .LogWarning(ex, "could not set CPU priority to {Priority}", priority);
+        }
+    }
+
     /// <summary>
     /// The folder this run's trace is being written into, created if it is not there yet, so the
     /// button that opens it always lands somewhere. Falls back to the folder auto-save would use,
@@ -236,7 +263,7 @@ public sealed class AppServices : IAsyncDisposable
         nameof(AppConfig.EngineEnabled), nameof(AppConfig.StartWithWindows),
         nameof(AppConfig.ProcessDetection), nameof(AppConfig.ProcessEventSource),
         nameof(AppConfig.MinimizeToTrayOnClose), nameof(AppConfig.Theme), nameof(AppConfig.Language),
-        nameof(AppConfig.AutoSaveLog), nameof(AppConfig.FileLogLevel),
+        nameof(AppConfig.AutoSaveLog), nameof(AppConfig.FileLogLevel), nameof(AppConfig.CpuPriority),
     };
 
     private string _appliedSnapshot = string.Empty;
