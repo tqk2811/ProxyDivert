@@ -57,3 +57,36 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 - **Vấn đề:** (1) trả lời DNS quá dài làm Windows hỏi lại qua TCP/53, mà TCP/53 không bị chặn nên đi DNS thường. (2) DoH lỗi liên tiếp thì mỗi truy vấn vẫn chờ hết timeout; nên có circuit breaker chuyển sang "cho qua" ngay lúc quyết định khi policy cho phép rơi về DNS thường.
 - **Vị trí:** `DnsOverHttpsMiddleware.cs` (chỉ xét UDP), `src/ProxyDivert.Core/Engine/DohHealth.cs`.
 - **Ngày ghi:** 2026-10-05.
+
+### Pump NETWORK: nhận gói theo lô (RecvEx/SendEx)
+
+- **Vấn đề:** pump nhận và gửi từng gói một. Batch giảm số syscall nhưng làm gói đầu lô chờ cả lô, tăng trễ từng gói; vì vậy chưa làm.
+- **Hướng làm:** chỉ làm nếu sau khi thu hẹp filter (2026-10-08) đo vẫn thấy pump bão hoà CPU; giới hạn lô ≤ 8, flush ngay sau mỗi lần recv. Binding `RecvEx` đã có, thiếu `SendEx`.
+- **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Pipeline/PacketPump.cs`, `Native/WinDivertNative.cs`.
+- **Ngày ghi:** 2026-10-08.
+
+### SYN chưa theo dõi của process không liên quan vẫn chờ một lượt quét bảng kernel
+
+- **Vấn đề:** mọi SYN chưa theo dõi của cả máy (kể cả app không bị chuyển hướng) bị giữ tới khi quét bảng kernel xong, trễ thiết lập connection vài ms. Pump không còn bị chặn, nhưng connection của app khác vẫn chậm chút.
+- **Hướng làm:** bỏ qua quét khi tracker không có pid target nào; hoặc cache port nguồn đã biết không thuộc target; hoặc chờ SOCKET event vài ms trước khi quét. Đo trễ SYN của app không target trước/sau.
+- **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/NatRedirectMiddleware.cs` (`HoldSynForReconcile`), `Flow/CoalescedSweep.cs`.
+- **Ngày ghi:** 2026-10-08.
+
+### Test filter chưa kiểm được cú pháp với driver
+
+- **Vấn đề:** `RedirectFilterTests` chỉ so chuỗi, không chứng minh WinDivert chấp nhận filter.
+- **Hướng làm:** thêm binding `WinDivertHelperCompileFilter` (không cần admin) và test biên dịch từng tổ hợp.
+- **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Tests/RedirectFilterTests.cs`.
+- **Ngày ghi:** 2026-10-08.
+
+### Bảng Connections vẫn dựng lại 500 dòng mỗi 250ms khi đang mở tab
+
+- **Vấn đề:** bộ đếm byte sửa tại chỗ nên không biết rẻ khi nào dữ liệu đổi; hiện chỉ đỡ nhờ dừng timer khi cửa sổ ẩn hoặc không mở tab.
+- **Vị trí:** `src/ProxyDivert.Wpf/ViewModels/ConnectionsViewModel.cs` (`Refresh`).
+- **Ngày ghi:** 2026-10-08.
+
+### Test RelayTeardownTests chập chờn khi máy bận
+
+- **Vấn đề:** `DisposingTheRelayResetsAConnectionItHasAccepted` rớt một lần (15s) khi chạy cả bộ lúc máy bận, chạy lại thì xanh.
+- **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Tests/RelayTeardownTests.cs:64`.
+- **Ngày ghi:** 2026-10-08.
