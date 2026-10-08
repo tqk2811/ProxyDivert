@@ -148,6 +148,7 @@ public sealed class ProxyDivertSession : IDisposable, IAsyncDisposable
             EnsureProcessesStarted();
 
             await Engine.StartAsync(snapshot).ConfigureAwait(false);
+            RuntimeLatencyTuning.Apply();
 
             // Last, and inside the same piece of queued work, so nothing can slip between the two:
             // see the remarks above. Sync only starts the supervision loops, so this returns while
@@ -160,7 +161,17 @@ public sealed class ProxyDivertSession : IDisposable, IAsyncDisposable
     /// Stops redirecting. The VPN tunnels stay up: the user switched them on, and nothing here has
     /// been asked to end their session with the provider.
     /// </summary>
-    public Task StopAsync() => Enqueue(Engine.StopAsync);
+    public Task StopAsync() => Enqueue(async () =>
+    {
+        try
+        {
+            await Engine.StopAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            RuntimeLatencyTuning.Restore();
+        }
+    });
 
     /// <summary>
     /// Writes <paramref name="config"/> to the file and hands it to everything that runs on it — the
