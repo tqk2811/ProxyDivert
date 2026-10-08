@@ -39,9 +39,29 @@ public sealed partial class ConnectionsViewModel : ObservableObject, IDisposable
     {
         _services = services;
         ColumnLayout = services.GridLayout.Section("connections");
+        // Background priority so input, the tray menu and rendering always go first. Not started
+        // here: the main view model starts it only while the window is up and this tab is showing,
+        // since rebuilding 500 rows four times a second for nobody still costs the UI thread.
         _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = RefreshInterval };
         _timer.Tick += (_, _) => Refresh();
-        _timer.Start();
+    }
+
+    /// <summary>
+    /// Starts or stops the periodic refresh. Starting refreshes at once, so a list that was paused
+    /// while hidden does not show stale rows for the first interval.
+    /// </summary>
+    public void SetActive(bool active)
+    {
+        if (active)
+        {
+            if (_timer.IsEnabled) return;
+            Refresh();
+            _timer.Start();
+        }
+        else
+        {
+            _timer.Stop();
+        }
     }
 
     partial void OnShowClosedChanged(bool value) => Refresh();

@@ -20,6 +20,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // comparing it with what was applied is one cheap check instead of a hook in each of them.
     private readonly DispatcherTimer _pendingChangesTimer;
 
+    // Positions of the two live tabs in MainWindow.xaml's TabControl; keep in step with it.
+    private const int ConnectionsTabIndex = 3;
+    private const int LogTabIndex = 4;
+
+    // False until the window reports itself shown: started with --minimized it never is, and
+    // nothing should poll for a window that does not exist on screen.
+    private bool _isWindowVisible;
+
     [ObservableProperty]
     private bool _hasPendingChanges;
 
@@ -111,9 +119,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         LocalizationManager.LanguageChanged += UpdateThemeButton;
         UpdateThemeButton();
 
-        _pendingChangesTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        // Background priority: the check serialises the whole configuration, and must never sit
+        // ahead of input. Started by SetWindowVisible once the window is actually on screen.
+        _pendingChangesTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(500),
+        };
         _pendingChangesTimer.Tick += (_, _) => HasPendingChanges = _services.HasPendingChanges;
-        _pendingChangesTimer.Start();
     }
 
     // One button for every tab: they all edit the same configuration, so a save from any of them
@@ -276,7 +288,43 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// Refreshing on the switch is the cheap version of the fix; one shared collection owned above
     /// the tabs is the right one.
     /// </remarks>
-    partial void OnSelectedTabIndexChanged(int value) => ReloadAll();
+    partial void OnSelectedTabIndexChanged(int value)
+    {
+        ReloadAll();
+        UpdateTimers();
+    }
+
+    /// <summary>
+    /// Told by the window whenever it is shown, hidden to the tray, minimised or restored. While
+    /// nobody can see it, every polling timer is stopped: the UI thread then has nothing queued
+    /// but input, so the tray menu opens at once even with the machine busy.
+    /// </summary>
+    public void SetWindowVisible(bool visible)
+    {
+        if (_isWindowVisible == visible) return;
+        _isWindowVisible = visible;
+        UpdateTimers();
+    }
+
+    // The live lists poll only while their own tab is the one showing; the pending-changes check
+    // runs on every tab, since the Save button it drives sits outside them.
+    private void UpdateTimers()
+    {
+        Connections.SetActive(_isWindowVisible && SelectedTabIndex == ConnectionsTabIndex);
+        Log.SetActive(_isWindowVisible && SelectedTabIndex == LogTabIndex);
+
+        if (_isWindowVisible)
+        {
+            if (_pendingChangesTimer.IsEnabled) return;
+            // Edits made while hidden (from the tray switch, say) show up straight away.
+            HasPendingChanges = _services.HasPendingChanges;
+            _pendingChangesTimer.Start();
+        }
+        else
+        {
+            _pendingChangesTimer.Stop();
+        }
+    }
 
     [RelayCommand]
     private void ReloadAll()

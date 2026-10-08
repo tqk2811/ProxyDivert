@@ -12,6 +12,18 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // Hidden to the tray and minimised both mean nobody is looking, and the view model stops
+        // its polling for as long as that lasts.
+        IsVisibleChanged += (_, _) => ReportVisibility();
+        StateChanged += (_, _) => ReportVisibility();
+        DataContextChanged += (_, _) => ReportVisibility();
+    }
+
+    private void ReportVisibility()
+    {
+        if (DataContext is MainViewModel viewModel)
+            viewModel.SetWindowVisible(IsVisible && WindowState != WindowState.Minimized);
     }
 
     // WindowStartupLocation="CenterScreen" is not used here: it asks WPF to work the position out
