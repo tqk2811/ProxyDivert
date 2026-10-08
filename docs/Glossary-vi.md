@@ -631,3 +631,7 @@ Thiết bị trên đường truyền (của nhà mạng hoặc tường lửa) 
 ## TLS record
 
 Đơn vị đóng gói của TLS: 5 byte đầu (loại nội dung, phiên bản, độ dài) rồi tới phần thân, tối đa khoảng 16 KB. Một thông điệp handshake như ClientHello **được phép cắt ra nhiều record** (RFC 8446 §5.1), và server phải ráp lại. Cờ Anti-DPI dựa vào điều này: cắt ClientHello thành record ngay quanh tên miền trong SNI.
+
+## MMCSS (Multimedia Class Scheduler Service)
+
+Dịch vụ của Windows giúp thread cần phản hồi tức thì (âm thanh, video) không bị việc thường chen lấn. Thread đăng ký với MMCSS theo một loại tác vụ (vd "Pro Audio") thì được Windows đẩy priority lên vùng realtime (16–26), cao hơn mọi thread thường, mà không phải chuyển cả tiến trình sang Realtime. Để máy không đơ, MMCSS luôn chừa lại một phần mỗi chu kỳ cho thread thường (`SystemResponsiveness`, mặc định 20%). Khi đã đăng ký, MMCSS tự quản lý priority của thread và ghi đè giá trị đặt bằng `SetThreadPriority`. ProxyDivert đăng ký MMCSS cho thread pump của các handle NETWORK, để gói của cả máy không phải chờ khi CPU bận.
