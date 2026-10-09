@@ -61,7 +61,7 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 ### Pump NETWORK: nhận gói theo lô (RecvEx/SendEx)
 
 - **Vấn đề:** pump nhận và gửi từng gói một. Batch giảm số syscall nhưng làm gói đầu lô chờ cả lô, tăng trễ từng gói; vì vậy chưa làm.
-- **Hướng làm:** chỉ làm nếu sau khi thu hẹp filter (2026-10-08) đo vẫn thấy pump bão hoà CPU; giới hạn lô ≤ 8, flush ngay sau mỗi lần recv. Binding `RecvEx` đã có, thiếu `SendEx`.
+- **Hướng làm:** chỉ làm nếu sau khi thu hẹp filter (2026-10-08) đo vẫn thấy pump bão hoà CPU; giới hạn lô ≤ 8, flush ngay sau mỗi lần recv. Binding `RecvEx` đã có, thiếu `SendEx`. Đo ngày 2026-10-09 (Release, 32 thread đốt CPU khi đang chơi game): gói chờ tối đa < 0,4ms, mỗi lần recv gần như chỉ có 1 gói, nên chưa cần. Nhận cả lô rồi đẩy sang thread khác xử lý còn tệ hơn: thêm một lần đánh thức thread, và nhiều worker thì đảo thứ tự gói cùng flow.
 - **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Pipeline/PacketPump.cs`, `Native/WinDivertNative.cs`.
 - **Ngày ghi:** 2026-10-08.
 
@@ -102,3 +102,23 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 - **Vấn đề:** sau khi tách handle chiều đi / chiều về, nếu riêng pump `*-reply` dừng bất thường (hoặc một trong hai pump chiều đi `*-tcp` / `*-udp` sau đợt tách theo giao thức, khi đó cả giao thức đó mất chuyển hướng) thì chiều đi vẫn đổi SYN sang relay nhưng không ai đổi gói trả về, mọi kết nối được chuyển hướng treo; log chỉ nói "traffic on this handle is no longer redirected". ProxyDivert.Core cũng không xử lý `PumpStopped`. Nên dừng/báo cả redirector khi một nửa cặp chết. Kèm ràng buộc ngầm: pipeline chiều về chỉ có NAT, stage mới muốn thấy gói trả về sẽ không thấy.
 - **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Redirect/ProcessRedirector.cs` (`OnPumpStopped`, `StartRelayReplyPump`).
 - **Ngày ghi:** 2026-10-08 (finding review đợt tách handle).
+
+### Mảnh IPv4 thứ hai trở đi bị NAT ghi đè "port"
+
+- **Vấn đề:** parser và NAT không kiểm fragment. Từ mảnh thứ hai trở đi của gói IPv4 bị phân mảnh không có header TCP/UDP, nên hai byte mà code coi là port thực ra là payload; `WritePort` vẫn ghi đè lên đó và làm hỏng gói. TCP hầu như không bị phân mảnh, nhưng UDP lớn (game, VPN) có thể gặp. Checksum cộng dồn đã từ chối fragment, còn đường `SetSource`/`SetDestination` thì chưa.
+- **Hướng làm:** parser đánh dấu fragment (flags/offset `& 0x3FFF`); NAT bỏ qua (thả nguyên hoặc cho đi Direct) mảnh không phải mảnh đầu, kèm test.
+- **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Packet/Models/ParsedPacket.cs:161` (`WritePort`), `Packet/PacketParser.cs`, `TqkLibrary.WinDivert.Redirect/NatRedirectMiddleware.cs`.
+- **Ngày ghi:** 2026-10-09 (phát hiện khi phân tích checksum cộng dồn).
+
+### Đường full của pump còn cấp phát 230–600 B mỗi gói
+
+- **Vấn đề:** đường bypass đã không cấp phát (IpAddressKey), nhưng gói đi đường full vẫn tạo `PacketContext` (`PacketPump.cs:184`), `ParsedPacket`, một `byte[]` + `IPAddress` mỗi lần đọc `Source`/`Destination` (`ParsedPacket.cs:26`, header Ipv4/Ipv6), `GetAddressBytes()` trong `WriteIp`, và `NatEntry`/`Slot` mới mỗi gói trong `NatTable.Upsert`. Log đo ngày 2026-10-09: pump `*-reply` khoảng 230–600 B/gói.
+- **Vì sao:** chỉ ảnh hưởng traffic đi qua proxy (không ảnh hưởng game Direct), nhưng tải nặng qua proxy sẽ đẩy GC gen0 lên, mà GC dừng cả thread pump.
+- **Hướng làm:** NAT dùng `IpAddressKey` và FlowKey dựng từ key; `Upsert` giữ slot cũ khi entry không đổi (đọc kỹ `Slot`/`MarkClosed` vì thay slot đang reset hạn); cân nhắc dùng lại `PacketContext`.
+- **Ngày ghi:** 2026-10-09.
+
+### Gợi ý lõi cho pump trên máy nhiều processor group
+
+- **Vấn đề:** máy > 64 logical processor có nhiều group; `PumpCoreHints` có thể gán ideal processor ở group khác với group của thread, `SetThreadIdealProcessorEx` thất bại (chỉ log Debug, pump vẫn chạy). Ranking cũng không lọc theo affinity của process.
+- **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Pipeline/Helpers/PumpCoreHints.cs`.
+- **Ngày ghi:** 2026-10-09 (finding review).
