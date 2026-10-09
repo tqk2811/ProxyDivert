@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -147,6 +148,7 @@ public sealed class AppServices : IAsyncDisposable
         _loggerProvider = _provider.GetRequiredService<AppLoggerProvider>();
         _loggerProvider.MinFileLevel = Config.FileLogLevel;
         ApplyCpuPriority(Config.CpuPriority);
+        DisablePowerThrottling();
         // Resolved, nothing started: the session brings the process table, the driver and the
         // tunnels up only when redirection is switched on, so opening the window costs a file read.
         Session = _provider.GetRequiredService<ProxyDivertSession>();
@@ -219,6 +221,49 @@ public sealed class AppServices : IAsyncDisposable
                 .LogWarning(ex, "could not set CPU priority to {Priority}", priority);
         }
     }
+
+    // Windows 11 runs a process it judges to be background work (EcoQoS) at reduced clocks or on
+    // efficiency cores, and a tool that sits minimised in the tray looks exactly like that — yet
+    // every packet of the machine passes through it. Opting out keeps it at full speed; timer
+    // resolution requests are kept honoured too.
+    private void DisablePowerThrottling()
+    {
+        ProcessPowerThrottlingState state = new()
+        {
+            Version = 1,
+            ControlMask = PowerThrottlingExecutionSpeed | PowerThrottlingIgnoreTimerResolution,
+            StateMask = 0,
+        };
+        try
+        {
+            if (!SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, ref state, Marshal.SizeOf<ProcessPowerThrottlingState>()))
+                _loggerProvider.CreateLogger(nameof(AppServices))
+                    .LogDebug("could not opt out of power throttling, win32={Win32}", Marshal.GetLastWin32Error());
+        }
+        catch (EntryPointNotFoundException)
+        {
+            // Older than Windows 8: no power throttling to opt out of.
+        }
+    }
+
+    private const int ProcessPowerThrottling = 4;
+    private const uint PowerThrottlingExecutionSpeed = 0x1;
+    private const uint PowerThrottlingIgnoreTimerResolution = 0x4;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessPowerThrottlingState
+    {
+        public uint Version;
+        public uint ControlMask;
+        public uint StateMask;
+    }
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetProcessInformation(IntPtr process, int informationClass, ref ProcessPowerThrottlingState information, int informationSize);
 
     /// <summary>
     /// The folder this run's trace is being written into, created if it is not there yet, so the
