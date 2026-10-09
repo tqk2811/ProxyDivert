@@ -31,10 +31,11 @@ dotnet build ProxyDivert.sln -c Debug
 Sản phẩm: `src/ProxyDivert/bin/x64/<Config>/net8.0-windows/ProxyDivert.exe`
 (kèm `WinDivert.dll` + `WinDivert64.sys` copy sẵn cạnh exe).
 
-Phiên bản lấy từ git: `M.N` theo tag `vM.N.0` gần nhất, số thứ ba là số commit kể từ tag đó (chưa có
-tag thì `0.0.<tổng số commit>`). Mỗi lần push lên `master`,
-[.github/workflows/release.yml](.github/workflows/release.yml) build và gắn file zip vào GitHub Release
-`vM.N.0`; muốn mở dòng phiên bản mới thì gắn tag `vM.N.0` mới lên `master`.
+Phiên bản lấy từ git: `M.N` theo tag `vM.N.0` gần nhất, số thứ ba đếm các commit có `[release]` trong
+message kể từ tag đó, bắt đầu từ 0 (commit đầu tiên sau `v1.0.0` là `1.0.0`, kế tiếp `1.0.1`). Push lên
+`master` mà commit đầu có `[release]` thì [.github/workflows/release.yml](.github/workflows/release.yml)
+build, gắn zip vào GitHub Release `vM.N.0` và sinh lại release notes bằng git-cliff. Muốn mở dòng
+phiên bản mới thì gắn tag `vM.N.0` mới lên `master`.
 
 ## Cấu trúc
 

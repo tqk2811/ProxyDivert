@@ -1,22 +1,23 @@
 name: Release
 
-# Build the WPF app on every push to master (docs-only pushes are skipped) and attach the zip to a
-# GitHub Release. Also runnable by hand (workflow_dispatch).
+# Build the WPF app and attach the zip to a GitHub Release. Does NOT run on every push: only when the
+# head commit of a push to master carries the marker '[release]'. Also runnable by hand
+# (workflow_dispatch).
 #
-# Version (computed in src/ProxyDivert/ProxyDivert.csproj, target SetVersionFromGit):
-# M.N from the nearest tag vM.N.0, third number = commits since that tag.
+# Version (computed in src/ProxyDivert/ProxyDivert.csproj, target SetVersionFromGit): M.N from the
+# nearest tag vM.N.0, third number = commits carrying '[release]' since that tag, starting at 0
+# (first [release] after v1.0.0 -> 1.0.0, second -> 1.0.1).
 #
 # /releases model: one GitHub Release per minor line, named by its tag 'vM.N.0'. Each build uploads
-# ProxyDivert-M.N.<commits>-win-x64.zip to that Release and rewrites the notes.
+# ProxyDivert-M.N.K-win-x64-framework-dependent.zip (needs the .NET 8 Desktop Runtime) to that
+# Release and regenerates the notes (git-cliff,
+# cliff-release.toml), grouped by [release] build.
 # Precondition: tag 'vM.N.0' is pushed to origin. Start a new line by tagging master 'vM.N.0'.
 
 on:
   push:
     branches:
       - master
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
   workflow_dispatch:
 
 permissions:
@@ -28,6 +29,7 @@ concurrency:
 
 jobs:
   release:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release]')
     runs-on: windows-latest
     env:
       DOTNET_NOLOGO: 'true'
@@ -44,9 +46,48 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Install git-cliff
+        shell: pwsh
+        run: |
+          $ver = "2.13.1"
+          $url = "https://github.com/orhun/git-cliff/releases/download/v$ver/git-cliff-$ver-x86_64-pc-windows-msvc.zip"
+          $zip = Join-Path $env:RUNNER_TEMP "git-cliff.zip"
+          Invoke-WebRequest $url -OutFile $zip
+          $dst = Join-Path $env:RUNNER_TEMP "git-cliff"
+          Expand-Archive $zip -DestinationPath $dst -Force
+          $exe = Get-ChildItem $dst -Recurse -Filter git-cliff.exe | Select-Object -First 1
+          Add-Content -Path $env:GITHUB_PATH -Value $exe.DirectoryName
+
+      # Only tests that are deterministic on a hosted runner. Left out:
+      # - real ETW kernel session + child process, whole-machine process listing under a time budget
+      # - Stopwatch/Task.Delay thresholds (PeekableStream, two held-connection router tests)
+      # - tests that open a real 1400x900 WPF window (depend on the runner's desktop size)
+      # Debug build: the submodule libraries only run GitVersion in Release.
+      - name: Test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exclude = @(
+            'EtwProcessEventSourceTests'
+            'NativeProcessReadingTests'
+            'PeekableStreamTests'
+            'TcpConnectionRouterTests.AConnectionRoutedThroughATunnelThatIsStillDialling_IsHeldRatherThanSentDirect'
+            'TcpConnectionRouterTests.AHeldConnection_GoesThroughAsSoonAsTheTunnelIsUp'
+            'DataGridColumnBindingTests'
+            'GridColumnLayoutTests'
+            'PolicyRenameTests'
+            'ProcessRuleDragTests'
+            'ConditionDragDropTests'
+            'AppliedProcessTreeTests'
+            'EditableComboBoxThemeTests'
+          )
+          $filter = ($exclude | ForEach-Object { "FullyQualifiedName!~ProxyDivert.Core.Tests.$_" }) -join '&'
+          dotnet test src/ProxyDivert.Core.Tests -c Debug --filter $filter --logger "console;verbosity=normal"
+          if ($LASTEXITCODE -ne 0) { throw "dotnet test failed" }
+
       # The submodule libraries run GitVersion.MsBuild in Release (they have a .nuspec), which fails
       # on a detached submodule HEAD. Their own version does not matter here, so turn it off globally;
-      # the app's version comes from git describe, not GitVersion.
+      # the app's version comes from git, not GitVersion.
       - name: Publish
         shell: pwsh
         run: |
@@ -64,7 +105,7 @@ jobs:
           $ver = (Get-Item publish/ProxyDivert.exe).VersionInfo.ProductVersion
           if ($ver -notmatch '^(\d+)\.(\d+)\.(\d+)$') { throw "Unexpected version '$ver'" }
           $tag = "v$($Matches[1]).$($Matches[2]).0"
-          $zip = "ProxyDivert-$ver-win-x64.zip"
+          $zip = "ProxyDivert-$ver-win-x64-framework-dependent.zip"
           Compress-Archive -Path publish/* -DestinationPath $zip
           Add-Content $env:GITHUB_OUTPUT "version=$ver"
           Add-Content $env:GITHUB_OUTPUT "tag=$tag"
@@ -80,23 +121,57 @@ jobs:
           ZIP: ${{ steps.zip.outputs.zip }}
         run: |
           $ErrorActionPreference = 'Stop'
-          git rev-parse -q --verify "refs/tags/$env:TAG" *> $null
-          if ($LASTEXITCODE -ne 0) { throw "Tag '$env:TAG' does not exist on origin. Tag the start of this minor line first." }
+          $tag = $env:TAG
+          git rev-parse -q --verify "refs/tags/$tag" *> $null
+          if ($LASTEXITCODE -ne 0) { throw "Tag '$tag' does not exist on origin. Tag the start of this minor line first." }
+          $mn = $tag.Substring(1, $tag.LastIndexOf('.') - 1)
 
-          # Notes: latest build on top, then every first-parent commit since the line's tag.
-          $repo = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY"
-          $lines = @("Latest build: **$env:VERSION** ($env:ZIP)", "", "Changes since $env:TAG`:")
-          $lines += @(git log --first-parent --format="- %s ([%h]($repo/commit/%H))" "$env:TAG..HEAD")
-          Set-Content -Path RELEASE_NOTES.md -Value ($lines -join "`n") -Encoding utf8
+          # Release notes, newest build on top. Build point R = first-parent commit carrying
+          # '[release]'; header '- M.N.<k>' with k = ([release] commits in base..R) - 1, the same rule
+          # as the app version. A manual run on a commit without the marker is added as its own
+          # header (labelled with the built version) only for this run.
+          # git-cliff only formats each commit, prefixing every line with '__SHA_<sha>__' for lookup.
+          # The tagged commit itself counts when it carries '[release]' (it is then M.N.0), so the
+          # range starts at its parent instead of at the tag.
+          $base = $tag
+          if ((git log -1 --format=%B $tag) -match '\[release\]') { $base = "$tag^" }
+          $lineOf = @{}
+          foreach ($l in @(git-cliff --config cliff-release.toml "$base..HEAD")) {
+            if ($l -match '^__SHA_([0-9a-f]+)__ (.*)$') { $lineOf[$Matches[1]] = $Matches[2] }
+          }
+          $fps = @(git rev-list --first-parent --reverse "$base..HEAD")
+          $points = @($fps | Where-Object { (git log -1 --format=%B $_) -match '\[release\]' })
+          $labels = @{}
+          foreach ($r in $points) {
+            $n = [int](git rev-list --count --fixed-strings --grep="[release]" "$base..$r")
+            $labels[$r] = "$mn.$([Math]::Max($n - 1, 0))"
+          }
+          if ($fps.Count -gt 0 -and ($points.Count -eq 0 -or $points[-1] -ne $fps[-1])) {
+            $points += $fps[-1]
+            $labels[$fps[-1]] = "$env:VERSION (manual build)"
+          }
+          $groups = New-Object System.Collections.Generic.List[string]
+          $prev = $base
+          foreach ($r in $points) {
+            $items = @(foreach ($c in @(git rev-list --reverse $r --not $prev)) {
+              if ($lineOf.ContainsKey($c)) { "  + $($lineOf[$c])" }
+            })
+            $groups.Insert(0, ((@("- $($labels[$r])") + $items) -join "`n"))
+            $prev = $r
+          }
+          $notes = ($groups -join "`n").Trim()
+          $notes = $notes -replace '__REPO__', "$($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)"
+          if ([string]::IsNullOrWhiteSpace($notes)) { $notes = "Release $tag" }
+          Set-Content -Path RELEASE_NOTES.md -Value $notes -Encoding utf8
 
           # gh is a native command: a non-zero exit does not throw under 'Stop', so check by hand.
-          gh release view $env:TAG *> $null
+          gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release edit $env:TAG --notes-file RELEASE_NOTES.md
+            gh release edit $tag --notes-file RELEASE_NOTES.md
             if ($LASTEXITCODE -ne 0) { throw "gh release edit failed" }
           } else {
-            gh release create $env:TAG --title $env:TAG --notes-file RELEASE_NOTES.md --verify-tag
+            gh release create $tag --title $tag --notes-file RELEASE_NOTES.md --verify-tag
             if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
           }
-          gh release upload $env:TAG $env:ZIP --clobber
+          gh release upload $tag $env:ZIP --clobber
           if ($LASTEXITCODE -ne 0) { throw "gh release upload failed" }
