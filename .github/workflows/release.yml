@@ -85,6 +85,15 @@ jobs:
           dotnet test src/ProxyDivert.Core.Tests -c Debug --filter $filter --logger "console;verbosity=normal"
           if ($LASTEXITCODE -ne 0) { throw "dotnet test failed" }
 
+          # The WinDivert submodule's own tests (all in-memory, no driver): they guard the NAT
+          # rewrite, e.g. the loopback checksum case that once broke every IPv4 connection.
+          # Left out: ConcurrentSynsShareSweeps asserts at most 3 sweeps for 50 SYNs, which a slow
+          # runner can exceed.
+          dotnet test libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Tests -c Debug `
+            --filter "FullyQualifiedName!~NatRedirectHeldSynTests.ConcurrentSynsShareSweeps" `
+            --logger "console;verbosity=normal"
+          if ($LASTEXITCODE -ne 0) { throw "WinDivert tests failed" }
+
       # The submodule libraries run GitVersion.MsBuild in Release (they have a .nuspec), which fails
       # on a detached submodule HEAD. Their own version does not matter here, so turn it off globally;
       # the app's version comes from git, not GitVersion.
