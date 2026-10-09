@@ -6,8 +6,7 @@ Tool WPF chuyển hướng gói tin của tiến trình được chọn sang pro
 domain hoặc IP; đích không khớp luật thì đi thẳng (direct). Giai đoạn sau cắm thêm VPN dưới dạng một
 loại đường ra.
 
-- Việc còn treo: [docs/Backlog-vi.md](docs/Backlog-vi.md)
-- Thuật ngữ: [docs/Glossary-vi.md](docs/Glossary-vi.md)
+- Kiến trúc: [docs/Architecture-vi.md](docs/Architecture-vi.md)
 
 ## Yêu cầu
 
@@ -34,14 +33,8 @@ Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.e
 
 ## Cấu trúc
 
-| Đường dẫn | Nội dung |
-|---|---|
-| `libs/TqkLibrary.WinDivert` | submodule — lõi chuyển hướng gói tin theo tiến trình (5 project: core, `.Redirect`, `.SecureDns`, `.Inspection`, `.ProcessControl`) |
-| `libs/TqkLibrary.Proxy` | submodule — `IProxySource` cho HTTP/SOCKS4/SOCKS5/SSH/WireGuard |
-| `libs/TqkLibrary.VpnClient` | submodule — [stack TCP/IP userspace](docs/Glossary-vi.md#L73) và driver các giao thức VPN. Project `TqkLibrary.VpnClient.Tunnels` trong đó quay số sáu giao thức bên dưới và trả về đường hầm đã lên. |
-| `src/ProxyDivert.Core` | engine, model, service (không phụ thuộc WPF) |
-| `src/ProxyDivert.Wpf` | giao diện |
-| `src/ProxyDivert.Core.Tests` | unit test |
+Repo gồm ứng dụng WPF (`src/`) và ba submodule trong `libs/`. Cấu trúc từng project nằm ở
+[docs/Architecture-vi.md](docs/Architecture-vi.md#L5).
 
 ## Cách dùng nhanh
 
@@ -110,63 +103,30 @@ tên riêng chứ không phải từ để dịch.
 
 ## Tên miền của một kết nối lấy từ đâu
 
-Luật định tuyến so khớp theo domain, nhưng gói tin không mang sẵn tên miền — tool phải tự tìm, theo
-đúng thứ tự đáng tin này:
-
-1. **[SNI](docs/Glossary-vi.md#L13) hoặc header `Host`** — đọc trộm (peek) vài byte đầu của kết nối,
-   bytes vẫn giữ nguyên cho chặng sau. Đây là cái tên chính ứng dụng gõ ra, nên vẫn đúng khi nhiều
-   domain **dùng chung một IP** như Cloudflare và các CDN khác
-   ([IP dùng chung](docs/Glossary-vi.md#L512)).
-2. **[Bảng DNS ngược](docs/Glossary-vi.md#L17)** — tool nghe gói trả lời DNS/53 (hoặc
-   [DoH](docs/Glossary-vi.md#L25)) để tự học IP → domain; nó KHÔNG đọc DNS cache của Windows. Bảng
-   khoá theo IP nên với IP dùng chung chỉ giữ được cái tên học **sau cùng**: đây là phỏng đoán chứ
-   không phải sự thật.
-3. Không ra tên → luật theo domain không khớp, chỉ còn luật theo IP, cổng và giao thức.
-
-Bước 1 không dùng được trong mấy trường hợp, lúc đó phải chịu phỏng đoán của bước 2:
-
-- **UDP và QUIC** — không có ClientHello để đọc.
-- **Giao thức server nói trước** (SMTP, FTP, SSH) — chờ 3 giây không thấy gì thì bỏ qua.
-- **[ECH](docs/Glossary-vi.md#L518)** — trình duyệt mã hoá luôn ClientHello, SNI biến mất.
+Luật theo domain cần một cái tên mà gói tin không mang sẵn: tool đọc SNI
+hoặc header `Host` ở đầu kết nối, không được thì dùng bảng học từ các gói trả lời DNS. UDP/QUIC,
+giao thức server nói trước và ECH không để lại tên nào để đọc. Chi tiết ở
+[docs/Architecture-vi.md](docs/Architecture-vi.md#L16).
 
 ## Độ trễ với traffic không chuyển hướng
 
-WinDivert ở tầng NETWORK không biết gói thuộc tiến trình nào, nên khi engine chạy thì **mọi** gói
-TCP/UDP đi ra của cả máy đều phải vòng lên user mode, kể cả gói của game không dính luật nào. Mỗi gói
-như vậy chờ một thread của ProxyDivert thả đi. Để thời gian chờ ngắn nhất:
-
-- Traffic chia ra **sáu handle**, mỗi handle một thread riêng: TCP đi ra, UDP đi ra và chiều về từ
-  relay, cho cả IPv4 lẫn IPv6. Một đợt QUIC của trình duyệt hay một lượt tải lớn qua proxy không
-  còn bắt gói TCP của game xếp hàng phía sau.
-- Gói không stage nào cần xử lý được thả theo **đường tắt**, trước khi parse hay cấp phát gì.
-- Thread pump chạy ở mức `TimeCritical` và đăng ký [MMCSS](docs/Glossary-vi.md#L635) ("Pro Audio"),
-  bên trên mức ưu tiên tiến trình chọn ở mục *Ưu tiên CPU* trong Cài đặt (mặc định High).
-- Mức log Debug ghi độ trễ pump mỗi 10 giây (`capture-to-release fast/full … avg p99 max`) để tự
-  xem engine tốn bao nhiêu trên máy mình.
-
-Đo trên máy 32 lõi (bản Debug): trung bình mỗi gói chờ khoảng 0,1–0,3 ms. Khi vắt hết CPU, thỉnh
-thoảng một gói TCP vẫn chờ vài ms, gói UDP có lúc tới ~30 ms.
+Khi engine chạy, mọi gói TCP/UDP đi ra của cả máy, dù có chuyển hướng hay không, đều đi qua engine
+(trung bình mỗi gói chờ khoảng 0,1–0,3 ms). Cách giữ chi phí đó thấp và số đo:
+[docs/Architecture-vi.md](docs/Architecture-vi.md#L37).
 
 ## Giới hạn hiện tại
 
 - **Mọi gói đi ra của cả máy đều qua engine**, không riêng tiến trình bị chuyển hướng (xem mục
   trên). Trung bình chỉ tốn chưa tới 1 ms, nhưng khi CPU bị vắt hết thì thỉnh thoảng một gói phải
   chờ thread pump vài tới vài chục ms — game giật ping thoáng qua dù game không bị chuyển hướng.
-  Code ở user mode không thể nhanh bằng đường xử lý gói của kernel; muốn hết hẳn thì tắt engine
-  khi chơi game.
-- Thread pump đăng ký MMCSS suốt lúc engine chạy. Cơ chế `NetworkThrottlingIndex` của Windows bóp
-  xử lý mạng của ứng dụng không phải đa phương tiện khi có tác vụ MMCSS; chưa đo xem nó có ảnh hưởng
-  tới các gói này không.
+  Muốn hết hẳn thì tắt engine khi chơi game ([vì sao](docs/Architecture-vi.md#L55)).
 
-- IPv6 được chuyển hướng như IPv4 (mặc định `Redirect`, xem [Ipv6Mode](docs/Glossary-vi.md#L89) trong Cài đặt).
+- IPv6 được chuyển hướng như IPv4 (mặc định `Redirect`, xem Ipv6Mode trong Cài đặt).
   Chọn `Block` nếu muốn hành vi cũ — chặn để ứng dụng lùi về IPv4; `Ignore` thì IPv6 đi thẳng, **lọt ra ngoài proxy**.
-  Bộ phân tích gói không đi qua IPv6 extension header, nên gói IPv6 có extension header sẽ được cho đi thẳng
-  thay vì bị hiểu sai (hiếm gặp với traffic ứng dụng thông thường).
-- Đường ra không có tuyến IPv6 (VPN/proxy chỉ IPv4): đích **có tên miền** vẫn đi được — tool đưa tên cho đường ra
-  tự phân giải sang IPv4. Đích chỉ có **địa chỉ IPv6 trần** thì không còn gì để lùi, tool đóng kết nối ngay để ứng dụng
-  tự chuyển sang IPv4 ([Happy Eyeballs](docs/Glossary-vi.md#L81)). Mỗi đường ra có thiết lập
-  [Ipv6Support](docs/Glossary-vi.md#L89): `Auto` (thử một lần rồi tự nhớ), `Enabled`, `Disabled`.
-  SOCKS4 không có IPv6 trong giao thức nên luôn coi là không hỗ trợ.
+- Đường ra không có tuyến IPv6 (VPN/proxy chỉ IPv4): đích có tên miền vẫn đi được bằng cách lùi về IPv4;
+  đích chỉ có địa chỉ IPv6 trần thì bị đóng kết nối để ứng dụng tự chuyển sang IPv4. Mỗi đường ra có thiết lập
+  Ipv6Support: `Auto` (thử một lần rồi tự nhớ), `Enabled`, `Disabled`.
+  Cách lùi hoạt động: [docs/Architecture-vi.md](docs/Architecture-vi.md#L55).
 - Secure DNS (xem mục [DNS bảo mật theo policy](#dns-bảo-mật-theo-policy)) xử lý DNS/53 qua UDP, cả IPv4 lẫn IPv6; DNS qua TCP/53 (hỏi lại khi câu trả lời quá dài) vẫn đi DNS thường.
 - Kết nối IPv6 đang mở sẵn lúc bật engine cũng rơi vào luật "kết nối đã mở trước" bên dưới.
 - Kết nối đã mở TRƯỚC khi tiến trình được gắn sẽ **đi thẳng** (không chuyển hướng) và ghi rõ trong log:
@@ -176,7 +136,7 @@ thoảng một gói TCP vẫn chờ vài ms, gói UDP có lúc tới ~30 ms.
   này (tức là mọi loại trừ file `.conf` WireGuard chạy bằng wireproxy — xem mục dưới). Đường ra khác
   — kể cả SSH — thì UDP bị chặn chứ không rò ra ngoài. QUIC (UDP/443) chặn mặc định để trình duyệt lùi về TCP.
 - Game có anti-cheat kernel có thể coi việc chuyển hướng gói tin là can thiệp.
-- **SoftEther** cần đúng khối [watermark](docs/Glossary-vi.md#L121) thật mới nói chuyện được với máy
+- **SoftEther** cần đúng khối watermark thật mới nói chuyện được với máy
   chủ thật; khối đó là dữ liệu GPL nên repo này không kèm — thiếu nó máy chủ trả HTTP 403. Bấm
   **Tải** ở mục *Watermark SoftEther* trong tab Cài đặt (hoặc nút **Tải watermark** hiện ngay trên
   dòng đường ra SoftEther) là tool tải khối đó từ mã nguồn chính thức về, lưu cạnh `ProxyDivert.exe`
@@ -198,45 +158,32 @@ bằng địa chỉ máy chủ.
 | `D:\vpn\wg0.conf` | WireGuard, chạy bằng `wireproxy.exe` | — |
 | `D:\vpn\jp.ovpn` | OpenVPN, chạy trong tiến trình này | Tài khoản, Mật khẩu (nếu profile đòi) |
 | `sstp://vpn.example.com:443` | SSTP | Tài khoản, Mật khẩu |
-| `l2tp://vpn.example.com` | L2TP/IPsec | Tài khoản, Mật khẩu, [Khoá chung](docs/Glossary-vi.md#L117) |
+| `l2tp://vpn.example.com` | L2TP/IPsec | Tài khoản, Mật khẩu, Khoá chung |
 | `ikev2://vpn.example.com` | IKEv2 | Khoá chung; Tài khoản/Mật khẩu chỉ khi dùng EAP |
 | `softether://vpn.example.com:443/HUB` | SoftEther SSL-VPN | Tài khoản, Mật khẩu |
 | `D:\vpn\office.vpn` | bất kỳ loại nào ở trên, khai trong file ini nhỏ | xem bên dưới |
 
 Cột **Giao thức VPN** để `Auto` là tool tự đoán từ ô URL — có scheme thì scheme nói thẳng ra giao
 thức, là file thì nhận theo đuôi và nội dung. Thứ duy nhất nó **không** đoán được là file `.conf`
-WireGuard nên chạy bằng engine nào; cột đó thật ra sinh ra vì lý do này, xem mục kế tiếp.
+WireGuard nên chạy bằng engine nào; cột đó thật ra sinh ra vì lý do này, xem mục kế tiếp. Việc tra
+tên miền của engine chạy trong tiến trình luôn nằm trong đường hầm, không bao giờ tới resolver của
+máy ([chi tiết](docs/Architecture-vi.md#L98)).
 
-Mật khẩu và [khoá chung](docs/Glossary-vi.md#L117) nằm ở ô riêng chứ không nhét vào URL, để sửa
+Mật khẩu và khoá chung nằm ở ô riêng chứ không nhét vào URL, để sửa
 riêng và che được trên màn hình. Trong file cấu hình chúng nằm thô đúng như bạn gõ.
 
 ### Hai engine, và khi nào dùng cái nào
 
-| | `wireproxy.exe` | Trong tiến trình này |
-|---|---|---|
-| Giao thức | file `.conf` WireGuard | OpenVPN, SSTP, L2TP/IPsec, IKEv2, SoftEther, `.conf` WireGuard |
-| File exe rời | bắt buộc | không cần |
-| UDP qua đường hầm | không (SOCKS5 của nó chỉ có TCP) | có |
-| IPv6 qua đường hầm | không | có, khi máy chủ cấp IPv6 global |
-| DNS | wireproxy tự hỏi trong đường hầm | hỏi trong đường hầm |
-
-File `.conf` WireGuard **mặc định vẫn đi wireproxy**, đúng như từ trước tới nay — cấu hình cũ của bạn
-không đổi hành vi một chút nào. Muốn chạy chính file đó trong tiến trình này thì đặt cột **Giao thức
-VPN** thành `WireGuard`: khi đó không cần `wireproxy.exe` nữa, và UDP đi qua được đường hầm.
+Chỉ file `.conf` WireGuard chạy được bằng một trong hai engine, `wireproxy.exe` hoặc tiến trình này;
+các giao thức khác luôn chạy trong tiến trình này. File `.conf` WireGuard **mặc định vẫn đi
+wireproxy**, đúng như từ trước tới nay — cấu hình cũ của bạn không đổi hành vi một chút nào. Muốn
+chạy chính file đó trong tiến trình này thì đặt cột **Giao thức VPN** thành `WireGuard`: khi đó không
+cần `wireproxy.exe` nữa, và UDP đi qua được đường hầm (SOCKS5 của wireproxy chỉ có TCP).
 
 Với engine wireproxy, cần tải `wireproxy.exe` để cạnh `ProxyDivert.exe` (hoặc trong PATH, hoặc trỏ
-đường dẫn ở tab **Cài đặt**). File `.conf` đã có sẵn mục `[Socks5]` thì dùng nguyên trạng; file
-thường sẽ được sinh bản sao tạm có `[Socks5]` trên cổng loopback ngẫu nhiên **kèm mật khẩu ngẫu
-nhiên**, để tiến trình khác trên máy không dùng ké được đường hầm. Bản sao tạm đó nằm trong `%TEMP%`
-và **chứa private key dạng rõ** trong lúc wireproxy chạy (bị xoá khi dừng) — đúng như cách wireproxy
-vốn nhận cấu hình.
-
-### Tra tên miền nằm trong đường hầm
-
-VPN chở lưu lượng của bạn nhưng để việc tra tên miền đi ra resolver của nhà mạng thì coi như đã đưa
-nguyên danh sách những nơi bạn vào ([rò rỉ DNS](docs/Glossary-vi.md#L113)). Nên engine chạy trong
-tiến trình tự hỏi DNS **bên trong đường hầm**, qua socket UDP của stack, tới máy chủ DNS mà VPN cấp —
-không cấp thì 1.1.1.1 rồi 8.8.8.8, vẫn gửi trong đường hầm. Không bao giờ hỏi resolver của máy.
+đường dẫn ở tab **Cài đặt**). Bảng so sánh hai engine và cách wireproxy nhận cấu hình (bản sao tạm
+trong `%TEMP%` **chứa private key dạng rõ** trong lúc chạy):
+[docs/Architecture-vi.md](docs/Architecture-vi.md#L77).
 
 ### File `.vpn`
 
@@ -263,27 +210,17 @@ dối mà bộ định tuyến tin theo. Muốn wireproxy thì trỏ thẳng ô 
 ### Đường hầm được giữ chạy liên tục
 
 Đường hầm dựng ngay khi bấm Start chứ không đợi request đầu tiên, và được giữ cho tới khi dừng
-engine: tiến trình `wireproxy` chết thì được dựng lại ngay, kết nối lại giãn dần 1 → 2 → 5 → 10 → 30
-giây để một cấu hình sai không biến thành vòng lặp sinh tiến trình. Phiên WireGuard rỗi được giữ sống
-bằng `PersistentKeepalive` — file nhà cung cấp thường không khai mục này nên tool tự điền 25 giây;
-file nào đã tự khai thì giữ nguyên.
-
-Driver chạy trong tiến trình thì [tự giám sát và tự kết nối lại](docs/Glossary-vi.md#L125) với backoff
-riêng của nó, nên tool cố ý đứng ngoài: đường hầm đang tự dựng lại thì chỉ được báo trạng thái chứ
-không bị đụng vào, chỉ khi driver bỏ cuộc hẳn mới bị thay. Dựng lại giữa chừng chỉ là hai lượt quay
-số cùng đua tới một máy chủ.
+engine, rớt thì tự dựng lại. Độ giãn cách khi thử lại, keepalive và ai giám sát cái gì:
+[docs/Architecture-vi.md](docs/Architecture-vi.md#L105).
 
 Trạng thái hiện ngay trên tab **Đường ra**: chấm xanh là đang chạy, chấm vàng kèm lý do là đang kết
 nối hoặc kết nối lại. Bấm Lưu **không** làm rớt đường hầm — chỉ đường ra nào thật sự bị sửa mới dựng
 lại, và sửa chính file cấu hình cũng tính là sửa.
 
-Ngoại lệ: file `.conf` do bạn tự viết (đã có sẵn `[Socks5]`) được giao cho wireproxy nguyên trạng,
-nên `PersistentKeepalive` trong đó là việc của bạn.
-
 ## Đường ra SSH
 
 Chọn loại đường ra **Ssh**. Tool giữ **một** phiên SSH tới máy chủ, và mỗi kết nối được chuyển hướng
-là một channel [direct-tcpip](docs/Glossary-vi.md#L587) trên phiên đó — giống `ssh -D` nhưng không
+là một channel direct-tcpip trên phiên đó — giống `ssh -D` nhưng không
 cần listener SOCKS cục bộ ở giữa. Tên miền đích được gửi sang máy chủ và phân giải ở đó, nên tra tên
 không đi qua DNS của máy này. Máy chủ không cần gì đặc biệt: `sshd` bình thường với
 `AllowTcpForwarding` (mặc định đã bật). Chạy ngay trong tiến trình này (SSH.NET), không cần cài
@@ -296,7 +233,7 @@ không đi qua DNS của máy này. Máy chủ không cần gì đặc biệt: `
 | Mật khẩu | mật khẩu — hoặc, khi có file khoá, là passphrase của khoá (vẫn được thử làm mật khẩu) |
 | File khoá | private key: OpenSSH, PuTTY `.ppk` hoặc PEM (RSA, ECDSA, Ed25519) |
 
-**Host key được tin ở lần đầu** ([TOFU](docs/Glossary-vi.md#L591)). Lần đầu nối tới một máy chủ,
+**Host key được tin ở lần đầu** (TOFU). Lần đầu nối tới một máy chủ,
 host key của nó được ghi vào `%LOCALAPPDATA%\ProxyDivert\known_hosts` — đúng định dạng của OpenSSH
 nên đọc và sửa tay được — và từ đó chỉ khoá này được chấp nhận. Máy chủ đưa khoá khác thì bị từ chối,
 thông báo lỗi nêu rõ file và dòng: xoá dòng đó nếu máy chủ thật sự vừa cài lại, còn nếu không giải
@@ -309,31 +246,29 @@ Giới hạn:
 
 - **Chỉ TCP.** SSH không có channel nào chở datagram, nên UDP định tuyến vào đường ra SSH bị chặn
   (kể cả QUIC — trình duyệt tự lùi về TCP).
-- Mọi tunnel dùng chung một kết nối TCP tới máy chủ, nên mất một gói là tất cả khựng lại một chút.
-- Mỗi tunnel đang mở giữ một luồng: SSH.NET chuyển tiếp bằng một vòng lặp chặn cho mỗi kết nối. Tool
-  giữ chỗ các luồng đó khi tunnel mở để phần còn lại của ứng dụng không bao giờ bị thiếu luồng, nhưng
-  trình duyệt mở một trăm kết nối là tốn một trăm luồng.
+- Mọi tunnel dùng chung một kết nối TCP tới máy chủ, và mỗi tunnel đang mở giữ một luồng, nên trình
+  duyệt mở một trăm kết nối là tốn một trăm luồng ([chi tiết](docs/Architecture-vi.md#L121)).
 - Đã thử với `sshd` OpenSSH 9.5 có sẵn của Windows trên chính máy này, bằng khoá Ed25519 có và không
   có passphrase (xem `LiveSshOutboundTests`). Chưa thử đăng nhập bằng mật khẩu và máy chủ Linux ở xa.
   Chưa hỗ trợ keyboard-interactive và ssh-agent.
 
 ## Chống DPI
 
-Có mạng đọc tên miền đích ngay trên đường truyền — [SNI](docs/Glossary-vi.md#L13) trong ClientHello
+Có mạng đọc tên miền đích ngay trên đường truyền — SNI trong ClientHello
 của TLS, hoặc tên máy trong dòng `CONNECT` gửi tới proxy — rồi chặn hay bóp băng thông theo đó
-([DPI](docs/Glossary-vi.md#L627)). Các công tắc chống DPI gửi phần tên miền thành nhiều mẩu nhỏ, để
+(DPI). Các công tắc chống DPI gửi phần tên miền thành nhiều mẩu nhỏ, để
 thiết bị chỉ soi từng gói hoặc từng record không thấy được trọn tên (ý tưởng của GoodbyeDPI).
 
 Ở tab **Outbounds**:
 
 | Cột | Làm gì | Áp dụng cho |
 |---|---|---|
-| **Chống DPI TLS** | ClientHello được dựng lại thành nhiều [TLS record](docs/Glossary-vi.md#L631) quanh tên miền trong SNI, riêng tên miền cắt thành record mỗi cái *Số byte DPI* byte. Server bắt buộc phải ráp lại (RFC 8446 §5.1). | Direct (cả hàng dựng sẵn), HTTP, SOCKS4, SOCKS5 |
+| **Chống DPI TLS** | ClientHello được dựng lại thành nhiều TLS record quanh tên miền trong SNI, riêng tên miền cắt thành record mỗi cái *Số byte DPI* byte. Server bắt buộc phải ráp lại (RFC 8446 §5.1). | Direct (cả hàng dựng sẵn), HTTP, SOCKS4, SOCKS5 |
 | **Chống DPI CONNECT** | Tên miền trong lệnh `CONNECT` gửi tới proxy được gửi mỗi lần *Số byte DPI* byte. Vài proxy xử lý kém. | HTTP, SOCKS4, SOCKS5 |
 | **Số byte DPI** | Số byte tên miền mỗi mảnh; mặc định 2. | |
 
-Chỉ phần bắt tay chứa tên miền bị cắt; mọi thứ sau đó đi thẳng, nên kết nối đã lên thì không tốn
-thêm gì. Đường ra VPN và SSH không có tuỳ chọn này — dữ liệu của chúng vốn đã mã hoá suốt đường.
+Chỉ phần bắt tay chứa tên miền bị cắt, nên kết nối đã lên thì không tốn thêm gì
+([chi tiết](docs/Architecture-vi.md#L130)). Đường ra VPN và SSH không có tuỳ chọn này — dữ liệu của chúng vốn đã mã hoá suốt đường.
 
 **Theo từng policy.** Ở tab **Rules**, mỗi policy có hai công tắc tương tự cạnh Block QUIC, dạng ô
 3 trạng thái: tick là bật chống DPI cho những gì luật của policy khớp, trống là tắt, ô vuông đặc là
@@ -355,7 +290,7 @@ trừ khi policy tự chọn máy chủ riêng ở ô *DoH server* cạnh các c
 
 Các ô bị mờ khi đường ra của policy là Block. Chúng chỉ có tác dụng khi engine đang chạy, và đổi
 endpoint DoH thì có hiệu lực ngay khi bấm Apply & Save. Tên máy chủ của chính các outbound (proxy, VPN,
-SSH) luôn được phân giải bằng DNS thường, vì bản thân yêu cầu DoH cần chúng.
+SSH) luôn được phân giải bằng DNS thường ([vì sao](docs/Architecture-vi.md#L137)).
 
 Giới hạn:
 - Phần mềm có driver lọc mạng riêng có thể lấy DNS/53 trước khi WinDivert thấy, khi đó không truy vấn

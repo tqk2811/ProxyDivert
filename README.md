@@ -6,8 +6,7 @@ A WPF tool that pushes a chosen process's traffic through a proxy (HTTP / SOCKS4
 to domain or IP rules; anything no rule matches goes out direct. VPN is available as another kind of
 outbound.
 
-- Backlog: [docs/Backlog-vi.md](docs/Backlog-vi.md) (Vietnamese)
-- Glossary: [docs/Glossary-vi.md](docs/Glossary-vi.md) (Vietnamese)
+- Architecture: [docs/Architecture.md](docs/Architecture.md)
 
 ## Requirements
 
@@ -34,14 +33,8 @@ and `WinDivert64.sys` copied next to it.
 
 ## Layout
 
-| Path | What it is |
-|---|---|
-| `libs/TqkLibrary.WinDivert` | submodule — per-process packet redirection (5 packages: core, `.Redirect`, `.SecureDns`, `.Inspection`, `.ProcessControl`) |
-| `libs/TqkLibrary.Proxy` | submodule — `IProxySource` for HTTP/SOCKS4/SOCKS5/SSH/WireGuard |
-| `libs/TqkLibrary.VpnClient` | submodule — userspace TCP/IP stack and VPN protocol drivers. Its `TqkLibrary.VpnClient.Tunnels` project dials the six protocols below and hands back a live tunnel. |
-| `src/ProxyDivert.Core` | engine, models, services (no WPF dependency) |
-| `src/ProxyDivert.Wpf` | the window |
-| `src/ProxyDivert.Core.Tests` | unit tests |
+The repository is the WPF app (`src/`) plus three submodules under `libs/`. The project-by-project
+layout is in [docs/Architecture.md](docs/Architecture.md#L5).
 
 ## Quick start
 
@@ -115,68 +108,33 @@ Every piece of text is translated, the values inside the drop-downs included: a 
 
 ## Where a connection's host name comes from
 
-Routing rules match on domains, but a packet does not carry one — the tool has to find it, in this
-order of trust:
-
-1. **[SNI](docs/Glossary-vi.md#L13) or the `Host` header** — peeked from the first bytes of the
-   connection, which are left in place for the forwarding leg. This is the name the application
-   itself asked for, so it stays correct when many domains **share one IP**, as they do behind
-   Cloudflare and other CDNs ([shared IP](docs/Glossary-vi.md#L512)).
-2. **The [reverse-DNS table](docs/Glossary-vi.md#L17)** — built by listening to the DNS/53 (or
-   [DoH](docs/Glossary-vi.md#L25)) answers the target receives; it does NOT read the Windows DNS
-   cache. The table is keyed by IP, so for a shared IP it holds only the name learned **last**: a
-   guess, not a fact.
-3. No name at all — domain rules cannot match, leaving the IP, port and protocol rules.
-
-Step 1 is unavailable in a few cases, and step 2's guess is what remains:
-
-- **UDP and QUIC** — there is no ClientHello to read.
-- **Server-speaks-first protocols** (SMTP, FTP, SSH) — the peek gives up after 3 seconds.
-- **[ECH](docs/Glossary-vi.md#L518)** — the browser encrypts the ClientHello and the SNI is gone.
+Domain rules need a name, which a packet does not carry: the tool reads the
+SNI or `Host` header from the start of the connection, and falls back to a
+table learned from DNS answers. UDP/QUIC, server-speaks-first protocols and
+ECH leave no name to read. Details in
+[docs/Architecture.md](docs/Architecture.md#L16).
 
 ## Latency for traffic that is not redirected
 
-WinDivert cannot tell which process a packet at the NETWORK layer belongs to, so while the engine runs
-**every** outbound TCP/UDP packet of the machine makes a round trip through user mode — including a
-game's that no rule touches. Each such packet waits for a ProxyDivert thread to release it. To keep
-that wait short:
-
-- Traffic is split over **six handles**, each with its own thread: TCP egress, UDP egress and relay
-  replies, for IPv4 and IPv6. A browser's QUIC burst or a large redirected download no longer
-  queues a game's TCP packets behind it.
-- A packet no stage would act on is released on a **fast path** before anything is parsed or
-  allocated.
-- The pump threads run at `TimeCritical` and are registered with
-  [MMCSS](docs/Glossary-vi.md#L635) ("Pro Audio"), on top of the process priority chosen under *CPU
-  priority* in Settings (default High).
-- Log level Debug writes the pump latency every 10 s (`capture-to-release fast/full … avg p99 max`),
-  to check what the engine costs on your machine.
-
-Measured on a 32-core machine (Debug build): the average wait is about 0.1–0.3 ms per packet. With
-every core busy, a TCP packet now and then still waits a few ms, and a UDP one up to ~30 ms.
+While the engine runs, every outbound TCP/UDP packet of the machine, redirected or not, passes
+through the engine (average wait about 0.1–0.3 ms per packet). How the cost is kept down, and the
+measurements: [docs/Architecture.md](docs/Architecture.md#L37).
 
 ## Current limits
 
 - **Every outbound packet of the machine passes through the engine**, not only the redirected
   processes' (see above). Average cost is a fraction of a millisecond, but when the CPU is
   saturated the occasional packet waits several to tens of ms for the pump thread — a short ping
-  spike in a game even if the game is not redirected. Nothing in user mode can match the kernel's
-  own packet path; the only complete cure is not running the engine while playing.
-- The pump threads stay registered with MMCSS for the life of the engine. Windows'
-  `NetworkThrottlingIndex` throttles non-multimedia network processing while an MMCSS task is
-  active; whether it affects these packets has not been measured.
+  spike in a game even if the game is not redirected. The only complete cure is not running the
+  engine while playing ([why](docs/Architecture.md#L58)).
 
-- IPv6 is redirected like IPv4 (default `Redirect`, see [Ipv6Mode](docs/Glossary-vi.md#L89) in
+- IPv6 is redirected like IPv4 (default `Redirect`, see Ipv6Mode in
   Settings). `Block` gives the old behaviour — drop it so the application falls back to IPv4;
-  `Ignore` lets IPv6 go out **unproxied**. The packet parser does not walk IPv6 extension headers, so
-  an IPv6 packet carrying one is passed through rather than misread (rare in ordinary application
-  traffic).
-- An outbound with no IPv6 route (an IPv4-only VPN or proxy) still reaches a destination that has a
-  **host name**: the name is handed to the outbound, which resolves it to IPv4 itself. A **bare IPv6
-  literal** has nothing left to fall back to, so the connection is closed immediately and the
-  application retries over IPv4 ([Happy Eyeballs](docs/Glossary-vi.md#L81)). Each outbound carries an
-  [Ipv6Support](docs/Glossary-vi.md#L89) setting: `Auto` (try once, then remember), `Enabled`,
-  `Disabled`. SOCKS4 has no IPv6 in the protocol at all, so it is always treated as unsupported.
+  `Ignore` lets IPv6 go out **unproxied**.
+- An outbound with no IPv6 route (an IPv4-only VPN or proxy) falls back to IPv4 for destinations that
+  have a host name; a bare IPv6 address is refused so the application retries over IPv4. Each
+  outbound carries an Ipv6Support setting: `Auto` (try once, then
+  remember), `Enabled`, `Disabled`. How the fallback works: [docs/Architecture.md](docs/Architecture.md#L58).
 - Secure DNS (see [Secure DNS per policy](#secure-dns-per-policy)) takes over DNS/53 over UDP, IPv4 and IPv6 alike; DNS over TCP/53 (asked again when an answer is too long) still goes out as plain DNS.
 - IPv6 connections already open when the engine starts fall under the "connections that started
   first" rule below.
@@ -218,7 +176,9 @@ file at all and are dialled with a server address instead.
 The **VPN protocol** column is `Auto` unless you say otherwise, and the guess is read off the URL —
 a scheme names the protocol outright, and a file is recognised by its extension and contents. The
 one thing it cannot guess is which of two engines should run a WireGuard `.conf`, so that is what
-the column is really for; see the next section.
+the column is really for; see the next section. Name lookups of the in-process engine stay inside the
+tunnel and never reach the machine's resolver
+([details](docs/Architecture.md#L103)).
 
 Passwords and pre-shared keys go in their own boxes rather than into the URL, so they can be edited
 and hidden on screen on their own. They are written to the configuration file as typed, like
@@ -226,32 +186,17 @@ everything else here.
 
 ### Two engines, and which one you get
 
-| | `wireproxy.exe` | In this process |
-|---|---|---|
-| Protocols | WireGuard `.conf` | OpenVPN, SSTP, L2TP/IPsec, IKEv2, SoftEther, WireGuard `.conf` |
-| External binary | required | none |
-| UDP through the tunnel | no (its SOCKS5 is TCP-only) | yes |
-| IPv6 through the tunnel | no | when the server assigns a global IPv6 |
-| DNS | resolved by wireproxy inside the tunnel | resolved inside the tunnel |
-
-A WireGuard `.conf` goes to **wireproxy by default**, which is what it has always done — an existing
-configuration behaves exactly as it did before the other protocols existed. To run the same file in
-this process instead, set the **VPN protocol** column to `WireGuard`; you then need no
-`wireproxy.exe`, and UDP goes through the tunnel.
+Only a WireGuard `.conf` can run on either engine, `wireproxy.exe` or this process; the other
+protocols always run in this process. A WireGuard `.conf` goes to **wireproxy by default**, which is
+what it has always done — an existing configuration behaves exactly as it did before the other
+protocols existed. To run the same file in this process instead, set the **VPN protocol** column to
+`WireGuard`; you then need no `wireproxy.exe`, and UDP goes through the tunnel (wireproxy's SOCKS5
+is TCP-only).
 
 For the wireproxy engine, download `wireproxy.exe` and put it next to `ProxyDivert.exe`, or on PATH,
-or point the **Settings** tab at it. A `.conf` that already has a `[Socks5]` section is used as-is;
-an ordinary one gets a temporary copy with `[Socks5]` on a random loopback port **and a random
-password**, so no other process on the machine can help itself to the tunnel. That temporary copy
-lives in `%TEMP%` and **holds the private key in clear text** while wireproxy runs (it is deleted on
-stop) — which is simply how wireproxy takes its configuration.
-
-### Name lookups stay inside the tunnel
-
-A VPN that carries your traffic but lets the name lookups go out to your ISP's resolver has given
-away the list of everywhere you went. So the in-process engine resolves through the tunnel, over its
-own UDP socket, asking the DNS server the VPN assigned — or 1.1.1.1 and then 8.8.8.8 when it
-assigned none, still inside the tunnel. The machine's own resolver is never asked.
+or point the **Settings** tab at it. The comparison of the two engines and how wireproxy takes its
+configuration (a temporary copy in `%TEMP%` that **holds the private key in clear text** while it
+runs): [docs/Architecture.md](docs/Architecture.md#L81).
 
 ### A `.vpn` file
 
@@ -279,27 +224,17 @@ router would act on. Point the URL box straight at the `.conf` for that.
 ### The tunnel is held up, not dialled per request
 
 The tunnel comes up the moment you press Start rather than when the first request needs it, and it is
-held until the engine stops: a dead `wireproxy` process is rebuilt immediately, with the retry delay
-growing 1 → 2 → 5 → 10 → 30 seconds so a broken configuration cannot become a process-spawning loop.
-An idle WireGuard session is kept alive by `PersistentKeepalive` — provider files usually omit it, so
-the tool fills in 25 seconds; a file that sets its own value is left alone.
-
-The in-process drivers already supervise their own link and re-establish it with their own backoff,
-so the tool stays out of their way: a tunnel that is re-establishing is reported as such but left
-alone, and only a driver that has given up entirely gets replaced. Rebuilding one mid-repair would
-just be two dials racing each other to the same server.
+held until the engine stops, re-established automatically when it drops. Retry delays, keepalive and
+who supervises what: [docs/Architecture.md](docs/Architecture.md#L110).
 
 The state shows on the **Outbounds** tab: a green dot means up, an amber one means connecting or
 reconnecting and carries the reason. Pressing Save does **not** drop a tunnel — only outbounds that
 actually changed are rebuilt, and editing the configuration file itself counts as a change.
 
-One exception: a `.conf` you wrote yourself (one that already has `[Socks5]`) is handed to wireproxy
-untouched, so the `PersistentKeepalive` in it is your business.
-
 ## The SSH outbound
 
 Pick the **Ssh** outbound kind. One SSH session to the server is held open and every redirected
-connection becomes a [direct-tcpip](docs/Glossary-vi.md#L587) channel on it — what `ssh -D` gives
+connection becomes a direct-tcpip channel on it — what `ssh -D` gives
 you, without a local SOCKS listener in between. The destination's name is sent to the server and
 resolved there, so name lookups never touch this machine's DNS. The server needs nothing special: a
 stock `sshd` with `AllowTcpForwarding` (the default). It runs inside this process (SSH.NET), so there
@@ -312,7 +247,7 @@ is no `ssh.exe` to install.
 | Password | the password — or, when a key file is set, the key's passphrase (it is still offered as a password as well) |
 | Key file | a private key: OpenSSH, PuTTY `.ppk` or PEM (RSA, ECDSA, Ed25519) |
 
-**Host keys are trusted on first use** ([TOFU](docs/Glossary-vi.md#L591)). The first time a server
+**Host keys are trusted on first use** (TOFU). The first time a server
 is reached, its host key is written to `%LOCALAPPDATA%\ProxyDivert\known_hosts` — OpenSSH's own
 format, so you can read and edit it — and from then on only that key is accepted. A server that
 shows a different key is refused, and the error names the file and the line: delete that line if the
@@ -325,31 +260,30 @@ Limits:
 
 - **TCP only.** SSH has no channel for datagrams, so UDP routed to an SSH outbound is blocked
   (QUIC included — browsers fall back to TCP).
-- Every tunnel shares one TCP connection to the server, so a lost packet briefly stalls all of them.
-- Each open tunnel holds a thread: SSH.NET forwards with a blocking loop per connection. The tool
-  reserves those threads as tunnels open so the rest of the application is never starved of them,
-  but a browser with a hundred connections open costs a hundred threads.
+- Every tunnel shares one TCP connection to the server, and each open tunnel holds a thread, so a
+  browser with a hundred connections open costs a hundred threads
+  ([details](docs/Architecture.md#L126)).
 - Tried against Windows' own OpenSSH 9.5 `sshd` on this machine, with an Ed25519 key with and without
   a passphrase (see `LiveSshOutboundTests`). Password logins and a remote Linux server have not been
   tried yet. Keyboard-interactive and ssh-agent are not supported.
 
 ## Anti-DPI
 
-Some networks read the destination's name off the wire — the [SNI](docs/Glossary-vi.md#L13) in a
+Some networks read the destination's name off the wire — the SNI in a
 TLS ClientHello, or the host in a proxy's `CONNECT` line — and block or throttle by it
-([DPI](docs/Glossary-vi.md#L627)). The anti-DPI switches send that name in small pieces, so a box
+(DPI). The anti-DPI switches send that name in small pieces, so a box
 that looks at one packet or one record at a time never sees it whole (the GoodbyeDPI idea).
 
 On the **Outbounds** tab:
 
 | Column | What it does | Applies to |
 |---|---|---|
-| **Anti-DPI TLS** | The ClientHello is rebuilt as several [TLS records](docs/Glossary-vi.md#L631) around the SNI name, the name itself cut into records of *DPI bytes* each. Servers must reassemble them (RFC 8446 §5.1). | Direct (the built-in row too), HTTP, SOCKS4, SOCKS5 |
+| **Anti-DPI TLS** | The ClientHello is rebuilt as several TLS records around the SNI name, the name itself cut into records of *DPI bytes* each. Servers must reassemble them (RFC 8446 §5.1). | Direct (the built-in row too), HTTP, SOCKS4, SOCKS5 |
 | **Anti-DPI CONNECT** | The name in the `CONNECT` request to the proxy goes out *DPI bytes* at a time. Some proxies handle this badly. | HTTP, SOCKS4, SOCKS5 |
 | **DPI bytes** | Bytes of the name per piece; defaults to 2. | |
 
-Only the part of the handshake that carries the name is split; everything after it passes through
-untouched, so there is no cost once the connection is up. VPN and SSH outbounds do not offer it —
+Only the part of the handshake that carries the name is split, so there is no cost once the
+connection is up ([details](docs/Architecture.md#L135)). VPN and SSH outbounds do not offer it —
 their traffic is already encrypted end to end.
 
 **Per policy.** On the **Rules** tab each policy has the same two switches beside Block QUIC, as
@@ -373,8 +307,8 @@ beside the switches (empty = the one in Settings).
 
 The boxes are greyed out when the policy's outbound is Block. They only act while the engine is
 running; ticking a box or changing the DoH endpoint takes effect on Apply & Save. The names of the
-outbounds' own servers (proxy, VPN and SSH endpoints) are always resolved with normal DNS, since the
-DoH request itself needs them.
+outbounds' own servers (proxy, VPN and SSH endpoints) are always resolved with normal DNS
+([why](docs/Architecture.md#L142)).
 
 Limits:
 - Software with its own network filter driver can take DNS/53 before WinDivert sees it, and then
