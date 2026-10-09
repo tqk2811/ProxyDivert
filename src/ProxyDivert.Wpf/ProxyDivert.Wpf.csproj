@@ -48,4 +48,32 @@
 		<PackageReference Include="Native.WinDivert" />
 	</ItemGroup>
 
+	<!--
+		Phiên bản lấy từ git: <Major>.<Minor> theo tag vM.N.x gần nhất, số thứ ba = số commit kể từ tag
+		(tag v1.2.0 + 15 commit => 1.2.15). Chưa có tag nào thì 0.0.<tổng số commit>.
+		Cố ý không dùng GitVersion.MsBuild: nó báo "orphaned branch" và làm đỏ build trên nhánh phụ,
+		còn git describe chạy được ở mọi nhánh. Không có git (vd build từ source zip) thì giữ 1.0.0.
+	-->
+	<Target Name="SetVersionFromGit" BeforeTargets="GetAssemblyVersion">
+		<Exec Command="git describe --tags --long --match &quot;v[0-9]*.[0-9]*.[0-9]*&quot;" WorkingDirectory="$(MSBuildProjectDirectory)"
+		      ConsoleToMSBuild="true" StandardOutputImportance="low" StandardErrorImportance="low" IgnoreExitCode="true" EchoOff="true">
+			<Output TaskParameter="ConsoleOutput" PropertyName="_GitDescribe" />
+			<Output TaskParameter="ExitCode" PropertyName="_GitDescribeExit" />
+		</Exec>
+		<Exec Command="git rev-list --count HEAD" WorkingDirectory="$(MSBuildProjectDirectory)" Condition="'$(_GitDescribeExit)' != '0'"
+		      ConsoleToMSBuild="true" StandardOutputImportance="low" StandardErrorImportance="low" IgnoreExitCode="true" EchoOff="true">
+			<Output TaskParameter="ConsoleOutput" PropertyName="_GitCommitCount" />
+			<Output TaskParameter="ExitCode" PropertyName="_GitCountExit" />
+		</Exec>
+		<PropertyGroup>
+			<_GitVersionMatch>$([System.Text.RegularExpressions.Regex]::Match('$(_GitDescribe)', '^v(\d+)\.(\d+)\.\d+-(\d+)-g'))</_GitVersionMatch>
+			<_GitVersion Condition="'$(_GitDescribeExit)' == '0' and '$(_GitVersionMatch)' != ''">$([System.Text.RegularExpressions.Regex]::Replace('$(_GitVersionMatch)', '^v(\d+)\.(\d+)\.\d+-(\d+)-g$', '$1.$2.$3'))</_GitVersion>
+			<_GitVersion Condition="'$(_GitVersion)' == '' and '$(_GitCountExit)' == '0'">0.0.$(_GitCommitCount.Trim())</_GitVersion>
+			<Version Condition="'$(_GitVersion)' != ''">$(_GitVersion)</Version>
+			<FileVersion Condition="'$(_GitVersion)' != ''">$(_GitVersion)</FileVersion>
+			<InformationalVersion Condition="'$(_GitVersion)' != ''">$(_GitVersion)</InformationalVersion>
+		</PropertyGroup>
+		<Message Importance="high" Text="ProxyDivert version: $(Version)" />
+	</Target>
+
 </Project>

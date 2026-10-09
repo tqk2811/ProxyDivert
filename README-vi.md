@@ -31,6 +31,11 @@ dotnet build ProxyDivert.sln -c Debug
 Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.exe`
 (kèm `WinDivert.dll` + `WinDivert64.sys` copy sẵn cạnh exe).
 
+Phiên bản lấy từ git: `M.N` theo tag `vM.N.0` gần nhất, số thứ ba là số commit kể từ tag đó (chưa có
+tag thì `0.0.<tổng số commit>`). Mỗi lần push lên `master`,
+[.github/workflows/release.yml](.github/workflows/release.yml) build và gắn file zip vào GitHub Release
+`vM.N.0`; muốn mở dòng phiên bản mới thì gắn tag `vM.N.0` mới lên `master`.
+
 ## Cấu trúc
 
 Repo gồm ứng dụng WPF (`src/`) và ba submodule trong `libs/`. Cấu trúc từng project nằm ở

@@ -1,0 +1,102 @@
+name: Release
+
+# Build the WPF app on every push to master (docs-only pushes are skipped) and attach the zip to a
+# GitHub Release. Also runnable by hand (workflow_dispatch).
+#
+# Version (computed in src/ProxyDivert.Wpf/ProxyDivert.Wpf.csproj, target SetVersionFromGit):
+# M.N from the nearest tag vM.N.0, third number = commits since that tag.
+#
+# /releases model: one GitHub Release per minor line, named by its tag 'vM.N.0'. Each build uploads
+# ProxyDivert-M.N.<commits>-win-x64.zip to that Release and rewrites the notes.
+# Precondition: tag 'vM.N.0' is pushed to origin. Start a new line by tagging master 'vM.N.0'.
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - name: Checkout (full history + tags + submodules)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # The submodule libraries run GitVersion.MsBuild in Release (they have a .nuspec), which fails
+      # on a detached submodule HEAD. Their own version does not matter here, so turn it off globally;
+      # the app's version comes from git describe, not GitVersion.
+      - name: Publish
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish src/ProxyDivert.Wpf/ProxyDivert.Wpf.csproj -c Release -o publish `
+            -p:DisableGitVersionTask=true -p:WriteVersionInfoToBuildLog=false `
+            -p:GenerateGitVersionInformation=false -p:UpdateAssemblyInfo=false -p:GenerateGitVersionFiles=false
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
+
+      - name: Zip
+        id: zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = (Get-Item publish/ProxyDivert.exe).VersionInfo.ProductVersion
+          if ($ver -notmatch '^(\d+)\.(\d+)\.(\d+)$') { throw "Unexpected version '$ver'" }
+          $tag = "v$($Matches[1]).$($Matches[2]).0"
+          $zip = "ProxyDivert-$ver-win-x64.zip"
+          Compress-Archive -Path publish/* -DestinationPath $zip
+          Add-Content $env:GITHUB_OUTPUT "version=$ver"
+          Add-Content $env:GITHUB_OUTPUT "tag=$tag"
+          Add-Content $env:GITHUB_OUTPUT "zip=$zip"
+          Write-Host "version=$ver  release-tag=$tag"
+
+      - name: Upload to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.zip.outputs.tag }}
+          VERSION: ${{ steps.zip.outputs.version }}
+          ZIP: ${{ steps.zip.outputs.zip }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git rev-parse -q --verify "refs/tags/$env:TAG" *> $null
+          if ($LASTEXITCODE -ne 0) { throw "Tag '$env:TAG' does not exist on origin. Tag the start of this minor line first." }
+
+          # Notes: latest build on top, then every first-parent commit since the line's tag.
+          $repo = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY"
+          $lines = @("Latest build: **$env:VERSION** ($env:ZIP)", "", "Changes since $env:TAG`:")
+          $lines += @(git log --first-parent --format="- %s ([%h]($repo/commit/%H))" "$env:TAG..HEAD")
+          Set-Content -Path RELEASE_NOTES.md -Value ($lines -join "`n") -Encoding utf8
+
+          # gh is a native command: a non-zero exit does not throw under 'Stop', so check by hand.
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release edit $env:TAG --notes-file RELEASE_NOTES.md
+            if ($LASTEXITCODE -ne 0) { throw "gh release edit failed" }
+          } else {
+            gh release create $env:TAG --title $env:TAG --notes-file RELEASE_NOTES.md --verify-tag
+            if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
+          }
+          gh release upload $env:TAG $env:ZIP --clobber
+          if ($LASTEXITCODE -ne 0) { throw "gh release upload failed" }

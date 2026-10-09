@@ -31,6 +31,11 @@ dotnet build ProxyDivert.sln -c Debug
 Output: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.exe`, with `WinDivert.dll`
 and `WinDivert64.sys` copied next to it.
 
+The version comes from git: `M.N` from the nearest tag `vM.N.0`, the third number is the count of
+commits since that tag (no tag yet: `0.0.<all commits>`). Every push to `master` is built by
+[.github/workflows/release.yml](.github/workflows/release.yml) and the zip is attached to the GitHub
+Release `vM.N.0`; tag `master` with a new `vM.N.0` to start a new line.
+
 ## Layout
 
 The repository is the WPF app (`src/`) plus three submodules under `libs/`. The project-by-project
