@@ -578,7 +578,7 @@ Hai commit khác hash nhưng mang **cùng một thay đổi** — thường vì 
 
 ## Slowloris (giữ kết nối bằng cách gửi nhỏ giọt)
 
-Kiểu tấn công (hoặc client hỏng) mở kết nối rồi gửi request **không bao giờ hoàn chỉnh** — vài byte, không có CRLF kết thúc dòng — và im lặng. Server nào đợi "đọc hết dòng đầu" mà không có timeout riêng cho giai đoạn đó sẽ giữ một slot (socket, task, buffer) cho mỗi kết nối như vậy cho tới khi cạn. `ReceiveTimeout` của socket không áp cho `ReadAsync`, nên phải tự đặt hạn cho giai đoạn nhận diện giao thức. Xem D6 trong [FixList-vi.md](FixList-vi.md).
+Kiểu tấn công (hoặc client hỏng) mở kết nối rồi gửi request **không bao giờ hoàn chỉnh** — vài byte, không có CRLF kết thúc dòng — và im lặng. Server nào đợi "đọc hết dòng đầu" mà không có timeout riêng cho giai đoạn đó sẽ giữ một slot (socket, task, buffer) cho mỗi kết nối như vậy cho tới khi cạn. `ReceiveTimeout` của socket không áp cho `ReadAsync`, nên phải tự đặt hạn cho giai đoạn nhận diện giao thức. Xem mục D6 trong [Backlog-vi.md](Backlog-vi.md).
 
 ## Back-pressure (áp lực ngược) và cửa sổ nhận TCP
 
