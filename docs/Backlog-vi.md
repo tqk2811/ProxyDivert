@@ -4,13 +4,6 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 
 Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát toàn repo ngày 2026-09-08, trước đây nằm trong `docs/FixList-vi.md` (lịch sử: `git log -p -- docs/FixList-vi.md`). A = lỗi tiềm ẩn ProxyDivert, B = WinDivert, C = cách dùng VpnClient, D = TqkLibrary.Proxy, E = thiết kế (OOP, tái sử dụng, test). Mức: `Cao` = mất dữ liệu / mất mạng / rò tài nguyên tích luỹ trong dùng bình thường; `Vừa` = sai trong tình huống thường gặp nhưng có đường tránh; `Thấp` = hiếm gặp hoặc chỉ tốn tài nguyên; với mục E: `Must` = đã gây lỗi thật hoặc chặn việc mở rộng đã dự định, `Should` = giảm trùng lặp hoặc cho phép test, `Nice` = sạch hơn, không đổi hành vi. Link của các mục này được đối chiếu lại với code ngày 2026-10-09; link không có số dòng (nhóm D7 và phần lớn E) là chưa dò lại dòng, tra theo tên ký hiệu.
 
-### Vá checksum incremental làm chết mọi kết nối IPv4 chuyển hướng
-
-- **Vấn đề:** commit `89b72db` của submodule WinDivert ("update checksums incrementally on the NAT rewrite") làm mọi kết nối TCP IPv4 bị chuyển hướng chết ở bắt tay. SYN-ACK của relay (bắt trên loopback, `lb=1`) được ghi lại địa chỉ rồi đưa về client, nhưng client không ACK mà phát lại SYN; một phiên có 726 lần chuyển hướng IPv4 và 0 lần relay `accepted[v4]`. IPv6 không bị. Giả thuyết: gói loopback không mang checksum hợp lệ, vá chênh lệch trên checksum sai thì vẫn sai. Bộ đếm `tcpcsum-valid` của PacketPump không phát hiện được.
-- **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Packet/Models/ParsedPacket.cs:73` (hàm ghi lại hai đầu và vá checksum), bộ đếm ở `PacketPump.cs:215`. ProxyDivert đã revert về submodule `347d74e` (commit `ec182d4`).
-- **Vì sao:** muốn giữ lợi ích hiệu năng của vá incremental thì phải tính lại đầy đủ cho gói loopback (hoặc gói có checksum gốc không hợp lệ), kèm test hồi quy dựng gói loopback có checksum sai. Chưa sửa thì không bump WinDivert lên `89b72db` trở đi.
-- **Ngày ghi:** 2026-10-09.
-
 ### Kiểm chống DPI trên mạng thật
 
 - **Vấn đề:** cờ Anti-DPI (tách tên miền trong CONNECT, tách ClientHello thành nhiều TLS record quanh SNI) mới được kiểm bằng test offline. Một server TLS thật (SslStream/SChannel trên loopback) đã nhận ClientHello bị tách và bắt tay xong. Còn hai câu hỏi chưa ai trả lời: nhà mạng đang chặn có bị lách thật không, và ra dây mỗi record có thành segment riêng không (bắt bằng Wireshark).
