@@ -10,12 +10,12 @@ using System.Windows.Media;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Routing.Models.Conditions;
-using ProxyDivert.Wpf.Bindings;
-using ProxyDivert.Wpf.Bindings.Enums;
-using ProxyDivert.Wpf.Bindings.Interfaces;
-using ProxyDivert.Wpf.Services;
-using ProxyDivert.Wpf.ViewModels;
-using ProxyDivert.Wpf.Views;
+using ProxyDivert.Bindings;
+using ProxyDivert.Bindings.Enums;
+using ProxyDivert.Bindings.Interfaces;
+using ProxyDivert.Services;
+using ProxyDivert.ViewModels;
+using ProxyDivert.Views;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;

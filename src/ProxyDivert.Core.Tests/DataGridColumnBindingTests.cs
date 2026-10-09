@@ -9,10 +9,10 @@ using System.Windows.Data;
 using System.Windows.Media;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models.Conditions;
-using AppDurationConverter = ProxyDivert.Wpf.Converters.DurationConverter;
-using ProxyDivert.Wpf.Localization;
-using ProxyDivert.Wpf.ViewModels;
-using ProxyDivert.Wpf.Views;
+using AppDurationConverter = ProxyDivert.Converters.DurationConverter;
+using ProxyDivert.Localization;
+using ProxyDivert.ViewModels;
+using ProxyDivert.Views;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;
@@ -439,7 +439,7 @@ public class DataGridColumnBindingTests
             };
 
             var window = new ProcessFilterWindow(
-                new ProxyDivert.Wpf.ViewModels.ProcessFilterViewModel(SampleFilter(), new[] { policy }))
+                new ProxyDivert.ViewModels.ProcessFilterViewModel(SampleFilter(), new[] { policy }))
             {
                 Width = 1000,
                 Height = 800,
@@ -448,11 +448,11 @@ public class DataGridColumnBindingTests
             window.UpdateLayout();
 
             FrameworkElement tree = FindVisuals<ContentControl>(window)
-                .First(control => control.Content is ProxyDivert.Wpf.ViewModels.Conditions.ConditionGroupViewModel);
+                .First(control => control.Content is ProxyDivert.ViewModels.Conditions.ConditionGroupViewModel);
 
             FrameworkElement policies = FindVisuals<ItemsControl>(window)
                 .First(control => control.ItemsSource
-                    is IEnumerable<ProxyDivert.Wpf.ViewModels.ProcessFilterViewModel.PolicyChoice>);
+                    is IEnumerable<ProxyDivert.ViewModels.ProcessFilterViewModel.PolicyChoice>);
 
             double treeRight = Left(tree, window) + tree.ActualWidth;
 
@@ -493,7 +493,7 @@ public class DataGridColumnBindingTests
             filter.PolicyIds.Add(policy.Id);
 
             var window = new ProcessFilterWindow(
-                new ProxyDivert.Wpf.ViewModels.ProcessFilterViewModel(filter, new[] { policy }))
+                new ProxyDivert.ViewModels.ProcessFilterViewModel(filter, new[] { policy }))
             {
                 Width = 1000,
                 Height = 800,
@@ -547,7 +547,7 @@ public class DataGridColumnBindingTests
         {
             EnsureApplication();
 
-            var model = new ProxyDivert.Wpf.ViewModels.ProcessFilterViewModel(
+            var model = new ProxyDivert.ViewModels.ProcessFilterViewModel(
                 SampleFilter(), Array.Empty<ProxyDivert.Core.Routing.Models.RoutingPolicy>());
             var window = new ProcessFilterWindow(model) { Width = 1000, Height = 800 };
             window.Show();
@@ -557,7 +557,7 @@ public class DataGridColumnBindingTests
             {
                 // Every ComboBox template carries its own (collapsed) edit box; only the row's pattern box counts.
                 if (box.TemplatedParent is ComboBox) continue;
-                if (box.DataContext is not ProxyDivert.Wpf.ViewModels.Conditions.ConditionLeafViewModel row) continue;
+                if (box.DataContext is not ProxyDivert.ViewModels.Conditions.ConditionLeafViewModel row) continue;
 
                 ComboBox subjectPicker = FindVisuals<ComboBox>(window).First(combo =>
                     ReferenceEquals(combo.DataContext, row) && ReferenceEquals(combo.ItemsSource, row.Subjects));
@@ -568,19 +568,19 @@ public class DataGridColumnBindingTests
                 shown.Add((
                     subjectText,
                     box.Tag as string ?? string.Empty,
-                    ProxyDivert.Wpf.Helpers.ConditionTextBuilder.SubjectText(row.Subject!),
-                    ProxyDivert.Wpf.Helpers.ConditionTextBuilder.PatternHint(row.Subject!)));
+                    ProxyDivert.Helpers.ConditionTextBuilder.SubjectText(row.Subject!),
+                    ProxyDivert.Helpers.ConditionTextBuilder.PatternHint(row.Subject!)));
             }
 
             // Switching a row's subject has to move the hint with it; the old trigger did that by
             // itself, the converter only does it if the binding is on the right property.
             TextBox first = FindVisuals<TextBox>(window)
-                .First(box => box.TemplatedParent is not ComboBox && box.DataContext is ProxyDivert.Wpf.ViewModels.Conditions.ConditionLeafViewModel);
-            var firstRow = (ProxyDivert.Wpf.ViewModels.Conditions.ConditionLeafViewModel)first.DataContext;
+                .First(box => box.TemplatedParent is not ComboBox && box.DataContext is ProxyDivert.ViewModels.Conditions.ConditionLeafViewModel);
+            var firstRow = (ProxyDivert.ViewModels.Conditions.ConditionLeafViewModel)first.DataContext;
             firstRow.Subject = ConditionSubject.CommandLine;
             window.UpdateLayout();
             hintAfterSwitch = first.Tag as string ?? string.Empty;
-            expectedAfterSwitch = ProxyDivert.Wpf.Helpers.ConditionTextBuilder.PatternHint(ConditionSubject.CommandLine);
+            expectedAfterSwitch = ProxyDivert.Helpers.ConditionTextBuilder.PatternHint(ConditionSubject.CommandLine);
 
             // The switch is an edit, and closing an edited filter asks whether to save it — a
             // modal box nobody is there to answer, which hangs the whole run.
@@ -783,7 +783,7 @@ public class DataGridColumnBindingTests
     {
         if (Application.Current == null)
         {
-            var application = new ProxyDivert.Wpf.App();
+            var application = new ProxyDivert.App();
             application.InitializeComponent();
         }
 

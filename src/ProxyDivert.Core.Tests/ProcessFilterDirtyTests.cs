@@ -1,8 +1,8 @@
 using System;
 using System.Linq;
 using ProxyDivert.Core.Routing.Models;
-using ProxyDivert.Wpf.ViewModels;
-using ProxyDivert.Wpf.ViewModels.Conditions;
+using ProxyDivert.ViewModels;
+using ProxyDivert.ViewModels.Conditions;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;

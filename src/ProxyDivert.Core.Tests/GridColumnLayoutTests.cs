@@ -5,9 +5,9 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using ProxyDivert.Wpf.Bindings;
-using ProxyDivert.Wpf.Services;
-using ProxyDivert.Wpf.Views;
+using ProxyDivert.Bindings;
+using ProxyDivert.Services;
+using ProxyDivert.Views;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;

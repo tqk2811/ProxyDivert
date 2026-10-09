@@ -1,0 +1,167 @@
+﻿<UserControl x:Class="ProxyDivert.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="4">
+
+            <!-- ==== secure DNS ==== -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Heading}" Text="{DynamicResource Str.Settings.SecureDns}"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.SecureDnsHint}"/>
+                    <!-- Free text with suggestions: picking one writes its URL (TextPath) into the
+                         box, while the list shows who runs it. -->
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{DynamicResource Str.Settings.DohEndpoint}" VerticalAlignment="Center" MinWidth="120"/>
+                        <ComboBox IsEditable="True" IsTextSearchEnabled="False" TextSearch.TextPath="Url" Width="320"
+                                  ItemsSource="{Binding DohEndpointPresets}"
+                                  Text="{Binding DohEndpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Provider}" MinWidth="70" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Url}" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ==== process detection ====
+
+                 Locked while redirection is on: swapping the source under a running engine leaves
+                 a window where neither the old nor the new one is delivering, and a process that
+                 starts inside it is redirected late or not at all. -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                <StackPanel IsEnabled="{Binding IsEngineRunning, Converter={StaticResource InverseBool}}">
+                    <TextBlock Style="{StaticResource Heading}" Text="{DynamicResource Str.Settings.EventSource}"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.EventSourceHint}"/>
+
+                    <RadioButton GroupName="ProcessDetection" Margin="0,0,0,4"
+                                 Content="{DynamicResource Str.Settings.DetectionProcessEvents}"
+                                 ToolTipService.ShowDuration="30000"
+                                 ToolTip="{DynamicResource Str.Settings.DetectionProcessEventsTip}"
+                                 IsChecked="{Binding UsesProcessEvents}"/>
+
+                    <!-- Indented because they are a choice INSIDE the one above, and dimmed while
+                         the other mode is picked: sniffing needs no process events at all, so the
+                         question of which one to use stops applying rather than changing answer. -->
+                    <StackPanel Margin="26,0,0,6" IsEnabled="{Binding UsesProcessEvents}">
+                        <RadioButton GroupName="ProcessEventSource" Margin="0,0,0,4"
+                                     Content="{DynamicResource Str.Settings.EventSourceEtw}"
+                                     ToolTipService.ShowDuration="30000"
+                                     ToolTip="{DynamicResource Str.Settings.EventSourceEtwTip}"
+                                     IsChecked="{Binding UsesEtw}"/>
+                        <RadioButton GroupName="ProcessEventSource"
+                                     Content="{DynamicResource Str.Settings.EventSourceWmi}"
+                                     ToolTipService.ShowDuration="30000"
+                                     ToolTip="{DynamicResource Str.Settings.EventSourceWmiTip}"
+                                     IsChecked="{Binding UsesWmi}"/>
+                    </StackPanel>
+
+                    <RadioButton GroupName="ProcessDetection"
+                                 Content="{DynamicResource Str.Settings.DetectionNetworkSniff}"
+                                 ToolTipService.ShowDuration="30000"
+                                 ToolTip="{DynamicResource Str.Settings.DetectionNetworkSniffTip}"
+                                 IsChecked="{Binding UsesNetworkSniff}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ==== network ==== -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{DynamicResource Str.Settings.Ipv6}" VerticalAlignment="Center" MinWidth="120"/>
+                        <ComboBox ItemsSource="{Binding Ipv6Modes}" SelectedItem="{Binding Ipv6}" Width="200"
+                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,4,0,10" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.Ipv6Hint}"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="{DynamicResource Str.Settings.WireProxy}" VerticalAlignment="Center" MinWidth="120"/>
+                        <TextBox Text="{Binding WireProxyPath, UpdateSourceTrigger=PropertyChanged}" Width="320"/>
+                        <Button Content="…" Command="{Binding BrowseWireProxyCommand}" Margin="8,0,0,0" MinWidth="36"/>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.WireProxyHint}"/>
+
+                    <!-- No path box for this one: the blob has a fixed name and two places it may
+                         live, so what the user needs is the button and the answer to "is it here". -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="{DynamicResource Str.Settings.Watermark}" VerticalAlignment="Center" MinWidth="120"/>
+                        <Button Content="{DynamicResource Str.Settings.WatermarkFetch}"
+                                Command="{Binding FetchWatermarkCommand}" MinWidth="90"/>
+                        <TextBlock Text="{Binding WatermarkStatus}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                   TextWrapping="Wrap" MaxWidth="420" Style="{StaticResource Subtle}"/>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.WatermarkHint}"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="{DynamicResource Str.Settings.CpuPriority}" Margin="0,0,6,0"
+                                   VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding CpuPriorities}" SelectedItem="{Binding CpuPriority}"
+                                  Width="140" ItemTemplate="{StaticResource EnumItemTemplate}"/>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.CpuPriorityHint}"/>
+
+                    <!-- The level and the folder sit on the switch's own line: they are what the
+                         user reaches for in the same breath as ticking it, and the level filters
+                         the file only — the log pane keeps showing everything. -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <CheckBox Content="{DynamicResource Str.Settings.AutoSaveLog}"
+                                  IsChecked="{Binding AutoSaveLog}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{DynamicResource Str.Settings.FileLogLevel}" Margin="16,0,6,0"
+                                   VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding FileLogLevels}" SelectedItem="{Binding FileLogLevel}"
+                                  Width="140" ItemTemplate="{StaticResource EnumItemTemplate}"/>
+                        <Button Content="{DynamicResource Str.Settings.OpenLogFolder}"
+                                Command="{Binding OpenLogFolderCommand}" Margin="8,0,0,0" MinWidth="110"/>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,0" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.AutoSaveLogHint}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ==== appearance ==== -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Heading}" Text="{DynamicResource Str.Settings.Appearance}"
+                               Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="{DynamicResource Str.Settings.Language}" VerticalAlignment="Center" MinWidth="120"/>
+                        <!-- Its own converter, not the enum one: a language is named in its own
+                             language, so the list stays readable whichever one is active. -->
+                        <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" Width="200"
+                                  ItemTemplate="{StaticResource LanguageItemTemplate}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="{DynamicResource Str.Settings.Theme}" VerticalAlignment="Center" MinWidth="120"/>
+                        <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" Width="200"
+                                  ItemTemplate="{StaticResource EnumItemTemplate}"/>
+                    </StackPanel>
+                    <CheckBox Content="{DynamicResource Str.Settings.StartWithWindows}"
+                              IsChecked="{Binding StartWithWindows}"/>
+                    <CheckBox Content="{DynamicResource Str.Settings.MinimizeToTrayOnClose}"
+                              IsChecked="{Binding MinimizeToTrayOnClose}"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Style="{StaticResource Subtle}" VerticalAlignment="Center"
+                           TextWrapping="Wrap" Text="{DynamicResource Str.Settings.RestartHint}"/>
+            </StackPanel>
+
+            <TextBlock Style="{StaticResource Subtle}" Margin="0,12,0,0" TextWrapping="Wrap"
+                       Text="{DynamicResource Str.Warn.AntiCheat}"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

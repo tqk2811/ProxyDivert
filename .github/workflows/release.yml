@@ -3,7 +3,7 @@ name: Release
 # Build the WPF app on every push to master (docs-only pushes are skipped) and attach the zip to a
 # GitHub Release. Also runnable by hand (workflow_dispatch).
 #
-# Version (computed in src/ProxyDivert.Wpf/ProxyDivert.Wpf.csproj, target SetVersionFromGit):
+# Version (computed in src/ProxyDivert/ProxyDivert.csproj, target SetVersionFromGit):
 # M.N from the nearest tag vM.N.0, third number = commits since that tag.
 #
 # /releases model: one GitHub Release per minor line, named by its tag 'vM.N.0'. Each build uploads
@@ -51,7 +51,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          dotnet publish src/ProxyDivert.Wpf/ProxyDivert.Wpf.csproj -c Release -o publish `
+          dotnet publish src/ProxyDivert/ProxyDivert.csproj -c Release -o publish `
             -p:DisableGitVersionTask=true -p:WriteVersionInfoToBuildLog=false `
             -p:GenerateGitVersionInformation=false -p:UpdateAssemblyInfo=false -p:GenerateGitVersionFiles=false
           if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }

@@ -10,7 +10,7 @@ How ProxyDivert is put together and how its mechanisms work; for installing and 
 | `libs/TqkLibrary.Proxy` | submodule — `IProxySource` for HTTP/SOCKS4/SOCKS5/SSH/WireGuard |
 | `libs/TqkLibrary.VpnClient` | submodule — userspace TCP/IP stack and VPN protocol drivers. Its `TqkLibrary.VpnClient.Tunnels` project dials the six protocols below and hands back a live tunnel. |
 | `src/ProxyDivert.Core` | engine, models, services (no WPF dependency) |
-| `src/ProxyDivert.Wpf` | the window |
+| `src/ProxyDivert` | the window |
 | `src/ProxyDivert.Core.Tests` | unit tests |
 
 ## Where a connection's host name comes from

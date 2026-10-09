@@ -6,7 +6,7 @@ using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Vpn;
 using ProxyDivert.Core.Vpn.Enums;
 using ProxyDivert.Core.Vpn.Models;
-using ProxyDivert.Wpf.ViewModels;
+using ProxyDivert.ViewModels;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;

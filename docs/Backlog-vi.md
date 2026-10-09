@@ -28,7 +28,7 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 ### Huỷ thay đổi không đồng bộ lại tunnel VPN
 
 - **Vấn đề:** thêm một outbound VPN rồi bấm Connect khi chưa Áp dụng & Lưu, sau đó bấm Huỷ thay đổi: outbound biến khỏi cấu hình nhưng tunnel vẫn sống (không ai gọi lại `Vpn.SyncAsync`), và tab Outbounds không còn hàng nào để Disconnect, kéo dài tới lần Apply sau. Chiều ngược lại: outbound bị xoá rồi được khôi phục thì mang `KeepConnected` của lần apply, có thể lệch với tunnel thật.
-- **Vị trí:** `src/ProxyDivert.Wpf/Services/AppServices.cs` (`DiscardChanges`), `src/ProxyDivert.Core/Hosting/ProxyDivertSession.cs` (`SetVpnConnectedAsync`).
+- **Vị trí:** `src/ProxyDivert/Services/AppServices.cs` (`DiscardChanges`), `src/ProxyDivert.Core/Hosting/ProxyDivertSession.cs` (`SetVpnConnectedAsync`).
 - **Vì sao:** finding của review ngày 2026-10-05; hiếm gặp. Hướng sửa: sau khi discard thì đưa session một lượt đồng bộ VPN theo cấu hình đã khôi phục.
 - **Ngày ghi:** 2026-10-05.
 
@@ -77,7 +77,7 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 ### Bảng Connections vẫn dựng lại 500 dòng mỗi 250ms khi đang mở tab
 
 - **Vấn đề:** bộ đếm byte sửa tại chỗ nên không biết rẻ khi nào dữ liệu đổi; hiện chỉ đỡ nhờ dừng timer khi cửa sổ ẩn hoặc không mở tab.
-- **Vị trí:** `src/ProxyDivert.Wpf/ViewModels/ConnectionsViewModel.cs` (`Refresh`).
+- **Vị trí:** `src/ProxyDivert/ViewModels/ConnectionsViewModel.cs` (`Refresh`).
 - **Ngày ghi:** 2026-10-08.
 
 ### Test RelayTeardownTests chập chờn khi máy bận
@@ -129,7 +129,7 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 ### A10. Các tab không đồng bộ danh sách với nhau (Cao, còn hở)
 
 - **Vấn đề:** đã sửa bằng cách `MainViewModel` gọi `Reload()` của ba tab khi đổi tab (giữ selection khi nạp lại); phần tham chiếu treo khi xoá policy/outbound do mô hình dữ liệu bịt. Còn hở: chưa chạy thử trên UI thật, không test nào chạm `Reload()`; fallback `Policies[0]` ở `ProcessFilterViewModel` vẫn còn, chỉ an toàn nhờ danh sách đã nạp lại; `Reload()` dựng lại toàn bộ row VM mỗi lần đổi tab nên hàng nào sau này giữ state riêng (không proxy xuống model) sẽ mất state.
-- **Vị trí:** [MainViewModel.cs:291-334](../src/ProxyDivert.Wpf/ViewModels/MainViewModel.cs#L291-L334), [ProcessesViewModel.cs:104](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L104), [RulesViewModel.cs:66](../src/ProxyDivert.Wpf/ViewModels/RulesViewModel.cs#L66), [OutboundsViewModel.cs:64](../src/ProxyDivert.Wpf/ViewModels/OutboundsViewModel.cs#L64), [ProcessFilterViewModel.cs:105-106](../src/ProxyDivert.Wpf/ViewModels/ProcessFilterViewModel.cs#L105-L106).
+- **Vị trí:** [MainViewModel.cs:291-334](../src/ProxyDivert/ViewModels/MainViewModel.cs#L291-L334), [ProcessesViewModel.cs:104](../src/ProxyDivert/ViewModels/ProcessesViewModel.cs#L104), [RulesViewModel.cs:66](../src/ProxyDivert/ViewModels/RulesViewModel.cs#L66), [OutboundsViewModel.cs:64](../src/ProxyDivert/ViewModels/OutboundsViewModel.cs#L64), [ProcessFilterViewModel.cs:105-106](../src/ProxyDivert/ViewModels/ProcessFilterViewModel.cs#L105-L106).
 - **Vì sao:** tạo policy rồi gán cho tiến trình là luồng thao tác chính của app.
 - **Cách sửa:** chạy thử UI (thêm policy ở Rules thì editor filter tab Processes thấy ngay; xoá policy đang được filter dùng) và thêm một test cho `Reload()` giữ selection.
 - **Ngày ghi:** 2026-09-08 (kiểm lại 2026-09-11).
@@ -142,7 +142,7 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
   - `OnProcessStopped` chỉ detach con trực tiếp, không lan xuống cháu: [ProcessRuleTracker.cs:395-405](../src/ProxyDivert.Core/Processes/ProcessRuleTracker.cs#L395-L405), `Detach` ([:380](../src/ProxyDivert.Core/Processes/ProcessRuleTracker.cs#L380)) không cascade nên cháu ở lại bảng tracked vĩnh viễn. Lặp tới khi không đổi như `FollowParents`; `ProcessRuleTrackerTests` chưa phủ ca này.
   - `AttachProcessId` có thể ném `KeyNotFoundException` khi `Detach` xen giữa: [ProcessRuleTracker.cs:253](../src/ProxyDivert.Core/Processes/ProcessRuleTracker.cs#L253) (`if (!_tracked.TryAdd(...)) return _tracked[processId];`). Nằm trên đường nút Launch suspended. Dùng `TryGetValue`.
   - Endpoint proxy phân giải bằng `Dns.GetHostAddresses` rồi lấy `addresses[0]`: [OutboundUrl.cs:45](../src/ProxyDivert.Core/Outbounds/Builders/OutboundUrl.cs#L45), gọi lúc dựng instance (registry), không còn trên đường mỗi kết nối. Còn lại: không ưu tiên IPv4 khi `Ipv6Support == Disabled`, không cache, vẫn đồng bộ lúc dựng (cùng gốc với E5.4).
-  - Cây tiến trình khi PID tái dùng thành vòng cha–con: [ProcessesViewModel.cs:130](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L130) (`BuildTree`), [:174](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L174) (`FilterName`, đã có `MaxParentSteps = 64`). Không còn treo, nhưng lúc nối chưa có tập-đã-thăm: mọi node trong vòng đều "có cha" nên không node nào là root, cả vòng biến mất khỏi cây dù tiến trình đang redirect. Node có cha nhưng không tới được root thì coi là root.
+  - Cây tiến trình khi PID tái dùng thành vòng cha–con: [ProcessesViewModel.cs:130](../src/ProxyDivert/ViewModels/ProcessesViewModel.cs#L130) (`BuildTree`), [:174](../src/ProxyDivert/ViewModels/ProcessesViewModel.cs#L174) (`FilterName`, đã có `MaxParentSteps = 64`). Không còn treo, nhưng lúc nối chưa có tập-đã-thăm: mọi node trong vòng đều "có cha" nên không node nào là root, cả vòng biến mất khỏi cây dù tiến trình đang redirect. Node có cha nhưng không tới được root thì coi là root.
   - `EtwProcessEventSource.Dispose` chặn `_pump?.Wait(2s)` ([EtwProcessEventSource.cs:192](../src/ProxyDivert.Core/Processes/EtwProcessEventSource.cs#L192)) và nằm trong chuỗi `ProcessInventory.DisposeAsync` → `StopEvents` → `events.Dispose()` ([ProcessInventory.cs:381](../src/ProxyDivert.Core/Processes/ProcessInventory.cs#L381)): cầu sync còn sót của chuỗi dispose, chặn luồng tới 2 giây lúc tắt. Cho nguồn sự kiện `IAsyncDisposable`.
   - Cache `Outbound.Address` có khe đua nhỏ ([Outbound.cs:57-77](../src/ProxyDivert.Core/Routing/Models/Outbound.cs#L57-L77)): luồng kết nối đọc `_kind/_url` xong, luồng UI sửa ô rồi vứt cache, luồng đọc mới gán `Parsed(<giá trị cũ>)` đè lên nên địa chỉ cũ sống tới lần vứt cache sau; hiếm, Save/Clone dựng bản mới. `AddressProblem` thì parse lại mỗi lần get, không dùng cache.
   - `ConditionGroup.Clone` ([ConditionGroup.cs:14-19](../src/ProxyDivert.Core/Routing/Models/Conditions/ConditionGroup.cs#L14-L19)) vẫn ném trên phần tử `null` trong `Children` trong khi `Answer` có guard; `Normalize` chỉ bịt ở cửa đọc file, `AppConfig` dựng trong bộ nhớ không qua `Normalize` vẫn dính NRE. Thêm guard cho khớp `Answer`.
@@ -457,8 +457,8 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 ### E8.2. Nhóm Nice (MVVM)
 
 - **Vấn đề:**
-  - 6 VM nhận `AppServices` bê tông, 41 chỗ gọi thẳng `Engine/Config/Vpn`; `CanToggleVpn` chạy `OutboundUsage.RoutedOutboundIds` mỗi lần WPF hỏi CanExecute ([OutboundsViewModel.cs:100](../src/ProxyDivert.Wpf/ViewModels/OutboundsViewModel.cs#L100)). Hướng: VM nhận `IProxyDivertSession` + `IConfigEditor`, cache theo config version. `ProxyDivertSession` hiện là class, chưa có interface; `AppServices` vẫn là mặt tiền VM gọi. Rút interface khi có test VM cần thay nó.
-  - VM tạo Window ([ProcessesViewModel.cs:318](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L318), `new ProcessFilterWindow(viewModel)`). Làm `IDialogService.EditFilter(vm) : bool` để test `AddRule/EditRule`.
+  - 6 VM nhận `AppServices` bê tông, 41 chỗ gọi thẳng `Engine/Config/Vpn`; `CanToggleVpn` chạy `OutboundUsage.RoutedOutboundIds` mỗi lần WPF hỏi CanExecute ([OutboundsViewModel.cs:100](../src/ProxyDivert/ViewModels/OutboundsViewModel.cs#L100)). Hướng: VM nhận `IProxyDivertSession` + `IConfigEditor`, cache theo config version. `ProxyDivertSession` hiện là class, chưa có interface; `AppServices` vẫn là mặt tiền VM gọi. Rút interface khi có test VM cần thay nó.
+  - VM tạo Window ([ProcessesViewModel.cs:318](../src/ProxyDivert/ViewModels/ProcessesViewModel.cs#L318), `new ProcessFilterWindow(viewModel)`). Làm `IDialogService.EditFilter(vm) : bool` để test `AddRule/EditRule`.
 - **Vị trí:** xem từng gạch.
 - **Ngày ghi:** 2026-09-08 (kiểm lại 2026-10-09).
 
@@ -481,7 +481,7 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 ### E9.3. Test Wpf đặt sai project (Nice)
 
 - **Vấn đề:** `DataGridColumnBindingTests`, `WpfResourceSmokeTests`, `PolicyRenameTests`, `TextBoxPlaceholderTests`, `StartupRegistrationTests` test Wpf nhưng nằm trong `ProxyDivert.Core.Tests` (csproj tham chiếu cả Wpf).
-- **Cách sửa:** tách `ProxyDivert.Wpf.Tests`.
+- **Cách sửa:** tách `ProxyDivert.Tests`.
 - **Ngày ghi:** 2026-09-08.
 
 ### OpenVPN và WireGuard native chưa thử với máy chủ thật

@@ -1,0 +1,226 @@
+<UserControl x:Class="ProxyDivert.Views.RulesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:b="clr-namespace:ProxyDivert.Bindings">
+    <!-- A DataGrid column is outside the visual tree, so the combo columns below reach the view
+         model through this proxy instead of an ancestor lookup that cannot resolve. -->
+    <UserControl.Resources>
+        <b:BindingProxy x:Key="Vm" Data="{Binding}"/>
+
+        <!-- A pattern that will not compile matches nothing on every connection, and with Not
+             ticked it claims everything instead. The list above the grid names all of them across
+             every policy; this says which row, on the cell it was typed into. -->
+        <Style x:Key="PatternCell" TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasPatternProblem}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}"/>
+                    <Setter Property="ToolTip" Value="{Binding PatternProblem}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+    <Grid Margin="4">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ==== policies ==== -->
+        <Border Style="{StaticResource Card}" Grid.Column="0" Margin="0,0,4,0">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Heading}"
+                           Text="{DynamicResource Str.Rules.Policies}" Margin="0,0,0,6"/>
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0" Orientation="Horizontal">
+                    <Button Content="{DynamicResource Str.App.Add}" Command="{Binding AddPolicyCommand}" MinWidth="70"/>
+                    <Button Content="{DynamicResource Str.App.Remove}" Command="{Binding RemovePolicyCommand}"
+                            Margin="8,0,0,0" MinWidth="70"/>
+                </StackPanel>
+                <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Subtle}" Margin="0,6,0,0"
+                           TextWrapping="Wrap" Text="{DynamicResource Str.Rules.RenameHint}"/>
+
+                <!-- Double-click a row to rename it in place: the text becomes a box, and the edit
+                     lands when the box loses focus or on Enter. Which row is being renamed is one
+                     reference on the view model rather than a flag on every row, so each row asks
+                     whether it is that one. -->
+                <ListBox x:Name="PolicyList" ItemsSource="{Binding Policies}"
+                         SelectedItem="{Binding SelectedPolicy}"
+                         MouseDoubleClick="PolicyList_MouseDoubleClick">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <TextBlock VerticalAlignment="Center" Text="{Binding Name}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Value="True">
+                                                    <DataTrigger.Binding>
+                                                        <MultiBinding Converter="{StaticResource SameObject}">
+                                                            <Binding/>
+                                                            <Binding Path="DataContext.RenamingPolicy"
+                                                                     RelativeSource="{RelativeSource AncestorType=ListBox}"/>
+                                                        </MultiBinding>
+                                                    </DataTrigger.Binding>
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <TextBox x:Name="PolicyNameBox" Margin="-4,0"
+                                         KeyDown="PolicyNameBox_KeyDown"
+                                         LostFocus="PolicyNameBox_LostFocus"
+                                         Text="{Binding DataContext.PolicyName,
+                                                RelativeSource={RelativeSource AncestorType=ListBox},
+                                                UpdateSourceTrigger=PropertyChanged}">
+                                    <TextBox.Style>
+                                        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Value="True">
+                                                    <DataTrigger.Binding>
+                                                        <MultiBinding Converter="{StaticResource SameObject}">
+                                                            <Binding/>
+                                                            <Binding Path="DataContext.RenamingPolicy"
+                                                                     RelativeSource="{RelativeSource AncestorType=ListBox}"/>
+                                                        </MultiBinding>
+                                                    </DataTrigger.Binding>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBox.Style>
+                                </TextBox>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- ==== rules of the selected policy ==== -->
+        <Border Style="{StaticResource Card}" Grid.Column="1">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Heading}"
+                           Text="{DynamicResource Str.Rules.Rules}" Margin="0,0,0,6"/>
+
+                <!-- A rule whose pattern cannot be parsed matches nothing on every connection, and
+                     with Not ticked it claims everything instead. The row looks perfectly ordinary
+                     in the grid below either way, so it is named here. -->
+                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6"
+                            Visibility="{Binding HasPatternProblems, Converter={StaticResource TrueToVisible}}">
+                    <TextBlock Text="{DynamicResource Str.Rules.PatternProblems}" TextWrapping="Wrap"
+                               FontWeight="SemiBold" Foreground="{DynamicResource Brush.Warning}"/>
+                    <TextBlock Text="{Binding PatternProblems}" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Foreground="{DynamicResource Brush.Warning}"/>
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="{DynamicResource Str.App.Add}" Command="{Binding AddRuleCommand}" MinWidth="70"/>
+                        <Button Content="{DynamicResource Str.App.Remove}" Command="{Binding RemoveRuleCommand}"
+                                Margin="8,0,0,0" MinWidth="70"/>
+                        <Button Content="{DynamicResource Str.App.Up}" Command="{Binding MoveUpCommand}"
+                                Margin="8,0,0,0" MinWidth="60"/>
+                        <Button Content="{DynamicResource Str.App.Down}" Command="{Binding MoveDownCommand}"
+                                Margin="8,0,0,0" MinWidth="60"/>
+                    </StackPanel>
+
+                    <WrapPanel Margin="0,10,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="{DynamicResource Str.Rules.Default}" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding Outbounds}" DisplayMemberPath="Name" SelectedValuePath="Id"
+                                  SelectedValue="{Binding SelectedPolicy.OutboundId}"
+                                  Width="160" Margin="8,0,0,0"/>
+
+                        <TextBlock Text="{DynamicResource Str.Rules.UdpMode}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <ComboBox ItemsSource="{Binding UdpModes}" SelectedItem="{Binding SelectedPolicy.UdpMode}"
+                                  ItemTemplate="{StaticResource EnumItemTemplate}"
+                                  Width="150" Margin="8,0,0,0"/>
+
+                        <CheckBox Content="{DynamicResource Str.Rules.BlockQuic}"
+                                  IsChecked="{Binding SelectedPolicy.BlockQuic}"
+                                  VerticalAlignment="Center" Margin="20,0,0,0"/>
+                    </WrapPanel>
+
+                    <WrapPanel Margin="0,6,0,0" VerticalAlignment="Center">
+                        <CheckBox Content="{DynamicResource Str.Outbound.AntiDpiTls}" IsThreeState="True"
+                                  IsChecked="{Binding SelectedPolicy.AntiDpiTls}"
+                                  IsEnabled="{Binding SelectedPolicySupportsAntiDpi}"
+                                  ToolTip="{DynamicResource Str.Rules.AntiDpiStateHint}"
+                                  VerticalAlignment="Center"/>
+                        <CheckBox Content="{DynamicResource Str.Outbound.AntiDpiConnect}" IsThreeState="True"
+                                  IsChecked="{Binding SelectedPolicy.AntiDpiConnect}"
+                                  IsEnabled="{Binding SelectedPolicySupportsAntiDpiConnect}"
+                                  ToolTip="{DynamicResource Str.Rules.AntiDpiStateHint}"
+                                  VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <TextBlock Text="{DynamicResource Str.Outbound.AntiDpiChunk}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <TextBox Text="{Binding SelectedPolicy.AntiDpiChunkSize, UpdateSourceTrigger=LostFocus}"
+                                 b:PositiveIntegerInput.IsEnabled="True"
+                                 IsEnabled="{Binding SelectedPolicySupportsAntiDpi}"
+                                 ToolTip="{DynamicResource Str.Rules.AntiDpiChunkHint}"
+                                 Width="50" Margin="8,0,0,0" VerticalContentAlignment="Center"/>
+                    </WrapPanel>
+
+                    <WrapPanel Margin="0,6,0,0" VerticalAlignment="Center">
+                        <CheckBox Content="{DynamicResource Str.Rules.SecureDnsProcess}"
+                                  IsChecked="{Binding SelectedPolicy.SecureDnsProcess}"
+                                  IsEnabled="{Binding SelectedPolicyAllowsSecureDnsProcess}"
+                                  ToolTip="{DynamicResource Str.Rules.SecureDnsProcessTip}"
+                                  VerticalAlignment="Center"/>
+                        <CheckBox Content="{DynamicResource Str.Rules.SecureDnsSystem}"
+                                  IsChecked="{Binding SelectedPolicy.SecureDnsSystem}"
+                                  IsEnabled="{Binding SelectedPolicyAllowsSecureDnsSystem}"
+                                  ToolTip="{DynamicResource Str.Rules.SecureDnsSystemTip}"
+                                  VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <CheckBox Content="{DynamicResource Str.Rules.SecureDnsFallback}"
+                                  IsChecked="{Binding SelectedPolicy.SecureDnsFallbackToPlain}"
+                                  IsEnabled="{Binding SelectedPolicyAllowsSecureDnsFallback}"
+                                  ToolTip="{DynamicResource Str.Rules.SecureDnsFallbackTip}"
+                                  VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <!-- Empty = the DoH server in Settings. Picking a suggestion writes its URL. -->
+                        <TextBlock Text="{DynamicResource Str.Rules.DohEndpoint}" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                        <ComboBox IsEditable="True" IsTextSearchEnabled="False" TextSearch.TextPath="Url" Width="260"
+                                  Margin="8,0,0,0" VerticalAlignment="Center"
+                                  ItemsSource="{Binding DohEndpointPresets}"
+                                  IsEnabled="{Binding SelectedPolicyAllowsSecureDnsFallback}"
+                                  ToolTip="{DynamicResource Str.Rules.DohEndpointTip}"
+                                  Text="{Binding SelectedPolicy.DohEndpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Provider}" MinWidth="70" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Url}" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </WrapPanel>
+
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Rules.BlockQuicHint}"/>
+                </StackPanel>
+
+                <DataGrid ItemsSource="{Binding Rules}" SelectedItem="{Binding SelectedRule}"
+                          b:ColumnLayoutBehavior.Layout="{Binding ColumnLayout}"
+                          IsEnabled="{Binding CanEditSelectedPolicy}"
+                          AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
+                    <DataGrid.Columns>
+                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}" b:ColumnLayoutBehavior.ColumnKey="enabled"
+                                                Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
+                        <DataGridComboBoxColumn Header="{b:LocalizedBinding Str.App.Type}" b:ColumnLayoutBehavior.ColumnKey="type"
+                                                SelectedItemBinding="{Binding Matcher, UpdateSourceTrigger=PropertyChanged}"
+                                                ItemsSource="{Binding Data.Matchers, Source={StaticResource Vm}}"
+                                                ElementStyle="{StaticResource EnumComboColumn}"
+                                                EditingElementStyle="{StaticResource EnumComboColumn}"
+                                                Width="120"/>
+                        <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Pattern}" b:ColumnLayoutBehavior.ColumnKey="pattern"
+                                            Binding="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
+                                            CellStyle="{StaticResource PatternCell}" Width="260"/>
+                        <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.Rules.Not}" b:ColumnLayoutBehavior.ColumnKey="not"
+                                                Binding="{Binding IsNot, UpdateSourceTrigger=PropertyChanged}" Width="55"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>

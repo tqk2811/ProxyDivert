@@ -8,7 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using ProxyDivert.Core.Routing.Models;
-using ProxyDivert.Wpf.ViewModels;
+using ProxyDivert.ViewModels;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;
@@ -63,7 +63,7 @@ public class PolicyRenameTests
             stub.Policies.Add(games);
             stub.PolicyName = "Games";
 
-            var view = new ProxyDivert.Wpf.Views.RulesView { DataContext = stub };
+            var view = new ProxyDivert.Views.RulesView { DataContext = stub };
             var window = new Window { Width = 1200, Height = 800, Content = view };
             window.Show();
             view.UpdateLayout();
@@ -115,13 +115,13 @@ public class PolicyRenameTests
             System.IO.Directory.CreateDirectory(directory);
             string path = System.IO.Path.Combine(directory, "config.json");
 
-            var services = new ProxyDivert.Wpf.Services.AppServices(path);
+            var services = new ProxyDivert.Services.AppServices(path);
             try
             {
-                var model = new ProxyDivert.Wpf.ViewModels.RulesViewModel(services);
+                var model = new ProxyDivert.ViewModels.RulesViewModel(services);
                 model.AddPolicyCommand.Execute(null);
 
-                var view = new ProxyDivert.Wpf.Views.RulesView { DataContext = model };
+                var view = new ProxyDivert.Views.RulesView { DataContext = model };
                 var window = new Window { Width = 1200, Height = 800, Content = view };
                 window.Show();
                 view.UpdateLayout();
@@ -182,15 +182,15 @@ public class PolicyRenameTests
             System.IO.Directory.CreateDirectory(directory);
             string path = System.IO.Path.Combine(directory, "config.json");
 
-            var services = new ProxyDivert.Wpf.Services.AppServices(path);
+            var services = new ProxyDivert.Services.AppServices(path);
             try
             {
-                var model = new ProxyDivert.Wpf.ViewModels.RulesViewModel(services);
+                var model = new ProxyDivert.ViewModels.RulesViewModel(services);
                 // The built-in Default is fixed, so the rule goes into a policy of the user's own.
                 model.AddPolicyCommand.Execute(null);
                 model.AddRuleCommand.Execute(null);
 
-                var view = new ProxyDivert.Wpf.Views.RulesView { DataContext = model };
+                var view = new ProxyDivert.Views.RulesView { DataContext = model };
                 var window = new Window { Width = 1200, Height = 800, Content = view };
                 window.Show();
                 view.UpdateLayout();
@@ -230,7 +230,7 @@ public class PolicyRenameTests
     {
         if (Application.Current == null)
         {
-            var application = new ProxyDivert.Wpf.App();
+            var application = new ProxyDivert.App();
             application.InitializeComponent();
         }
 

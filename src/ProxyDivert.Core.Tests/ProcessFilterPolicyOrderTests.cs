@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProxyDivert.Core.Routing.Models;
-using ProxyDivert.Wpf.Bindings.Enums;
-using ProxyDivert.Wpf.ViewModels;
+using ProxyDivert.Bindings.Enums;
+using ProxyDivert.ViewModels;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;

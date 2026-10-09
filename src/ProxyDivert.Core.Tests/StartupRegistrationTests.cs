@@ -1,5 +1,5 @@
 using System.Xml.Linq;
-using ProxyDivert.Wpf.Services;
+using ProxyDivert.Services;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;

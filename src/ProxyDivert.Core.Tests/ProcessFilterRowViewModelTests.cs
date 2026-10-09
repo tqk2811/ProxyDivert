@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Routing.Models.Conditions;
-using ProxyDivert.Wpf.ViewModels;
+using ProxyDivert.ViewModels;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;

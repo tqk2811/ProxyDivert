@@ -21,7 +21,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{FCE7191B-A2F
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TqkLibrary.Proxy", "libs\TqkLibrary.Proxy\src\TqkLibrary.Proxy\TqkLibrary.Proxy.csproj", "{22F4D368-B431-4D2B-BD3D-DA5A9486F27E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProxyDivert.Wpf", "src\ProxyDivert.Wpf\ProxyDivert.Wpf.csproj", "{44BB52E5-EA8D-4DA9-9E25-2A07F7B5A8F8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProxyDivert", "src\ProxyDivert\ProxyDivert.csproj", "{44BB52E5-EA8D-4DA9-9E25-2A07F7B5A8F8}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProxyDivert.Core.Tests", "src\ProxyDivert.Core.Tests\ProxyDivert.Core.Tests.csproj", "{F406C1BE-FEF3-4137-8227-8BE788CB78B3}"
 EndProject

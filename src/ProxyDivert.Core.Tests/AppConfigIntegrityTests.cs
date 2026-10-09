@@ -359,7 +359,7 @@ public class AppConfigIntegrityTests
             Assert.DoesNotContain(null, inner.Children);
 
             // What the user actually runs into: the editor opens on it.
-            var editor = new ProxyDivert.Wpf.ViewModels.ProcessFilterViewModel(loaded, Array.Empty<RoutingPolicy>());
+            var editor = new ProxyDivert.ViewModels.ProcessFilterViewModel(loaded, Array.Empty<RoutingPolicy>());
             Assert.Equal(2, editor.Root.Children.Count);
         }
         finally

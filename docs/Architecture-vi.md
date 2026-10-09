@@ -10,7 +10,7 @@ ProxyDivert được ghép từ những phần nào và các cơ chế chạy ra
 | `libs/TqkLibrary.Proxy` | submodule — `IProxySource` cho HTTP/SOCKS4/SOCKS5/SSH/WireGuard |
 | `libs/TqkLibrary.VpnClient` | submodule — [stack TCP/IP userspace](Glossary-vi.md#L73) và driver các giao thức VPN. Project `TqkLibrary.VpnClient.Tunnels` trong đó quay số sáu giao thức bên dưới và trả về đường hầm đã lên. |
 | `src/ProxyDivert.Core` | engine, model, service (không phụ thuộc WPF) |
-| `src/ProxyDivert.Wpf` | giao diện |
+| `src/ProxyDivert` | giao diện |
 | `src/ProxyDivert.Core.Tests` | unit test |
 
 ## Tên miền của một kết nối lấy từ đâu

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Windows;
-using ProxyDivert.Wpf.Localization;
+using ProxyDivert.Localization;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;
@@ -102,7 +102,7 @@ public class TrayIconTests
     {
         if (Application.Current != null) return Application.Current;
 
-        var application = new ProxyDivert.Wpf.App();
+        var application = new ProxyDivert.App();
         application.InitializeComponent();
         return application;
     }

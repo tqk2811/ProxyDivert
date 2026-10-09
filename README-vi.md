@@ -28,7 +28,7 @@ git clone --recursive https://github.com/tqk2811/ProxyDivert.git
 dotnet build ProxyDivert.sln -c Debug
 ```
 
-Sản phẩm: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.exe`
+Sản phẩm: `src/ProxyDivert/bin/x64/<Config>/net8.0-windows/ProxyDivert.exe`
 (kèm `WinDivert.dll` + `WinDivert64.sys` copy sẵn cạnh exe).
 
 Phiên bản lấy từ git: `M.N` theo tag `vM.N.0` gần nhất, số thứ ba là số commit kể từ tag đó (chưa có

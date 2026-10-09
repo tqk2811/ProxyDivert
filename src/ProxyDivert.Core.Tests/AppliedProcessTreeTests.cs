@@ -6,10 +6,10 @@ using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Core.Routing.Models;
 using System.Windows;
 using System.Windows.Controls;
-using ProxyDivert.Wpf.ViewModels;
-using ProxyDivert.Wpf.Views;
+using ProxyDivert.ViewModels;
+using ProxyDivert.Views;
 using Xunit;
-using Node = ProxyDivert.Wpf.ViewModels.ProcessesViewModel.AppliedProcessNode;
+using Node = ProxyDivert.ViewModels.ProcessesViewModel.AppliedProcessNode;
 
 namespace ProxyDivert.Core.Tests;
 

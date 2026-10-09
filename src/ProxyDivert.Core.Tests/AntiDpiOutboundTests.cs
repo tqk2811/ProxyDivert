@@ -4,7 +4,7 @@ using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Outbounds.Builders;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
-using ProxyDivert.Wpf.ViewModels;
+using ProxyDivert.ViewModels;
 using TqkLibrary.Proxy.ProxySources;
 using Xunit;
 

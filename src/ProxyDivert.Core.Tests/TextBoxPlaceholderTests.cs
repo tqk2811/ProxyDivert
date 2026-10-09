@@ -111,7 +111,7 @@ public class TextBoxPlaceholderTests
     {
         if (Application.Current == null)
         {
-            var application = new ProxyDivert.Wpf.App();
+            var application = new ProxyDivert.App();
             application.InitializeComponent();
         }
 

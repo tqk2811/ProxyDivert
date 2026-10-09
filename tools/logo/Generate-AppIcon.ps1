@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Dựng src/ProxyDivert.Wpf/Assets/app.ico từ nguồn vector Themes/Logo.xaml.
+    Dựng src/ProxyDivert/Assets/app.ico từ nguồn vector Themes/Logo.xaml.
 
 .DESCRIPTION
     Chạy lại script này mỗi khi sửa logo; file .ico được commit nên bản build không phụ thuộc
@@ -31,8 +31,8 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'LogoLoader.ps1')
 
 $repositoryRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
-if (-not $XamlPath) { $XamlPath = Join-Path $repositoryRoot 'src\ProxyDivert.Wpf\Themes\Logo.xaml' }
-if (-not $OutPath) { $OutPath = Join-Path $repositoryRoot 'src\ProxyDivert.Wpf\Assets\app.ico' }
+if (-not $XamlPath) { $XamlPath = Join-Path $repositoryRoot 'src\ProxyDivert\Themes\Logo.xaml' }
+if (-not $OutPath) { $OutPath = Join-Path $repositoryRoot 'src\ProxyDivert\Assets\app.ico' }
 
 function Get-StraightAlphaPixels {
     param([System.Windows.Media.Imaging.BitmapSource] $Bitmap)

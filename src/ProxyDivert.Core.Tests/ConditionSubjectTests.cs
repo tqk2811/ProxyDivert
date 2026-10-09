@@ -8,7 +8,7 @@ using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Routing.Models.Conditions;
-using ProxyDivert.Wpf.ViewModels.Conditions;
+using ProxyDivert.ViewModels.Conditions;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;

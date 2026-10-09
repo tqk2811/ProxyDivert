@@ -28,7 +28,7 @@ Already cloned without it: `git submodule update --init --recursive`.
 dotnet build ProxyDivert.sln -c Debug
 ```
 
-Output: `src/ProxyDivert.Wpf/bin/x64/<Config>/net8.0-windows/ProxyDivert.exe`, with `WinDivert.dll`
+Output: `src/ProxyDivert/bin/x64/<Config>/net8.0-windows/ProxyDivert.exe`, with `WinDivert.dll`
 and `WinDivert64.sys` copied next to it.
 
 The version comes from git: `M.N` from the nearest tag `vM.N.0`, the third number is the count of

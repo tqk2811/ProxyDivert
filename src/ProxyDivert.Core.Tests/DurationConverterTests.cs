@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 using Xunit;
-using AppDurationConverter = ProxyDivert.Wpf.Converters.DurationConverter;
+using AppDurationConverter = ProxyDivert.Converters.DurationConverter;
 
 namespace ProxyDivert.Core.Tests;
 

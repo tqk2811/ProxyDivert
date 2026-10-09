@@ -1,0 +1,451 @@
+<Window x:Class="ProxyDivert.Views.ProcessFilterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:b="clr-namespace:ProxyDivert.Bindings"
+        xmlns:cvm="clr-namespace:ProxyDivert.ViewModels.Conditions"
+        xmlns:loc="clr-namespace:ProxyDivert.Localization"
+        Title="{DynamicResource Str.Process.FilterTitle}"
+        Height="660" Width="1180" MinHeight="480" MinWidth="960"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Brush.Window.Background}"
+        TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
+
+    <!-- Same replaced caption as the main window, and the same rule that comes with it:
+         CaptionHeight must match the title row below exactly, because that is what the window
+         treats as draggable, and anything clickable inside it has to say IsHitTestVisibleInChrome
+         or the click drags the window instead of pressing the button. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="44" ResizeBorderThickness="6" GlassFrameThickness="0"
+                      CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <!-- NOT is a labelled button that turns red when it is on, not a tick box. A negation you
+             cannot see at a glance is how a filter ends up meaning the opposite of what its author
+             thinks it means. -->
+        <Style x:Key="NotButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinWidth" Value="58"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="Opacity" Value="0.55"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Negate}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Brush.Danger}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}"/>
+                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="RowButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+
+        <!-- The grip a row is picked up by is in the theme, next to everything else that is shared
+             with the rules grid on the Processes tab.
+
+             The insertion line. It is always there and only ever changes opacity: a line that took
+             up room the moment it appeared would shove the row it is pointing at out from under
+             the pointer. Each variant watches the zone it sits in for the mark the drag left. -->
+        <Style x:Key="DropLine" TargetType="Border">
+            <Setter Property="Height" Value="2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Background" Value="{DynamicResource Brush.Accent}"/>
+            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+        </Style>
+
+        <Style x:Key="DropLineBefore" TargetType="Border" BasedOn="{StaticResource DropLine}">
+            <Style.Triggers>
+                <DataTrigger Value="Before"
+                             Binding="{Binding (b:DragReorderBehavior.DropMark),
+                                       RelativeSource={RelativeSource AncestorType=Grid}}">
+                    <Setter Property="Opacity" Value="1"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DropLineAfter" TargetType="Border" BasedOn="{StaticResource DropLine}">
+            <Style.Triggers>
+                <DataTrigger Value="After"
+                             Binding="{Binding (b:DragReorderBehavior.DropMark),
+                                       RelativeSource={RelativeSource AncestorType=Grid}}">
+                    <Setter Property="Opacity" Value="1"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DropLineInside" TargetType="Border" BasedOn="{StaticResource DropLine}">
+            <Style.Triggers>
+                <DataTrigger Value="Inside"
+                             Binding="{Binding (b:DragReorderBehavior.DropMark),
+                                       RelativeSource={RelativeSource AncestorType=Grid}}">
+                    <Setter Property="Opacity" Value="1"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The strip under a group's last row belongs to the group's own border, so this one
+             watches that instead of the nearest grid. -->
+        <Style x:Key="DropLineTail" TargetType="Border" BasedOn="{StaticResource DropLine}">
+            <Style.Triggers>
+                <DataTrigger Value="After"
+                             Binding="{Binding (b:DragReorderBehavior.DropMark),
+                                       RelativeSource={RelativeSource AncestorType=Border}}">
+                    <Setter Property="Opacity" Value="1"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- ==== one condition ====
+             The gaps above and below the row are inside the row rather than around it. A strip
+             that belongs to nothing falls through to the bracket behind it, and the line then
+             offers to drop after the whole group while the pointer is between two of its rows. -->
+        <DataTemplate DataType="{x:Type cvm:ConditionLeafViewModel}">
+            <Grid Background="Transparent" b:DragReorderBehavior.DropZone="Row">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="4"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="4"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Style="{StaticResource DropLineBefore}"/>
+                <Border Grid.Row="2" Style="{StaticResource DropLineAfter}"/>
+
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="126"/>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Style="{StaticResource DragGrip}"/>
+
+                    <Button Grid.Column="1" Style="{StaticResource NotButton}" Margin="0,0,6,0"
+                            Content="{DynamicResource Str.Cond.Not}"
+                            Command="{Binding ToggleNegateCommand}"
+                            ToolTip="{DynamicResource Str.Cond.NotHint}"/>
+
+                    <!-- A subject is an object rather than an enum value, so it has a template of
+                         its own; the second binding re-runs the lookup when the language changes. -->
+                    <ComboBox Grid.Column="2" Margin="0,0,6,0"
+                              ItemsSource="{Binding Subjects}"
+                              SelectedItem="{Binding Subject}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock>
+                                    <TextBlock.Text>
+                                        <MultiBinding Converter="{StaticResource ConditionSubjectText}" Mode="OneWay">
+                                            <Binding/>
+                                            <Binding Path="Version" Source="{x:Static loc:LocalizationScope.Instance}"/>
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <ComboBox Grid.Column="3" Margin="0,0,6,0"
+                              ItemsSource="{Binding Matchers}"
+                              SelectedItem="{Binding Matcher}"
+                              ItemTemplate="{StaticResource EnumItemTemplate}"/>
+
+                    <!-- Enter adds the next condition to the same group, so a run of them can be
+                         typed without going back to the mouse. -->
+                    <TextBox Grid.Column="4" Margin="0,0,6,0"
+                             Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
+                             b:FocusBehavior.FocusWhen="{Binding IsNew, Mode=TwoWay}">
+                        <!-- The hint follows the subject: a file name for one, "leave empty" for
+                             another. Looked up by the subject's name, so a new kind of condition
+                             brings its hint along with its strings. -->
+                        <TextBox.Tag>
+                            <MultiBinding Converter="{StaticResource ConditionSubjectText}" ConverterParameter="Hint" Mode="OneWay">
+                                <Binding Path="Subject"/>
+                                <Binding Path="Version" Source="{x:Static loc:LocalizationScope.Instance}"/>
+                            </MultiBinding>
+                        </TextBox.Tag>
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Return" Command="{Binding Parent.AddConditionCommand}"/>
+                        </TextBox.InputBindings>
+                    </TextBox>
+
+                    <StackPanel Grid.Column="5" Orientation="Horizontal">
+                        <Button Style="{StaticResource RowButton}" Content="▲"
+                                Command="{Binding MoveUpCommand}" ToolTip="{DynamicResource Str.App.Up}"/>
+                        <Button Style="{StaticResource RowButton}" Content="▼"
+                                Command="{Binding MoveDownCommand}" ToolTip="{DynamicResource Str.App.Down}"/>
+                        <Button Style="{StaticResource RowButton}" Content="✕"
+                                Command="{Binding RemoveCommand}" ToolTip="{DynamicResource Str.App.Remove}"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </DataTemplate>
+
+        <!-- ==== a group, which holds conditions and more groups ====
+             This template puts an ItemsControl over Children, and Children hold groups again, so
+             the nesting draws itself. The vertical rule down the left is the bracket.
+
+             Three things can be dropped on a group and they have to stay apart, which is why the
+             border and its header row are two zones rather than one: the top of the header means
+             above the whole bracket, the bottom of it means into the bracket, and the strip under
+             its last row means after the whole bracket. -->
+        <DataTemplate DataType="{x:Type cvm:ConditionGroupViewModel}">
+            <Border Margin="0,3" Padding="9,0,5,6" CornerRadius="8"
+                    BorderThickness="2,1,1,1"
+                    Background="{DynamicResource Brush.Surface.Alt}"
+                    BorderBrush="{DynamicResource Brush.Surface.BorderBrush}"
+                    b:DragReorderBehavior.DropZone="GroupTail">
+                <StackPanel>
+                    <Grid Background="Transparent" b:DragReorderBehavior.DropZone="GroupHeader">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="5"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="4"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource DropLineBefore}"/>
+                        <Border Grid.Row="2" Style="{StaticResource DropLineInside}"/>
+
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- The outermost group is the tree itself: there is nowhere to drag it. -->
+                            <TextBlock Grid.Column="0" Style="{StaticResource DragGrip}"
+                                       Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
+
+                            <Button Grid.Column="1" Style="{StaticResource NotButton}" Margin="0,0,6,0"
+                                    Content="{DynamicResource Str.Cond.Not}"
+                                    Command="{Binding ToggleNegateCommand}"
+                                    ToolTip="{DynamicResource Str.Cond.NotGroupHint}"/>
+
+                            <ComboBox Grid.Column="2" Width="168"
+                                      ItemsSource="{Binding Operators}"
+                                      SelectedItem="{Binding Operator}"
+                                      ItemTemplate="{StaticResource EnumItemTemplate}"/>
+
+                            <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.AddCondition}"
+                                        Command="{Binding AddConditionCommand}"/>
+                                <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.AddGroup}"
+                                        Command="{Binding AddGroupCommand}"/>
+                                <Button Margin="6,0,0,0" Content="{DynamicResource Str.Cond.Ungroup}"
+                                        Command="{Binding UngroupCommand}"
+                                        ToolTip="{DynamicResource Str.Cond.UngroupHint}"
+                                        Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
+                                <Button Style="{StaticResource RowButton}" Margin="6,0,0,0" Content="✕"
+                                        Command="{Binding RemoveCommand}"
+                                        ToolTip="{DynamicResource Str.App.Remove}"
+                                        Visibility="{Binding IsRoot, Converter={StaticResource FalseToVisible}}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+
+                    <ItemsControl Margin="16,0,0,0" ItemsSource="{Binding Children}"/>
+
+                    <Border Style="{StaticResource DropLineTail}" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="44"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ==== title bar ====
+             No minimize button, unlike the main window. This opens modal, so a minimized copy of
+             it would leave the window behind it visible and refusing every click — the app would
+             look hung. Maximize earns its place: a condition tree several groups deep is exactly
+             what someone would want the whole screen for. -->
+        <Grid Grid.Row="0" Background="{DynamicResource Brush.TitleBar.Background}">
+            <TextBlock Margin="16,0,0,0" VerticalAlignment="Center"
+                       FontWeight="SemiBold" FontSize="13"
+                       Text="{DynamicResource Str.Process.FilterTitle}"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Height="44"
+                        WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button Style="{StaticResource WindowControlButton}" VerticalAlignment="Center"
+                        Click="Maximize_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                <!-- E922 maximize, E923 restore: the glyph has to say which one the
+                                     click will do, or a maximized window still offers to maximize. -->
+                                <Setter Property="Text" Value="&#xE922;"/>
+                                <Style.Triggers>
+                                    <DataTrigger Value="Maximized"
+                                                 Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}">
+                                        <Setter Property="Text" Value="&#xE923;"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Button>
+                <Button Style="{StaticResource WindowCloseButton}" VerticalAlignment="Center"
+                        Click="Close_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8BB;" FontSize="10"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1" Margin="14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ==== name ==== -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                <TextBlock Text="{DynamicResource Str.Process.FilterName}" VerticalAlignment="Center"
+                           Width="110"/>
+                <TextBox Width="420" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                         Tag="{DynamicResource Str.Process.FilterNameHint}"/>
+            </StackPanel>
+
+            <!-- ==== the tree read back as a sentence ====
+                 The editor never asks anyone to type an expression, but it always shows the one they
+                 built — otherwise a bracket dragged into place is a change nobody can check. -->
+            <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,10,0,0">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Subtle}" Text="{DynamicResource Str.Cond.Reads}"/>
+                    <TextBlock Margin="0,3,0,0" FontSize="13" TextWrapping="Wrap"
+                               Text="{Binding Summary}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ==== the conditions, and what happens to whatever matches ====
+                 Side by side rather than stacked: the tree is what the window is for and it grows
+                 downwards without limit, so the action underneath it was the part that got pushed
+                 off the bottom. In a column of its own the policy list is never the thing that has
+                 to be scrolled to. -->
+            <Grid Grid.Row="2" Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="520"/>
+                    <ColumnDefinition Width="330"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0" Padding="6">
+                    <!-- The scroller is where a drop is worked out, for every row inside it at once:
+                         it is the one element that is always under the pointer, and it is also the
+                         thing that has to scroll while a row is being held over its edge. -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  b:DragReorderBehavior.IsDropSurface="True">
+                        <ContentControl Content="{Binding Root}"/>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- Tick as many policies as you like: their rules are tried from the top down, and
+                     the first rule that matches the connection decides it. The order is the point,
+                     so it is arranged here rather than inferred from anything. -->
+                <Border Grid.Column="1" Style="{StaticResource Card}" Margin="10,0,0,0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Heading}"
+                                   Text="{DynamicResource Str.Cond.Action}"/>
+
+                        <TextBlock DockPanel.Dock="Top" Margin="0,4,0,0" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" Text="{Binding PolicySummary}"/>
+
+                        <CheckBox DockPanel.Dock="Top" Margin="0,8,0,0"
+                                  Content="{DynamicResource Str.Process.IncludeChildrenLong}"
+                                  IsChecked="{Binding IncludeChildren}"/>
+
+                        <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Subtle}"
+                                   Margin="0,6,0,0" TextWrapping="Wrap"
+                                   Text="{DynamicResource Str.Process.PolicyOrderHint}"/>
+
+                        <Border Margin="0,8,0,0" CornerRadius="6" Padding="4"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource Brush.Surface.BorderBrush}">
+                            <!-- Dragged the same way as the tree, and for the same reason: the order
+                                 of this list IS the priority, so arranging it is the point of it. -->
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          b:DragReorderBehavior.IsDropSurface="True">
+                                <ItemsControl ItemsSource="{Binding Policies}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Background="Transparent" b:DragReorderBehavior.DropZone="Row">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="3"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="3"/>
+                                                </Grid.RowDefinitions>
+
+                                                <Border Grid.Row="0" Style="{StaticResource DropLineBefore}"/>
+                                                <Border Grid.Row="2" Style="{StaticResource DropLineAfter}"/>
+
+                                                <Grid Grid.Row="1">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="22"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Style="{StaticResource DragGrip}"
+                                                               Padding="2,4" FontSize="11"/>
+
+                                                    <!-- Only the ticked rows are numbered: an order among
+                                                         rows nothing uses would be noise. -->
+                                                    <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="11"
+                                                               HorizontalAlignment="Center"
+                                                               Foreground="{DynamicResource Brush.Accent}"
+                                                               Text="{Binding Rank}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Rank}" Value="0">
+                                                                        <Setter Property="Visibility" Value="Hidden"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+
+                                                    <CheckBox Grid.Column="2" VerticalAlignment="Center"
+                                                              Content="{Binding Name}"
+                                                              IsChecked="{Binding IsSelected}"/>
+
+                                                    <Button Grid.Column="3" Content="▲" Width="26" Padding="0"
+                                                            Command="{Binding DataContext.MovePolicyUpCommand,
+                                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"/>
+                                                    <Button Grid.Column="4" Content="▼" Width="26" Padding="0" Margin="4,0,0,0"
+                                                            Command="{Binding DataContext.MovePolicyDownCommand,
+                                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"/>
+                                                </Grid>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                <Button MinWidth="96" Content="{DynamicResource Str.App.Cancel}" IsCancel="True"/>
+                <Button MinWidth="96" Margin="8,0,0,0" Style="{StaticResource AccentButton}"
+                        Content="{DynamicResource Str.App.Save}" Click="Save_Click"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

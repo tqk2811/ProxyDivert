@@ -7,11 +7,11 @@ using System.Windows.Media;
 using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
 using ProxyDivert.Core.Routing.Models.Conditions;
-using ProxyDivert.Wpf.Bindings;
-using ProxyDivert.Wpf.Bindings.Enums;
-using ProxyDivert.Wpf.ViewModels;
-using ProxyDivert.Wpf.ViewModels.Conditions;
-using ProxyDivert.Wpf.Views;
+using ProxyDivert.Bindings;
+using ProxyDivert.Bindings.Enums;
+using ProxyDivert.ViewModels;
+using ProxyDivert.ViewModels.Conditions;
+using ProxyDivert.Views;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;

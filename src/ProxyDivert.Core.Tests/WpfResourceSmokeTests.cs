@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
-using ProxyDivert.Wpf.Localization;
-using ProxyDivert.Wpf.Themes;
-using ProxyDivert.Wpf.Views;
+using ProxyDivert.Localization;
+using ProxyDivert.Themes;
+using ProxyDivert.Views;
 using Xunit;
 
 namespace ProxyDivert.Core.Tests;
@@ -138,7 +138,7 @@ public class WpfResourceSmokeTests
     {
         if (Application.Current != null) return Application.Current;
 
-        var application = new ProxyDivert.Wpf.App();
+        var application = new ProxyDivert.App();
         // InitializeComponent is what merges App.xaml's dictionaries; OnStartup is deliberately
         // NOT called, since that would build the engine and open a window.
         application.InitializeComponent();

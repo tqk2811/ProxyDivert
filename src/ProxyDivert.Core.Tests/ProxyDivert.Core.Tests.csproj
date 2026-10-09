@@ -13,7 +13,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\ProxyDivert.Core\ProxyDivert.Core.csproj" />
-		<ProjectReference Include="..\ProxyDivert.Wpf\ProxyDivert.Wpf.csproj" />
+		<ProjectReference Include="..\ProxyDivert\ProxyDivert.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
