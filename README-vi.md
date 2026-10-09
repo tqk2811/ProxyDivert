@@ -6,7 +6,7 @@ Tool WPF chuyển hướng gói tin của tiến trình được chọn sang pro
 domain hoặc IP; đích không khớp luật thì đi thẳng (direct). Giai đoạn sau cắm thêm VPN dưới dạng một
 loại đường ra.
 
-- Kế hoạch: [docs/Plan-vi.md](docs/Plan-vi.md)
+- Việc còn treo: [docs/Backlog-vi.md](docs/Backlog-vi.md)
 - Thuật ngữ: [docs/Glossary-vi.md](docs/Glossary-vi.md)
 
 ## Yêu cầu

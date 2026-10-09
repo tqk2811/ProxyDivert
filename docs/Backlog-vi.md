@@ -490,3 +490,10 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 - **Vấn đề:** `DataGridColumnBindingTests`, `WpfResourceSmokeTests`, `PolicyRenameTests`, `TextBoxPlaceholderTests`, `StartupRegistrationTests` test Wpf nhưng nằm trong `ProxyDivert.Core.Tests` (csproj tham chiếu cả Wpf).
 - **Cách sửa:** tách `ProxyDivert.Wpf.Tests`.
 - **Ngày ghi:** 2026-09-08.
+
+### OpenVPN và WireGuard native chưa thử với máy chủ thật
+
+- **Vấn đề:** SSTP, L2TP/IPsec, SoftEther đã dựng được đường hầm tới VPN Gate thật (2026-09-10). OpenVPN và WireGuard chạy native qua TqkLibrary.VpnClient mới có unit test; đường WireGuard qua wireproxy cũng chưa chạy thật vì máy chưa có `wireproxy.exe`.
+- **Vị trí:** `src/ProxyDivert.Core/Vpn/Client/`, `src/ProxyDivert.Core/Vpn/VpnProfileReader.cs`, `libs/TqkLibrary.VpnClient/src/TqkLibrary.VpnClient.Tunnels/`.
+- **Vì sao:** SoftEther cũng qua hết test offline nhưng chạy thật mới lộ lỗi login PACK; hai giao thức này có thể giấu lỗi cùng loại.
+- **Ngày ghi:** 2026-10-09 (chuyển từ docs/Plan-vi.md đã xoá).

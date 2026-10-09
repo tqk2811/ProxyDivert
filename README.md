@@ -6,7 +6,7 @@ A WPF tool that pushes a chosen process's traffic through a proxy (HTTP / SOCKS4
 to domain or IP rules; anything no rule matches goes out direct. VPN is available as another kind of
 outbound.
 
-- Plan: [docs/Plan-vi.md](docs/Plan-vi.md) (Vietnamese)
+- Backlog: [docs/Backlog-vi.md](docs/Backlog-vi.md) (Vietnamese)
 - Glossary: [docs/Glossary-vi.md](docs/Glossary-vi.md) (Vietnamese)
 
 ## Requirements
