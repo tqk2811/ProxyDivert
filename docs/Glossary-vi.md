@@ -407,7 +407,7 @@ Một bẫy nữa khi render: `RenderTargetBitmap` chỉ dựng được `Pbgra3
 
 ## Cờ dòng lệnh khi khởi động (argument flag)
 
-Cùng một file thi hành, hai cách vào: người dùng bấm thì hiện cửa sổ, task đăng nhập chạy thì không. Phân biệt bằng một tham số dòng lệnh — ở đây là `--minimized`, do `AppArguments.Parse` đọc từ `StartupEventArgs.Args`. Khác với `CliOptions` của bản console, parser này **bỏ qua tham số lạ thay vì báo lỗi**: một cửa sổ chạy lúc đăng nhập không có chỗ nào để in lời than, và từ chối chạy vì một chữ gõ sai thì trông y hệt như công cụ bị hỏng.
+Cùng một file thi hành, hai cách vào: người dùng bấm thì hiện cửa sổ, task đăng nhập chạy thì không. Phân biệt bằng một tham số dòng lệnh — ở đây là `--minimized`, do `AppArguments.Parse` đọc từ `StartupEventArgs.Args`. Parser này **bỏ qua tham số lạ thay vì báo lỗi**: một cửa sổ chạy lúc đăng nhập không có chỗ nào để in lời than, và từ chối chạy vì một chữ gõ sai thì trông y hệt như công cụ bị hỏng.
 
 Kéo theo: khi cửa sổ có thể không bao giờ được `Show()`, `ShutdownMode` mặc định `OnLastWindowClose` là sai — phải chuyển sang `OnExplicitShutdown` và tự gọi `Shutdown()` ở đúng hai chỗ (mục Thoát trên menu khay, và nút X khi người dùng chọn "đóng là thoát").
 

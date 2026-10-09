@@ -18,13 +18,6 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 - **Vì sao:** finding của review ngày 2026-10-03; chỉ đáng làm nếu gặp trang hỏng khi bật cờ.
 - **Ngày ghi:** 2026-10-03.
 
-### CLI chưa có cờ Anti-DPI
-
-- **Vấn đề:** `ProxyDivert.Cli` dựng outbound Direct/HTTP/SOCKS mà không có option bật Anti-DPI; chỉ bật được trong app WPF.
-- **Vị trí:** `src/ProxyDivert.Cli/Program.cs:82-117`, `src/ProxyDivert.Cli/CliOptions.cs`.
-- **Vì sao:** nếu CLI được dùng ngang WPF thì thiếu tính năng; đợt 2026-10-03 chỉ làm WPF.
-- **Ngày ghi:** 2026-10-03.
-
 ### Dọn source biến thể Anti-DPI không còn policy nào dùng
 
 - **Vấn đề:** `OutboundRegistry` giữ một source riêng cho mỗi cặp chunk size hiệu lực mà policy yêu cầu. Khi user sửa hoặc bỏ cài đặt Anti-DPI của policy, source biến thể cũ không bị dọn tới khi outbound đó bị sửa, bị xoá hoặc app tắt.
@@ -147,7 +140,7 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
   - Regex của user trong luật định tuyến không có trần thời gian ([HostPredicate.cs:87-100](../src/ProxyDivert.Core/Routing/Compiled/HostPredicate.cs#L87-L100)). Đã quyết định KHÔNG đặt `matchTimeout` (timeout làm luật âm thầm ngừng áp dụng khi máy bận, bài học của `RegexBudget`). Rủi ro còn lại: pattern backtracking thảm hoạ treo luồng định tuyến vô hạn. Chọn một trong: `RegexOptions.NonBacktracking`, giới hạn độ dài/độ phức tạp pattern lúc lưu, hoặc cảnh báo ở tab Rules; không thêm timeout.
   - `DomainSuffix` với pattern `.example.com` không bao giờ khớp: nhánh `DomainSuffix` của `NamePredicate` trong [HostPredicate.cs](../src/ProxyDivert.Core/Routing/Compiled/HostPredicate.cs) (và `pattern.Trim()` ở dòng 49) chỉ cắt khoảng trắng. Thêm `TrimStart('.')`.
   - `OnProcessStopped` chỉ detach con trực tiếp, không lan xuống cháu: [ProcessRuleTracker.cs:395-405](../src/ProxyDivert.Core/Processes/ProcessRuleTracker.cs#L395-L405), `Detach` ([:380](../src/ProxyDivert.Core/Processes/ProcessRuleTracker.cs#L380)) không cascade nên cháu ở lại bảng tracked vĩnh viễn. Lặp tới khi không đổi như `FollowParents`; `ProcessRuleTrackerTests` chưa phủ ca này.
-  - `AttachProcessId` có thể ném `KeyNotFoundException` khi `Detach` xen giữa: [ProcessRuleTracker.cs:253](../src/ProxyDivert.Core/Processes/ProcessRuleTracker.cs#L253) (`if (!_tracked.TryAdd(...)) return _tracked[processId];`). Nằm trên đường `--pid` của CLI và nút Launch suspended. Dùng `TryGetValue`.
+  - `AttachProcessId` có thể ném `KeyNotFoundException` khi `Detach` xen giữa: [ProcessRuleTracker.cs:253](../src/ProxyDivert.Core/Processes/ProcessRuleTracker.cs#L253) (`if (!_tracked.TryAdd(...)) return _tracked[processId];`). Nằm trên đường nút Launch suspended. Dùng `TryGetValue`.
   - Endpoint proxy phân giải bằng `Dns.GetHostAddresses` rồi lấy `addresses[0]`: [OutboundUrl.cs:45](../src/ProxyDivert.Core/Outbounds/Builders/OutboundUrl.cs#L45), gọi lúc dựng instance (registry), không còn trên đường mỗi kết nối. Còn lại: không ưu tiên IPv4 khi `Ipv6Support == Disabled`, không cache, vẫn đồng bộ lúc dựng (cùng gốc với E5.4).
   - Cây tiến trình khi PID tái dùng thành vòng cha–con: [ProcessesViewModel.cs:130](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L130) (`BuildTree`), [:174](../src/ProxyDivert.Wpf/ViewModels/ProcessesViewModel.cs#L174) (`FilterName`, đã có `MaxParentSteps = 64`). Không còn treo, nhưng lúc nối chưa có tập-đã-thăm: mọi node trong vòng đều "có cha" nên không node nào là root, cả vòng biến mất khỏi cây dù tiến trình đang redirect. Node có cha nhưng không tới được root thì coi là root.
   - `EtwProcessEventSource.Dispose` chặn `_pump?.Wait(2s)` ([EtwProcessEventSource.cs:192](../src/ProxyDivert.Core/Processes/EtwProcessEventSource.cs#L192)) và nằm trong chuỗi `ProcessInventory.DisposeAsync` → `StopEvents` → `events.Dispose()` ([ProcessInventory.cs:381](../src/ProxyDivert.Core/Processes/ProcessInventory.cs#L381)): cầu sync còn sót của chuỗi dispose, chặn luồng tới 2 giây lúc tắt. Cho nguồn sự kiện `IAsyncDisposable`.
