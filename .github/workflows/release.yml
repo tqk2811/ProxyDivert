@@ -101,7 +101,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          dotnet publish src/ProxyDivert/ProxyDivert.csproj -c Release -o publish `
+          # Self-contained: the app hosts ASP.NET Core (local API), and a framework-dependent build
+          # would then need the ASP.NET Core runtime installed besides the desktop one.
+          dotnet publish src/ProxyDivert/ProxyDivert.csproj -c Release -o publish --self-contained true `
             -p:DisableGitVersionTask=true -p:WriteVersionInfoToBuildLog=false `
             -p:GenerateGitVersionInformation=false -p:UpdateAssemblyInfo=false -p:GenerateGitVersionFiles=false
           if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
