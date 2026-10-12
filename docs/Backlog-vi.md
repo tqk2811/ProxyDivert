@@ -4,6 +4,20 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 
 Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát toàn repo ngày 2026-09-08, trước đây nằm trong `docs/FixList-vi.md` (lịch sử: `git log -p -- docs/FixList-vi.md`). A = lỗi tiềm ẩn ProxyDivert, B = WinDivert, C = cách dùng VpnClient, D = TqkLibrary.Proxy, E = thiết kế (OOP, tái sử dụng, test). Mức: `Cao` = mất dữ liệu / mất mạng / rò tài nguyên tích luỹ trong dùng bình thường; `Vừa` = sai trong tình huống thường gặp nhưng có đường tránh; `Thấp` = hiếm gặp hoặc chỉ tốn tài nguyên; với mục E: `Must` = đã gây lỗi thật hoặc chặn việc mở rộng đã dự định, `Should` = giảm trùng lặp hoặc cho phép test, `Nice` = sạch hơn, không đổi hành vi. Link của các mục này được đối chiếu lại với code ngày 2026-10-09; link không có số dòng (nhóm D7 và phần lớn E) là chưa dò lại dòng, tra theo tên ký hiệu.
 
+### [Thấp] API cục bộ: trả 500 khi engine áp cấu hình lỗi dù thay đổi đã lưu
+
+- **Vấn đề:** `EditAsync` thay danh sách trong `AppServices.Config` và ghi file trước khi chờ `Session.ApplyAsync`. Nếu bước áp vào engine ném lỗi, request trả 500 nhưng thay đổi đã nằm trong file và trên cửa sổ. Tool gọi lại thì tạo trùng (POST không kèm id).
+- **Vị trí:** `src/ProxyDivert/Api/WindowApiBackend.cs` (`EditAsync`), `src/ProxyDivert/ViewModels/MainViewModel.cs` (`SaveFromApiAsync`).
+- **Vì sao:** chốt một ngữ nghĩa rõ ràng: hoặc trả 200 kèm cảnh báo "đã lưu, engine áp lỗi", hoặc gom "thay list + RememberApplied + Reload" vào một hàm `AppServices.ApplyConfig` có test.
+- **Ngày ghi:** 2026-10-12.
+
+### [Thấp] API cục bộ: thêm/sửa outbound
+
+- **Vấn đề:** API mới chỉ liệt kê outbound (không URL, không mật khẩu); chưa thêm, sửa hay xoá được proxy/VPN qua API. User đã chốt để đợt sau.
+- **Vị trí:** `src/ProxyDivert/Api/LocalApiService.cs`, `src/ProxyDivert/Api/WindowApiBackend.cs` (`EditAsync` hiện chỉ chép `Policies`/`ProcessRules`).
+- **Vì sao:** tool bên ngoài muốn chuyển sang proxy mới thì hiện phải tạo outbound bằng tay trên cửa sổ trước.
+- **Ngày ghi:** 2026-10-12.
+
 ### Kiểm chống DPI trên mạng thật
 
 - **Vấn đề:** cờ Anti-DPI (tách tên miền trong CONNECT, tách ClientHello thành nhiều TLS record quanh SNI) mới được kiểm bằng test offline. Một server TLS thật (SslStream/SChannel trên loopback) đã nhận ClientHello bị tách và bắt tay xong. Còn hai câu hỏi chưa ai trả lời: nhà mạng đang chặn có bị lách thật không, và ra dây mỗi record có thành segment riêng không (bắt bằng Wireshark).
