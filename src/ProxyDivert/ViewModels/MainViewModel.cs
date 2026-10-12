@@ -138,6 +138,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         HasPendingChanges = false;
     }
 
+    /// <summary>
+    /// What the local API does after writing the configuration: the same as Save, then the grids
+    /// re-read the lists the request replaced.
+    /// </summary>
+    internal async Task SaveFromApiAsync()
+    {
+        Task applied = _services.SaveAndApply();
+        ReloadAll();
+        Rules.CheckPatterns();
+        HasPendingChanges = false;
+        await applied;
+    }
+
+    /// <summary>The engine switch, driven from the local API. Returns whether redirection is on afterwards.</summary>
+    internal async Task<bool> SetEngineRunningAsync(bool running)
+    {
+        if (running) await StartAsync();
+        else await StopAsync();
+        OnPropertyChanged(nameof(IsSwitchedOn));
+        return IsRunning;
+    }
+
     [RelayCommand]
     private void DiscardChanges()
     {

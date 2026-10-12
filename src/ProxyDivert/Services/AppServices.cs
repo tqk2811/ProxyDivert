@@ -198,6 +198,22 @@ public sealed class AppServices : IAsyncDisposable
     }
 
     /// <summary>Changes the CPU priority class of this process, applied at once and saved.</summary>
+    /// <summary>
+    /// Raised after <see cref="SetLocalApi"/> has saved new API settings; the host listens and
+    /// restarts or stops itself.
+    /// </summary>
+    public event Action<LocalApiSettings>? LocalApiChanged;
+
+    /// <summary>The sink the API host writes its own log lines to, so they land in the log pane.</summary>
+    internal ILoggerProvider LoggerProvider => _loggerProvider;
+
+    public void SetLocalApi(LocalApiSettings settings)
+    {
+        Config.LocalApi = settings;
+        Save();
+        LocalApiChanged?.Invoke(settings);
+    }
+
     public void SetCpuPriority(ProcessPriorityClass priority)
     {
         Config.CpuPriority = priority;
@@ -309,6 +325,7 @@ public sealed class AppServices : IAsyncDisposable
         nameof(AppConfig.ProcessDetection), nameof(AppConfig.ProcessEventSource),
         nameof(AppConfig.MinimizeToTrayOnClose), nameof(AppConfig.Theme), nameof(AppConfig.Language),
         nameof(AppConfig.AutoSaveLog), nameof(AppConfig.FileLogLevel), nameof(AppConfig.CpuPriority),
+        nameof(AppConfig.LocalApi),
     };
 
     private string _appliedSnapshot = string.Empty;
@@ -320,6 +337,9 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>True when the configuration differs from what was last applied.</summary>
     public bool HasPendingChanges => TakeSnapshot() != _appliedSnapshot;
+
+    /// <summary>A copy of the configuration as last saved, edits in progress left out.</summary>
+    public AppConfig CloneApplied() => ConfigStore.Clone(_applied);
 
     /// <summary>
     /// Puts the configuration back to what was last applied, in place: the view models hold this

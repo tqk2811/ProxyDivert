@@ -179,6 +179,16 @@ Downside: an extra service and a COM hop add latency, and the events of one watc
     <sys:String x:Key="Enum.LogLevel.Warning">Warning</sys:String>
     <sys:String x:Key="Enum.LogLevel.Error">Error</sys:String>
     <sys:String x:Key="Enum.LogLevel.Critical">Critical</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApi">Enable local API</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiPort">Port</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiLan">Listen on LAN</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiOpenSwagger">Open Swagger</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiRequireToken">Require token</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiCopyToken">Copy</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiRegenerateToken">Regenerate</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiHint">Lets other programs change filters, policies and outbounds over HTTP (documented at /swagger). Port and listen mode can only be changed while the API is off. Send the token as "Authorization: Bearer &lt;token&gt;". While the window has unsaved changes, every write answers 409.</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiLanWarning">Listening on the LAN without a token: other machines on the network can change the routing of this elevated program.</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiBadPort">The port must be a number from 1 to 65535.</sys:String>
     <sys:String x:Key="Str.Settings.CpuPriority">CPU priority</sys:String>
     <sys:String x:Key="Str.Settings.CpuPriorityHint">Every packet of a redirected application passes through this program. High keeps games and calls responsive while the CPU is busy. Applied immediately.</sys:String>
     <sys:String x:Key="Enum.ProcessPriorityClass.Normal">Normal</sys:String>

@@ -113,6 +113,40 @@
                     <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
                                Text="{DynamicResource Str.Settings.CpuPriorityHint}"/>
 
+                    <!-- Port and LAN lock while the API is on: the address a tool is talking to
+                         must not move under it. The token applies at once, no restart. -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <CheckBox Content="{DynamicResource Str.Settings.LocalApi}"
+                                  IsChecked="{Binding LocalApiEnabled}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{DynamicResource Str.Settings.LocalApiPort}" Margin="16,0,6,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding LocalApiPort, UpdateSourceTrigger=PropertyChanged}" Width="70"
+                                 IsEnabled="{Binding CanEditLocalApiAddress}"/>
+                        <CheckBox Content="{DynamicResource Str.Settings.LocalApiLan}" Margin="16,0,0,0"
+                                  IsChecked="{Binding LocalApiListenOnLan}" VerticalAlignment="Center"
+                                  IsEnabled="{Binding CanEditLocalApiAddress}"/>
+                        <Button Content="{DynamicResource Str.Settings.LocalApiOpenSwagger}" Margin="16,0,0,0"
+                                Command="{Binding OpenLocalApiSwaggerCommand}" MinWidth="90"
+                                IsEnabled="{Binding LocalApiEnabled}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <CheckBox Content="{DynamicResource Str.Settings.LocalApiRequireToken}"
+                                  IsChecked="{Binding LocalApiRequireToken}" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding LocalApiToken, Mode=OneWay}" IsReadOnly="True" Width="320"
+                                 Margin="16,0,0,0"/>
+                        <Button Content="{DynamicResource Str.Settings.LocalApiCopyToken}" Margin="8,0,0,0"
+                                Command="{Binding CopyLocalApiTokenCommand}" MinWidth="60"/>
+                        <Button Content="{DynamicResource Str.Settings.LocalApiRegenerateToken}" Margin="8,0,0,0"
+                                Command="{Binding RegenerateLocalApiTokenCommand}" MinWidth="80"/>
+                    </StackPanel>
+                    <TextBlock Foreground="{DynamicResource Brush.Danger}" Margin="0,0,0,4" TextWrapping="Wrap"
+                               Text="{Binding LocalApiError}" Visibility="{Binding HasLocalApiError, Converter={StaticResource TrueToVisible}}"/>
+                    <TextBlock Foreground="{DynamicResource Brush.Warning}" Margin="0,0,0,4" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.LocalApiLanWarning}"
+                               Visibility="{Binding LocalApiLanWithoutToken, Converter={StaticResource TrueToVisible}}"/>
+                    <TextBlock Style="{StaticResource Subtle}" Margin="0,0,0,10" TextWrapping="Wrap"
+                               Text="{DynamicResource Str.Settings.LocalApiHint}"/>
+
                     <!-- The level and the folder sit on the switch's own line: they are what the
                          user reaches for in the same breath as ticking it, and the level filters
                          the file only — the log pane keeps showing everything. -->

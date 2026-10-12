@@ -303,3 +303,28 @@ Giới hạn:
   nào bị chuyển hướng. ExitLag ở chế độ mặc định (WFP) là một ví dụ; chuyển ExitLag sang chế độ driver NDIS thì truy vấn lại tới được ProxyDivert.
 - Trình duyệt bật DNS bảo mật riêng (*Use secure DNS* của Chrome, DNS over HTTPS của Firefox) không hỏi
   DNS của Windows, nên các công tắc này không thấy truy vấn của chúng. Tắt cài đặt đó để chúng đi qua đây.
+
+## API cục bộ
+
+Settings → *Bật API cục bộ* chạy một HTTP API ngay trong tool, để chương trình khác đổi được cái gì bị
+chuyển hướng và đi đường nào: rule tên miền của policy, outbound của policy, bộ lọc tiến trình, công
+tắc engine và tunnel VPN. Mọi route và body có tài liệu ở `http://127.0.0.1:5085/swagger` (nút
+*Mở Swagger*).
+
+- Cổng mặc định 5085, chỉ sửa được khi API đang tắt. Chỉ nghe loopback, trừ khi tick *Nghe trong LAN*.
+- *Bắt token*: mọi request `/api` phải gửi `Authorization: Bearer <token>`. Token sinh trong Settings
+  (Copy / Tạo lại). Nghe trong LAN mà không bắt token thì máy nào trong mạng cũng đổi được định tuyến
+  của một chương trình chạy quyền admin; Settings có dòng cảnh báo.
+- Một lệnh ghi được áp đúng như bấm Save. Khi cửa sổ đang có thay đổi chưa Save, mọi lệnh ghi trả
+  `409 PENDING_CHANGES` thay vì lưu luôn phần đang sửa dở.
+- Lệnh đọc trả cấu hình đã Save gần nhất. Outbound được liệt kê nhưng không có URL hay mật khẩu, và
+  chưa thêm/sửa được qua API.
+- Policy Default dựng sẵn giữ nguyên tên và rule bắt-tất-cả; sửa rule của nó trả 400.
+
+```
+curl -X POST http://127.0.0.1:5085/api/policies/<policyId>/rules \
+     -H "Content-Type: application/json" \
+     -d '{"matcher":"DomainSuffix","pattern":"example.com"}'
+curl -X PUT http://127.0.0.1:5085/api/policies/<policyId>/outbound \
+     -H "Content-Type: application/json" -d '{"outboundId":"<outboundId>"}'
+```

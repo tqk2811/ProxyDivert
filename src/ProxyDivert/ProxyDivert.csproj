@@ -46,6 +46,12 @@
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" />
 		<PackageReference Include="Microsoft.Extensions.Logging" />
 		<PackageReference Include="Native.WinDivert" />
+		<!-- The local HTTP API (Api/) and its Swagger page run on a Kestrel inside this process. -->
+		<PackageReference Include="Swashbuckle.AspNetCore" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 	</ItemGroup>
 
 	<!--

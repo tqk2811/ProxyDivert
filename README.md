@@ -323,3 +323,28 @@ Limits:
 - Browsers with their own secure DNS (Chrome's *Use secure DNS*, Firefox's DNS over HTTPS) never ask
   the system resolver, so these switches do not see their lookups. Turn that setting off to route
   them here.
+
+## Local API
+
+Settings → *Enable local API* starts an HTTP API inside the tool, so another program can change what
+gets redirected and where it goes: a policy's host rules, which outbound a policy uses, the process
+filters, the engine switch and VPN tunnels. Every route and body is documented at
+`http://127.0.0.1:5085/swagger` (the *Open Swagger* button).
+
+- Port 5085 by default, editable while the API is off. Loopback only unless *Listen on LAN* is ticked.
+- *Require token*: every `/api` request must send `Authorization: Bearer <token>`. The token is
+  generated in Settings (Copy / Regenerate). Listening on the LAN without a token lets any machine on
+  the network change the routing of an elevated program; Settings warns about it.
+- A write is applied exactly like pressing Save. While the window holds unsaved edits every write
+  answers `409 PENDING_CHANGES` instead of saving them along with it.
+- Reads return the configuration as last saved. Outbounds are listed without URLs or credentials,
+  and cannot be added or edited through the API yet.
+- The built-in Default policy keeps its name and catch-all rule; editing its rules answers 400.
+
+```
+curl -X POST http://127.0.0.1:5085/api/policies/<policyId>/rules \
+     -H "Content-Type: application/json" \
+     -d '{"matcher":"DomainSuffix","pattern":"example.com"}'
+curl -X PUT http://127.0.0.1:5085/api/policies/<policyId>/outbound \
+     -H "Content-Type: application/json" -d '{"outboundId":"<outboundId>"}'
+```

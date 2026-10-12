@@ -1,12 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
+using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Processes.Enums;
 using TqkLibrary.WinDivert.Redirect.Enums;
 using ProxyDivert.Localization;
@@ -63,6 +66,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         RefreshWatermarkStatus();
         VerifyStartWithWindows();
+        LoadLocalApi();
     }
 
     // The logon task can be gone without this tool knowing — removed by hand, or left behind on a
@@ -325,6 +329,138 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isFetchingWatermark;
+
+    // ==== local API ====
+
+    /// <summary>Why the API could not start (port already taken, say); null while it is fine or off.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLocalApiError))]
+    private string? _localApiError;
+
+    public bool HasLocalApiError => !string.IsNullOrEmpty(LocalApiError);
+
+    // Every box below writes the whole settings object back, and AppServices.SetLocalApi restarts
+    // or stops the listener. Port and LAN are only editable while it is off, so the address it is
+    // listening on never changes under a tool that is using it.
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanEditLocalApiAddress))]
+    private bool _localApiEnabled;
+
+    public bool CanEditLocalApiAddress => !LocalApiEnabled;
+
+    [ObservableProperty]
+    private string _localApiPort = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LocalApiLanWithoutToken))]
+    private bool _localApiListenOnLan;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LocalApiLanWithoutToken))]
+    private bool _localApiRequireToken;
+
+    [ObservableProperty]
+    private string _localApiToken = string.Empty;
+
+    /// <summary>Anyone on the network can change routing in an elevated process: said out loud.</summary>
+    public bool LocalApiLanWithoutToken => LocalApiListenOnLan && !LocalApiRequireToken;
+
+    private bool _loadingLocalApi;
+
+    private void LoadLocalApi()
+    {
+        LocalApiSettings api = _services.Config.LocalApi;
+        _loadingLocalApi = true;
+        try
+        {
+            LocalApiEnabled = api.Enabled;
+            LocalApiPort = api.Port.ToString(CultureInfo.InvariantCulture);
+            LocalApiListenOnLan = api.ListenOnLan;
+            LocalApiRequireToken = api.RequireToken;
+            LocalApiToken = api.Token ?? string.Empty;
+        }
+        finally
+        {
+            _loadingLocalApi = false;
+        }
+    }
+
+    partial void OnLocalApiEnabledChanged(bool value)
+    {
+        if (_loadingLocalApi) return;
+        if (value && !TryParsePort(out _))
+        {
+            LocalApiError = Loc.S("Str.Settings.LocalApiBadPort");
+            _loadingLocalApi = true;
+            LocalApiEnabled = false;
+            _loadingLocalApi = false;
+            return;
+        }
+        if (!value) LocalApiError = null;
+        SaveLocalApi();
+    }
+
+    partial void OnLocalApiPortChanged(string value)
+    {
+        if (_loadingLocalApi || !TryParsePort(out _)) return;
+        SaveLocalApi();
+    }
+
+    partial void OnLocalApiListenOnLanChanged(bool value) => SaveLocalApi();
+
+    partial void OnLocalApiRequireTokenChanged(bool value)
+    {
+        if (_loadingLocalApi) return;
+        // Requiring a token nobody has would lock every tool out, the user included.
+        if (value && string.IsNullOrEmpty(LocalApiToken)) LocalApiToken = NewToken();
+        SaveLocalApi();
+    }
+
+    [RelayCommand]
+    private void RegenerateLocalApiToken()
+    {
+        LocalApiToken = NewToken();
+        SaveLocalApi();
+    }
+
+    [RelayCommand]
+    private void CopyLocalApiToken()
+    {
+        if (string.IsNullOrEmpty(LocalApiToken)) return;
+        try { System.Windows.Clipboard.SetText(LocalApiToken); }
+        catch (System.Runtime.InteropServices.COMException) { /* clipboard held by another program */ }
+    }
+
+    [RelayCommand]
+    private void OpenLocalApiSwagger()
+    {
+        if (!TryParsePort(out int port)) return;
+        string url = FormattableString.Invariant($"http://127.0.0.1:{port}/swagger");
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+    }
+
+    private bool TryParsePort(out int port)
+        => int.TryParse(LocalApiPort, NumberStyles.None, CultureInfo.InvariantCulture, out port)
+            && port is >= 1 and <= 65535;
+
+    private void SaveLocalApi()
+    {
+        if (_loadingLocalApi) return;
+        TryParsePort(out int port);
+        _services.SetLocalApi(new LocalApiSettings
+        {
+            Enabled = LocalApiEnabled,
+            Port = port == 0 ? _services.Config.LocalApi.Port : port,
+            ListenOnLan = LocalApiListenOnLan,
+            RequireToken = LocalApiRequireToken,
+            Token = string.IsNullOrEmpty(LocalApiToken) ? null : LocalApiToken,
+        });
+    }
+
+    private static string NewToken()
+        => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     public void RefreshWatermarkStatus()
     {

@@ -87,6 +87,10 @@ public sealed class AppConfig
     // the engine is meant to keep running, and the tray icon is there to say it still is.
     public bool MinimizeToTrayOnClose { get; set; } = true;
 
+    // Takes effect the moment it is changed in Settings, like the theme: it is not routing, and a
+    // pending-changes Save is not what starts or stops a listener.
+    public LocalApiSettings LocalApi { get; set; } = new LocalApiSettings();
+
     // A fresh install still needs something that works: the Direct outbound, and the built-in
     // Default policy sending everything Direct — nothing is redirected until a filter says so.
     public static AppConfig CreateDefault()
@@ -175,6 +179,9 @@ public sealed class AppConfig
         KeepOneOfEachId(ProcessRules, r => r.Id);
 
         RestoreBuiltInOutbounds();
+
+        // "LocalApi": null in a hand-edited file would otherwise reach Settings as a null.
+        LocalApi ??= new LocalApiSettings();
 
         // A hand-edited size below 1 would run as 1 while the grid showed 0; put the default back so
         // what is shown is what runs.
