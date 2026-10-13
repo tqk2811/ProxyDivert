@@ -14,6 +14,21 @@ outbound.
 - .NET SDK 8.0 or later.
 - Run the tool **as Administrator** — WinDivert loads a kernel driver.
 
+## Download
+
+Each [release](https://github.com/tqk2811/ProxyDivert/releases) carries four zips of the same
+version; unzip and run `ProxyDivert.exe` (the .NET SDK is only needed to build from source):
+
+| Zip | Local API + MCP | Needs installed |
+|---|---|---|
+| `ProxyDivert-<ver>-win-x64.zip` | yes | nothing (self-contained) |
+| `ProxyDivert-<ver>-win-x64-fd.zip` | yes | .NET 8 Desktop Runtime **and** ASP.NET Core Runtime 8 |
+| `ProxyDivert-<ver>-lite-win-x64.zip` | no | nothing (self-contained) |
+| `ProxyDivert-<ver>-lite-win-x64-fd.zip` | no | .NET 8 Desktop Runtime |
+
+`-fd` (framework-dependent) zips are much smaller but use the runtime installed on the machine.
+"Lite" builds leave out the [local API](#local-api), Swagger and the MCP server.
+
 ## Getting the source
 
 ```

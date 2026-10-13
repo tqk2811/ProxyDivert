@@ -9,9 +9,12 @@ name: Release
 # (first [release] after v1.0.0 -> 1.0.0, second -> 1.0.1).
 #
 # /releases model: one GitHub Release per minor line, named by its tag 'vM.N.0'. Each build uploads
-# ProxyDivert-M.N.K-win-x64-framework-dependent.zip (needs the .NET 8 Desktop Runtime) to that
-# Release and regenerates the notes (git-cliff,
-# cliff-release.toml), grouped by [release] build.
+# four zips to that Release and regenerates the notes (git-cliff, cliff-release.toml), grouped by
+# [release] build. The zips are {with, without the local API} x {self-contained, framework-dependent}:
+#   ProxyDivert-M.N.K-win-x64.zip          local API + MCP, self-contained (no runtime needed)
+#   ProxyDivert-M.N.K-win-x64-fd.zip       local API + MCP, needs .NET 8 Desktop + ASP.NET Core Runtime
+#   ProxyDivert-M.N.K-lite-win-x64.zip     no local API (-p:EnableLocalApi=false), self-contained
+#   ProxyDivert-M.N.K-lite-win-x64-fd.zip  no local API, needs only the .NET 8 Desktop Runtime
 # Precondition: tag 'vM.N.0' is pushed to origin. Start a new line by tagging master 'vM.N.0'.
 
 on:
@@ -101,27 +104,45 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          # Self-contained: the app hosts ASP.NET Core (local API), and a framework-dependent build
-          # would then need the ASP.NET Core runtime installed besides the desktop one.
-          dotnet publish src/ProxyDivert/ProxyDivert.csproj -c Release -o publish --self-contained true `
-            -p:DisableGitVersionTask=true -p:WriteVersionInfoToBuildLog=false `
-            -p:GenerateGitVersionInformation=false -p:UpdateAssemblyInfo=false -p:GenerateGitVersionFiles=false
-          if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
+          # Four variants into publish/<suffix>: {local API on, off} x {self-contained, framework-dependent}.
+          # The suffix is also the zip name's tail (see the header). obj/ is shared between the runs,
+          # so each publish restores again for its own EnableLocalApi/self-contained combination.
+          $variants = @(
+            @{ Suffix = 'win-x64';         Api = 'true';  SelfContained = 'true'  }
+            @{ Suffix = 'win-x64-fd';      Api = 'true';  SelfContained = 'false' }
+            @{ Suffix = 'lite-win-x64';    Api = 'false'; SelfContained = 'true'  }
+            @{ Suffix = 'lite-win-x64-fd'; Api = 'false'; SelfContained = 'false' }
+          )
+          foreach ($v in $variants) {
+            dotnet publish src/ProxyDivert/ProxyDivert.csproj -c Release -o "publish/$($v.Suffix)" `
+              --self-contained $v.SelfContained "-p:EnableLocalApi=$($v.Api)" `
+              -p:DisableGitVersionTask=true -p:WriteVersionInfoToBuildLog=false `
+              -p:GenerateGitVersionInformation=false -p:UpdateAssemblyInfo=false -p:GenerateGitVersionFiles=false
+            if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($($v.Suffix))" }
+            if ($v.Api -eq 'false') {
+              $leak = @(Get-ChildItem "publish/$($v.Suffix)" -Filter *.dll |
+                Where-Object { $_.Name -match '^(Microsoft\.AspNetCore|Swashbuckle|ModelContextProtocol)' })
+              if ($leak.Count -gt 0) { throw "lite build $($v.Suffix) ships $($leak.Name -join ', ')" }
+            }
+          }
 
       - name: Zip
         id: zip
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $ver = (Get-Item publish/ProxyDivert.exe).VersionInfo.ProductVersion
+          $ver = (Get-Item publish/win-x64/ProxyDivert.exe).VersionInfo.ProductVersion
           if ($ver -notmatch '^(\d+)\.(\d+)\.(\d+)$') { throw "Unexpected version '$ver'" }
           $tag = "v$($Matches[1]).$($Matches[2]).0"
-          $zip = "ProxyDivert-$ver-win-x64-framework-dependent.zip"
-          Compress-Archive -Path publish/* -DestinationPath $zip
+          $zips = foreach ($dir in Get-ChildItem publish -Directory) {
+            $zip = "ProxyDivert-$ver-$($dir.Name).zip"
+            Compress-Archive -Path "$($dir.FullName)/*" -DestinationPath $zip
+            $zip
+          }
           Add-Content $env:GITHUB_OUTPUT "version=$ver"
           Add-Content $env:GITHUB_OUTPUT "tag=$tag"
-          Add-Content $env:GITHUB_OUTPUT "zip=$zip"
-          Write-Host "version=$ver  release-tag=$tag"
+          Add-Content $env:GITHUB_OUTPUT "zips=$($zips -join ';')"
+          Write-Host "version=$ver  release-tag=$tag  zips=$($zips -join ', ')"
 
       - name: Upload to GitHub Release
         shell: pwsh
@@ -129,7 +150,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.zip.outputs.tag }}
           VERSION: ${{ steps.zip.outputs.version }}
-          ZIP: ${{ steps.zip.outputs.zip }}
+          ZIPS: ${{ steps.zip.outputs.zips }}
         run: |
           $ErrorActionPreference = 'Stop'
           $tag = $env:TAG
@@ -184,5 +205,5 @@ jobs:
             gh release create $tag --title $tag --notes-file RELEASE_NOTES.md --verify-tag
             if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
           }
-          gh release upload $tag $env:ZIP --clobber
+          gh release upload $tag @($env:ZIPS -split ';') --clobber
           if ($LASTEXITCODE -ne 0) { throw "gh release upload failed" }
