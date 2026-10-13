@@ -166,9 +166,10 @@
                                     Command="{Binding OpenLocalApiSwaggerCommand}" MinWidth="90"
                                     IsEnabled="{Binding LocalApiEnabled}"/>
                         </WrapPanel>
-                        <CheckBox Content="{DynamicResource Str.Settings.LocalApiRequireToken}" Margin="0,0,0,4"
-                                  IsChecked="{Binding LocalApiRequireToken}"/>
                         <DockPanel Margin="0,0,0,8">
+                            <CheckBox DockPanel.Dock="Left" Content="{DynamicResource Str.Settings.LocalApiRequireToken}"
+                                      Margin="0,0,8,0" IsChecked="{Binding LocalApiRequireToken}"
+                                      VerticalAlignment="Center"/>
                             <Button DockPanel.Dock="Right" Content="{DynamicResource Str.Settings.LocalApiRegenerateToken}"
                                     Margin="8,0,0,0" Command="{Binding RegenerateLocalApiTokenCommand}" MinWidth="80"/>
                             <Button DockPanel.Dock="Right" Content="{DynamicResource Str.Settings.LocalApiCopyToken}"
