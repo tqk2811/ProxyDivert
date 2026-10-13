@@ -332,6 +332,18 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     // ==== local API ====
 
+    /// <summary>
+    /// Whether this build has the local API and MCP server compiled in (MSBuild EnableLocalApi);
+    /// the "lite" build hides the section. The settings below still load and save either way, so
+    /// a config written by the full build keeps its API settings.
+    /// </summary>
+    public bool IsLocalApiAvailable =>
+#if LOCAL_API
+        true;
+#else
+        false;
+#endif
+
     /// <summary>Why the API could not start (port already taken, say); null while it is fine or off.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasLocalApiError))]

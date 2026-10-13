@@ -31,6 +31,11 @@ dotnet build ProxyDivert.sln -c Debug
 Output: `src/ProxyDivert/bin/x64/<Config>/net8.0-windows/ProxyDivert.exe`, with `WinDivert.dll`
 and `WinDivert64.sys` copied next to it.
 
+The local API, Swagger page and MCP server (see [Local API](#local-api)) are compiled in by default.
+`-p:EnableLocalApi=false` builds the "lite" app without them and without ASP.NET Core
+(`dotnet build ProxyDivert.sln -p:EnableLocalApi=false`; the API tests are left out too). The
+settings stay in the config file either way, and the lite build hides that section of Settings.
+
 The version comes from git: `M.N` from the nearest tag `vM.N.0`, the third number counts the commits
 whose message contains `[release]` since that tag, starting at 0 (the first one after `v1.0.0` is
 `1.0.0`, the next `1.0.1`). A push to `master` whose head commit contains `[release]` is built by

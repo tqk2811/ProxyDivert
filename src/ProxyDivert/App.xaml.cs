@@ -3,7 +3,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
 using Microsoft.Extensions.Logging;
+#if LOCAL_API
 using ProxyDivert.Api;
+#endif
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Helpers;
 using ProxyDivert.Localization;
@@ -19,7 +21,9 @@ public partial class App : Application
     private AppServices? _services;
     private MainViewModel? _mainViewModel;
     private TrayIconController? _tray;
+#if LOCAL_API
     private LocalApiHost? _api;
+#endif
 
     /// <summary>
     /// True once the user has actually asked to quit. The window checks it before deciding whether
@@ -75,6 +79,7 @@ public partial class App : Application
         // happens rather than after it. Failures land on the notice strip and in the log.
         _ = _mainViewModel.RestoreEngineAsync();
 
+#if LOCAL_API
         // Built always, listening only when Settings says so; a change there restarts it.
         _api = new LocalApiHost(
             new WindowApiBackend(_services, _mainViewModel, Dispatcher),
@@ -82,6 +87,7 @@ public partial class App : Application
             _services.LoggerProvider);
         _services.LocalApiChanged += settings => _ = ApplyLocalApiAsync(settings);
         if (_services.Config.LocalApi.Enabled) _ = ApplyLocalApiAsync(_services.Config.LocalApi);
+#endif
 
         // The Run-key entry an earlier version wrote never started anything — Windows skips a Run
         // entry that needs elevation — so it is cleared rather than left listed under the machine's
@@ -104,6 +110,7 @@ public partial class App : Application
         return (TaskbarIcon)dictionary["Tray"];
     }
 
+#if LOCAL_API
     // Fire-and-forget from the settings event, so nothing may escape: a port already taken is
     // reported on the Settings tab, anything else in the log.
     private async Task ApplyLocalApiAsync(LocalApiSettings settings)
@@ -129,11 +136,14 @@ public partial class App : Application
             }
         }
     }
+#endif
 
     protected override void OnExit(ExitEventArgs e)
     {
         // First, so no request is still reaching into the window while it goes away.
+#if LOCAL_API
         _api?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+#endif
 
         // Stop the redirect before the process goes away: leaving WinDivert handles open would
         // keep the target's traffic pointed at a relay that no longer exists.

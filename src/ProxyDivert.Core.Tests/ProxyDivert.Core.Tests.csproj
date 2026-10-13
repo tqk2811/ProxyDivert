@@ -16,6 +16,11 @@
 		<ProjectReference Include="..\ProxyDivert\ProxyDivert.csproj" />
 	</ItemGroup>
 
+	<ItemGroup Condition="'$(EnableLocalApi)' != 'true'">
+		<!-- The local API is compiled out of the app (-p:EnableLocalApi=false), and so are its tests. -->
+		<Compile Remove="LocalApiTests.cs;McpTests.cs;FakeApiBackend.cs" />
+	</ItemGroup>
+
 	<ItemGroup>
 		<PackageReference Include="Microsoft.NET.Test.Sdk" />
 		<PackageReference Include="xunit" />

@@ -31,6 +31,11 @@ dotnet build ProxyDivert.sln -c Debug
 Sản phẩm: `src/ProxyDivert/bin/x64/<Config>/net8.0-windows/ProxyDivert.exe`
 (kèm `WinDivert.dll` + `WinDivert64.sys` copy sẵn cạnh exe).
 
+API localhost, trang Swagger và MCP server mặc định được build kèm. `-p:EnableLocalApi=false` build
+bản "lite" không có chúng và không cần ASP.NET Core (`dotnet build ProxyDivert.sln -p:EnableLocalApi=false`;
+test của API cũng bị bỏ ra). Cài đặt API vẫn được giữ trong file config, bản lite chỉ ẩn phần đó trong
+tab Cài đặt.
+
 Phiên bản lấy từ git: `M.N` theo tag `vM.N.0` gần nhất, số thứ ba đếm các commit có `[release]` trong
 message kể từ tag đó, bắt đầu từ 0 (commit đầu tiên sau `v1.0.0` là `1.0.0`, kế tiếp `1.0.1`). Push lên
 `master` mà commit đầu có `[release]` thì [.github/workflows/release.yml](.github/workflows/release.yml)

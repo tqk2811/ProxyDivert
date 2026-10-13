@@ -138,6 +138,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         HasPendingChanges = false;
     }
 
+#if LOCAL_API
     /// <summary>
     /// What the local API does after writing the configuration: the same as Save, then the grids
     /// re-read the lists the request replaced.
@@ -159,6 +160,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsSwitchedOn));
         return IsRunning;
     }
+#endif
 
     [RelayCommand]
     private void DiscardChanges()

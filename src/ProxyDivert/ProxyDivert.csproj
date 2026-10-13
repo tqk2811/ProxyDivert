@@ -46,14 +46,22 @@
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" />
 		<PackageReference Include="Microsoft.Extensions.Logging" />
 		<PackageReference Include="Native.WinDivert" />
-		<!-- The local HTTP API (Api/) and its Swagger page run on a Kestrel inside this process. -->
-		<PackageReference Include="Swashbuckle.AspNetCore" />
-		<!-- The MCP server mapped at /mcp on that same Kestrel. -->
-		<PackageReference Include="ModelContextProtocol.AspNetCore" />
 	</ItemGroup>
 
-	<ItemGroup>
+	<!--
+		The local HTTP API (Api/), its Swagger page and the MCP server at /mcp run on a Kestrel inside
+		this process. Compile-time option (EnableLocalApi, default true, set in src/Directory.Build.props
+		together with the LOCAL_API constant): -p:EnableLocalApi=false builds the "lite" app without
+		ASP.NET Core, so its framework-dependent build needs only the .NET Desktop Runtime. The wiring
+		is under #if LOCAL_API; LocalApiSettings stays in Core either way so config files round-trip.
+	-->
+	<ItemGroup Condition="'$(EnableLocalApi)' == 'true'">
+		<PackageReference Include="Swashbuckle.AspNetCore" />
+		<PackageReference Include="ModelContextProtocol.AspNetCore" />
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+	<ItemGroup Condition="'$(EnableLocalApi)' != 'true'">
+		<Compile Remove="Api\**" />
 	</ItemGroup>
 
 	<!--

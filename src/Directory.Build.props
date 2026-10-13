@@ -13,5 +13,9 @@
 		<PlatformTarget>x64</PlatformTarget>
 		<Company>tqk2811</Company>
 		<Product>ProxyDivert</Product>
+		<!-- Local API + MCP compiled into the app (see src/ProxyDivert/ProxyDivert.csproj);
+		     -p:EnableLocalApi=false gives the "lite" build. Defined here so the tests follow it. -->
+		<EnableLocalApi Condition="'$(EnableLocalApi)' == ''">true</EnableLocalApi>
+		<DefineConstants Condition="'$(EnableLocalApi)' == 'true'">$(DefineConstants);LOCAL_API</DefineConstants>
 	</PropertyGroup>
 </Project>
