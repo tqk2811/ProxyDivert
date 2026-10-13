@@ -312,7 +312,7 @@ tắc engine và tunnel VPN. Mọi route và body có tài liệu ở `http://12
 *Mở Swagger*).
 
 - Cổng mặc định 5085, chỉ sửa được khi API đang tắt. Chỉ nghe loopback, trừ khi tick *Nghe trong LAN*.
-- *Bắt token*: mọi request `/api` phải gửi `Authorization: Bearer <token>`. Token sinh trong Settings
+- *Bắt token*: mọi request `/api` và `/mcp` phải gửi `Authorization: Bearer <token>`. Token sinh trong Settings
   (Copy / Tạo lại). Nghe trong LAN mà không bắt token thì máy nào trong mạng cũng đổi được định tuyến
   của một chương trình chạy quyền admin; Settings có dòng cảnh báo.
 - Một lệnh ghi được áp đúng như bấm Save. Khi cửa sổ đang có thay đổi chưa Save, mọi lệnh ghi trả
@@ -328,3 +328,17 @@ curl -X POST http://127.0.0.1:5085/api/policies/<policyId>/rules \
 curl -X PUT http://127.0.0.1:5085/api/policies/<policyId>/outbound \
      -H "Content-Type: application/json" -d '{"outboundId":"<outboundId>"}'
 ```
+
+### MCP server
+
+Tick *Bật MCP server ở /mcp* (trong phần API của Settings, chỉ chạy khi API đang bật) để trợ lý AI
+điều khiển cùng các thao tác đó dưới dạng tool MCP: trạng thái, đường ra, policy và luật host của nó,
+bộ lọc tiến trình, bật/tắt engine, connect/disconnect VPN. Giao thức Streamable HTTP ở
+`http://127.0.0.1:5085/mcp`, chung cổng và chung token với API. Request bị từ chối trả về dạng tool
+error kèm mã lỗi của API. Thêm vào Claude Code:
+
+```
+claude mcp add --transport http proxydivert http://127.0.0.1:5085/mcp --header "Authorization: Bearer <token>"
+```
+
+Bỏ phần header nếu không tick *Bắt token*.

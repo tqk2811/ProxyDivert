@@ -48,6 +48,8 @@
 		<PackageReference Include="Native.WinDivert" />
 		<!-- The local HTTP API (Api/) and its Swagger page run on a Kestrel inside this process. -->
 		<PackageReference Include="Swashbuckle.AspNetCore" />
+		<!-- The MCP server mapped at /mcp on that same Kestrel. -->
+		<PackageReference Include="ModelContextProtocol.AspNetCore" />
 	</ItemGroup>
 
 	<ItemGroup>

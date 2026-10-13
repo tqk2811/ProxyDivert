@@ -139,6 +139,9 @@
                         <Button Content="{DynamicResource Str.Settings.LocalApiRegenerateToken}" Margin="8,0,0,0"
                                 Command="{Binding RegenerateLocalApiTokenCommand}" MinWidth="80"/>
                     </StackPanel>
+                    <CheckBox Content="{DynamicResource Str.Settings.LocalApiMcp}" Margin="0,0,0,4"
+                              IsChecked="{Binding LocalApiMcpEnabled}" IsEnabled="{Binding LocalApiEnabled}"
+                              ToolTip="{DynamicResource Str.Settings.LocalApiMcpHint}"/>
                     <TextBlock Foreground="{DynamicResource Brush.Danger}" Margin="0,0,0,4" TextWrapping="Wrap"
                                Text="{Binding LocalApiError}" Visibility="{Binding HasLocalApiError, Converter={StaticResource TrueToVisible}}"/>
                     <TextBlock Foreground="{DynamicResource Brush.Warning}" Margin="0,0,0,4" TextWrapping="Wrap"

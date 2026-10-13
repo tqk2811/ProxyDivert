@@ -18,4 +18,8 @@ public sealed class LocalApiSettings
     public bool RequireToken { get; set; }
 
     public string? Token { get; set; }
+
+    // Also serves an MCP server (Streamable HTTP) at /mcp on the same port, behind the same token.
+    // Has no effect while Enabled is off.
+    public bool McpEnabled { get; set; }
 }

@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Constraints;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.AspNetCore;
 using Microsoft.OpenApi.Models;
 using ProxyDivert.Api.Extensions;
 using ProxyDivert.Api.Interfaces;
@@ -183,6 +184,16 @@ public sealed class LocalApiHost : IAsyncDisposable
             o.UseAllOfForInheritance();
             o.UseOneOfForPolymorphism();
         });
+        if (settings.McpEnabled)
+        {
+            var mcpJson = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            ConfigureJson(mcpJson);
+            builder.Services.AddMcpServer(o => o.ServerInfo = new() { Name = "ProxyDivert", Version = "1.0" })
+                // Stateless: every request stands alone, so a restart of this host never strands
+                // a client holding a session id the new instance does not know.
+                .WithHttpTransport(o => o.Stateless = true)
+                .WithTools<LocalMcpTools>(mcpJson);
+        }
 
         WebApplication app = builder.Build();
         app.Use(HandleErrorsAsync);
@@ -191,21 +202,25 @@ public sealed class LocalApiHost : IAsyncDisposable
         app.UseSwaggerUI(o => o.DocumentTitle = "ProxyDivert API");
         app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
         app.MapLocalApi();
+        if (settings.McpEnabled) app.MapMcp("/mcp");
         return app;
     }
 
-    // Only /api is guarded: the Swagger page describes routes, it changes nothing, and it is where
-    // the token gets typed in.
+    // Only /api and /mcp are guarded: the Swagger page describes routes, it changes nothing, and it
+    // is where the token gets typed in.
     private async Task CheckTokenAsync(HttpContext context, RequestDelegate next)
     {
         LocalApiSettings settings = _settings();
-        if (settings.RequireToken && context.Request.Path.StartsWithSegments("/api") && !HasToken(context, settings.Token))
+        if (settings.RequireToken && IsGuarded(context.Request.Path) && !HasToken(context, settings.Token))
         {
             await WriteErrorAsync(context, 401, "UNAUTHORIZED", "Missing or wrong bearer token.").ConfigureAwait(false);
             return;
         }
         await next(context).ConfigureAwait(false);
     }
+
+    private static bool IsGuarded(PathString path)
+        => path.StartsWithSegments("/api") || path.StartsWithSegments("/mcp");
 
     private static bool HasToken(HttpContext context, string? expected)
     {

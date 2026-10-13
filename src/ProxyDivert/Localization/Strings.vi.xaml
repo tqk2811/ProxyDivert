@@ -189,6 +189,8 @@ Hại: thêm một dịch vụ và một chặng COM nên trễ hơn, và sự k
     <sys:String x:Key="Str.Settings.LocalApiHint">Cho chương trình khác sửa bộ lọc, policy và đường ra qua HTTP (tài liệu ở /swagger). Tắt API mới sửa được cổng và chế độ nghe. Gửi token qua header "Authorization: Bearer &lt;token&gt;". Khi cửa sổ có thay đổi chưa Save, mọi lệnh ghi trả 409.</sys:String>
     <sys:String x:Key="Str.Settings.LocalApiLanWarning">Đang nghe trong LAN mà không bắt token: máy khác trong mạng có thể đổi định tuyến của chương trình đang chạy quyền admin này.</sys:String>
     <sys:String x:Key="Str.Settings.LocalApiBadPort">Cổng phải là số từ 1 đến 65535.</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiMcp">Bật MCP server ở /mcp (cho trợ lý AI)</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiMcpHint">Đưa các thao tác của API thành tool MCP (Streamable HTTP) trên cùng cổng, dùng chung token. Chỉ chạy khi API cục bộ đang bật.</sys:String>
     <sys:String x:Key="Str.Settings.CpuPriority">Ưu tiên CPU</sys:String>
     <sys:String x:Key="Str.Settings.CpuPriorityHint">Mọi gói tin của ứng dụng được chuyển hướng đều đi qua chương trình này. Mức High giữ game và cuộc gọi mượt khi CPU bận. Áp dụng ngay.</sys:String>
     <sys:String x:Key="Enum.ProcessPriorityClass.Normal">Normal</sys:String>

@@ -363,6 +363,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _localApiToken = string.Empty;
 
+    [ObservableProperty]
+    private bool _localApiMcpEnabled;
+
     /// <summary>Anyone on the network can change routing in an elevated process: said out loud.</summary>
     public bool LocalApiLanWithoutToken => LocalApiListenOnLan && !LocalApiRequireToken;
 
@@ -379,6 +382,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             LocalApiListenOnLan = api.ListenOnLan;
             LocalApiRequireToken = api.RequireToken;
             LocalApiToken = api.Token ?? string.Empty;
+            LocalApiMcpEnabled = api.McpEnabled;
         }
         finally
         {
@@ -408,6 +412,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     partial void OnLocalApiListenOnLanChanged(bool value) => SaveLocalApi();
+
+    partial void OnLocalApiMcpEnabledChanged(bool value) => SaveLocalApi();
 
     partial void OnLocalApiRequireTokenChanged(bool value)
     {
@@ -455,6 +461,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             ListenOnLan = LocalApiListenOnLan,
             RequireToken = LocalApiRequireToken,
             Token = string.IsNullOrEmpty(LocalApiToken) ? null : LocalApiToken,
+            McpEnabled = LocalApiMcpEnabled,
         });
     }
 

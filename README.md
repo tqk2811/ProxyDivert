@@ -332,7 +332,7 @@ filters, the engine switch and VPN tunnels. Every route and body is documented a
 `http://127.0.0.1:5085/swagger` (the *Open Swagger* button).
 
 - Port 5085 by default, editable while the API is off. Loopback only unless *Listen on LAN* is ticked.
-- *Require token*: every `/api` request must send `Authorization: Bearer <token>`. The token is
+- *Require token*: every `/api` and `/mcp` request must send `Authorization: Bearer <token>`. The token is
   generated in Settings (Copy / Regenerate). Listening on the LAN without a token lets any machine on
   the network change the routing of an elevated program; Settings warns about it.
 - A write is applied exactly like pressing Save. While the window holds unsaved edits every write
@@ -348,3 +348,17 @@ curl -X POST http://127.0.0.1:5085/api/policies/<policyId>/rules \
 curl -X PUT http://127.0.0.1:5085/api/policies/<policyId>/outbound \
      -H "Content-Type: application/json" -d '{"outboundId":"<outboundId>"}'
 ```
+
+### MCP server
+
+Tick *Enable MCP server at /mcp* (under the API settings, works only while the API is on) to let an
+AI assistant drive the same operations as MCP tools: status, outbounds, policies and their host
+rules, process filters, engine on/off, VPN connect/disconnect. It speaks Streamable HTTP at
+`http://127.0.0.1:5085/mcp`, on the API's port and behind the same token. Refused requests come back
+as tool errors carrying the API's error code. Adding it to Claude Code:
+
+```
+claude mcp add --transport http proxydivert http://127.0.0.1:5085/mcp --header "Authorization: Bearer <token>"
+```
+
+Leave the header out when *Require token* is off.
