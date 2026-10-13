@@ -31,7 +31,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   release:
+    needs: test
     runs-on: windows-latest
     env:
       DOTNET_NOLOGO: 'true'
@@ -67,42 +71,6 @@ jobs:
           Expand-Archive $zip -DestinationPath $dst -Force
           $exe = Get-ChildItem $dst -Recurse -Filter git-cliff.exe | Select-Object -First 1
           Add-Content -Path $env:GITHUB_PATH -Value $exe.DirectoryName
-
-      # Only tests that are deterministic on a hosted runner. Left out:
-      # - real ETW kernel session + child process, whole-machine process listing under a time budget
-      # - Stopwatch/Task.Delay thresholds (PeekableStream, two held-connection router tests)
-      # - tests that open a real 1400x900 WPF window (depend on the runner's desktop size)
-      # Debug build: the submodule libraries only run GitVersion in Release.
-      - name: Test
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $exclude = @(
-            'EtwProcessEventSourceTests'
-            'NativeProcessReadingTests'
-            'PeekableStreamTests'
-            'TcpConnectionRouterTests.AConnectionRoutedThroughATunnelThatIsStillDialling_IsHeldRatherThanSentDirect'
-            'TcpConnectionRouterTests.AHeldConnection_GoesThroughAsSoonAsTheTunnelIsUp'
-            'DataGridColumnBindingTests'
-            'GridColumnLayoutTests'
-            'PolicyRenameTests'
-            'ProcessRuleDragTests'
-            'ConditionDragDropTests'
-            'AppliedProcessTreeTests'
-            'EditableComboBoxThemeTests'
-          )
-          $filter = ($exclude | ForEach-Object { "FullyQualifiedName!~ProxyDivert.Core.Tests.$_" }) -join '&'
-          dotnet test src/ProxyDivert.Core.Tests -c Debug --filter $filter --logger "console;verbosity=normal"
-          if ($LASTEXITCODE -ne 0) { throw "dotnet test failed" }
-
-          # The WinDivert submodule's own tests (all in-memory, no driver): they guard the NAT
-          # rewrite, e.g. the loopback checksum case that once broke every IPv4 connection.
-          # Left out: ConcurrentSynsShareSweeps asserts at most 3 sweeps for 50 SYNs, which a slow
-          # runner can exceed.
-          dotnet test libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Tests -c Debug `
-            --filter "FullyQualifiedName!~NatRedirectHeldSynTests.ConcurrentSynsShareSweeps" `
-            --logger "console;verbosity=normal"
-          if ($LASTEXITCODE -ne 0) { throw "WinDivert tests failed" }
 
       # The submodule libraries run GitVersion.MsBuild in Release (they have a .nuspec), which fails
       # on a detached submodule HEAD. Their own version does not matter here, so turn it off globally;

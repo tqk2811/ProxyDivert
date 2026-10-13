@@ -1,0 +1,76 @@
+name: Test
+
+# Tests on every push to master and every pull request. release.yml also calls this workflow
+# (workflow_call) and only builds a release when it passes.
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  # A newer push to the same ref makes the older run pointless; a release call has its own ref.
+  group: test-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - name: Checkout (submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Only tests that are deterministic on a hosted runner. Left out:
+      # - real ETW kernel session + child process, whole-machine process listing under a time budget
+      # - Stopwatch/Task.Delay thresholds (PeekableStream, two held-connection router tests)
+      # - tests that open a real 1400x900 WPF window (depend on the runner's desktop size)
+      # Debug build: the submodule libraries only run GitVersion in Release.
+      - name: Test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exclude = @(
+            'EtwProcessEventSourceTests'
+            'NativeProcessReadingTests'
+            'PeekableStreamTests'
+            'TcpConnectionRouterTests.AConnectionRoutedThroughATunnelThatIsStillDialling_IsHeldRatherThanSentDirect'
+            'TcpConnectionRouterTests.AHeldConnection_GoesThroughAsSoonAsTheTunnelIsUp'
+            'DataGridColumnBindingTests'
+            'GridColumnLayoutTests'
+            'PolicyRenameTests'
+            'ProcessRuleDragTests'
+            'ConditionDragDropTests'
+            'AppliedProcessTreeTests'
+            'EditableComboBoxThemeTests'
+          )
+          $filter = ($exclude | ForEach-Object { "FullyQualifiedName!~ProxyDivert.Core.Tests.$_" }) -join '&'
+          dotnet test src/ProxyDivert.Core.Tests -c Debug --filter $filter --logger "console;verbosity=normal"
+          if ($LASTEXITCODE -ne 0) { throw "dotnet test failed" }
+
+          # The WinDivert submodule's own tests (all in-memory, no driver): they guard the NAT
+          # rewrite, e.g. the loopback checksum case that once broke every IPv4 connection.
+          # Left out: ConcurrentSynsShareSweeps asserts at most 3 sweeps for 50 SYNs, which a slow
+          # runner can exceed.
+          dotnet test libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert.Tests -c Debug `
+            --filter "FullyQualifiedName!~NatRedirectHeldSynTests.ConcurrentSynsShareSweeps" `
+            --logger "console;verbosity=normal"
+          if ($LASTEXITCODE -ne 0) { throw "WinDivert tests failed" }
