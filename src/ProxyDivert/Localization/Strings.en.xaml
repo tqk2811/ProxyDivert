@@ -197,6 +197,10 @@ Downside: an extra service and a COM hop add latency, and the events of one watc
     <sys:String x:Key="Enum.ProcessPriorityClass.AboveNormal">Above normal</sys:String>
     <sys:String x:Key="Enum.ProcessPriorityClass.High">High</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Appearance</sys:String>
+    <sys:String x:Key="Str.Settings.NetworkGroup">Network</sys:String>
+    <sys:String x:Key="Str.Settings.VpnGroup">VPN</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiGroup">Local API &amp; MCP</sys:String>
+    <sys:String x:Key="Str.Settings.LogGroup">Logging</sys:String>
     <sys:String x:Key="Str.Settings.Language">Language</sys:String>
     <sys:String x:Key="Str.Settings.Theme">Theme</sys:String>
     <sys:String x:Key="Str.Settings.StartWithWindows">Start with Windows</sys:String>

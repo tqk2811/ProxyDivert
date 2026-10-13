@@ -197,6 +197,10 @@ Hại: thêm một dịch vụ và một chặng COM nên trễ hơn, và sự k
     <sys:String x:Key="Enum.ProcessPriorityClass.AboveNormal">Above normal</sys:String>
     <sys:String x:Key="Enum.ProcessPriorityClass.High">High</sys:String>
     <sys:String x:Key="Str.Settings.Appearance">Giao diện</sys:String>
+    <sys:String x:Key="Str.Settings.NetworkGroup">Mạng</sys:String>
+    <sys:String x:Key="Str.Settings.VpnGroup">VPN</sys:String>
+    <sys:String x:Key="Str.Settings.LocalApiGroup">API cục bộ &amp; MCP</sys:String>
+    <sys:String x:Key="Str.Settings.LogGroup">Ghi log</sys:String>
     <sys:String x:Key="Str.Settings.Language">Ngôn ngữ</sys:String>
     <sys:String x:Key="Str.Settings.Theme">Chủ đề</sys:String>
     <sys:String x:Key="Str.Settings.StartWithWindows">Chạy cùng Windows</sys:String>
