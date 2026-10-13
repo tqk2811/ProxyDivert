@@ -1,11 +1,6 @@
 # git-cliff config for GitHub Release notes (used by CI .github/workflows/release.yml).
-# Used with range "<tag>..HEAD" (every commit since tag vM.N.0, merged branches included).
-#
-# The template ONLY emits "__SHA_<sha>__ <formatted content>" per commit; release.yml groups them
-# by [release] build:
-# - build point R = first-parent commit carrying "[release]"; header "- M.N.<k>" with
-#   k = (commits carrying "[release]" in tag..R) - 1, same rule as the app version in ProxyDivert.csproj
-# - sub-items "  + <content>" = every new commit in (R_prev..R]
+# Used with range "<previous vM.N.P tag>..<this tag>" (merged branches included): one bullet per
+# commit, which release.yml puts in the Release body as is.
 
 [changelog]
 header = ""
@@ -16,7 +11,7 @@ header = ""
 body = """
 {% for commit in commits %}\
 {% if commit.group in ["feat", "fix", "perf", "revert", "refactor", "chore"] %}\
-__SHA_{{ commit.id }}__ {% if commit.scope %}({{ commit.group }}) [**{{ commit.scope }}**](__REPO__/commit/{{ commit.id }}){% else %}[({{ commit.group }})](__REPO__/commit/{{ commit.id }}){% endif %} {{ commit.message | upper_first }}{% if commit.breaking %} [**breaking**]{% endif %}
+- {% if commit.scope %}({{ commit.group }}) [**{{ commit.scope }}**](__REPO__/commit/{{ commit.id }}){% else %}[({{ commit.group }})](__REPO__/commit/{{ commit.id }}){% endif %} {{ commit.message | upper_first }}{% if commit.breaking %} [**breaking**]{% endif %}
 {% endif %}\
 {% endfor %}\
 """
@@ -45,10 +40,9 @@ commit_parsers = [
     { message = "^sample", group = "sample" },
     { message = "^chore", group = "chore" },
     { message = ".*", group = "other" },
-    # Numbering/ordering are decided by release.yml (lookup by sha), so skipping would not break it;
-    # display-type filtering still happens in the body template, kept in one place.
+    # Display-type filtering happens in the body template, kept in one place.
 ]
 filter_commits = false
 tag_pattern = '[vV]?[0-9]+\.[0-9]+\.[0-9]+'
-# Output order does not matter (release.yml looks up by sha); oldest for determinism.
+# Oldest first, the order the changes landed.
 sort_commits = "oldest"

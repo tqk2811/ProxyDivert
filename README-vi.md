@@ -51,11 +51,11 @@ bản "lite" không có chúng và không cần ASP.NET Core (`dotnet build Prox
 test của API cũng bị bỏ ra). Cài đặt API vẫn được giữ trong file config, bản lite chỉ ẩn phần đó trong
 tab Cài đặt.
 
-Phiên bản lấy từ git: `M.N` theo tag `vM.N.0` gần nhất, số thứ ba đếm các commit có `[release]` trong
-message kể từ tag đó, bắt đầu từ 0 (commit đầu tiên sau `v1.0.0` là `1.0.0`, kế tiếp `1.0.1`). Push lên
-`master` mà commit đầu có `[release]` thì [.github/workflows/release.yml](.github/workflows/release.yml)
-build, gắn zip vào GitHub Release `vM.N.0` và sinh lại release notes bằng git-cliff. Muốn mở dòng
-phiên bản mới thì gắn tag `vM.N.0` mới lên `master`.
+Phiên bản lấy từ tag git `vM.N.P`: commit mang tag build ra `M.N.P`, commit sau đó ra
+`M.N.P-dev.<số commit kể từ tag>`. Muốn phát hành thì gắn tag lên commit rồi push tag
+(`git tag v1.0.3`, `git push origin v1.0.3`): [.github/workflows/release.yml](.github/workflows/release.yml)
+build và tạo GitHub Release cùng tên, kèm các zip và release notes sinh bằng git-cliff (commit kể từ tag
+trước). Mỗi lần push một tag: push hơn ba tag cùng lúc thì GitHub không chạy workflow.
 
 ## Cấu trúc
 

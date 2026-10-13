@@ -51,12 +51,12 @@ The local API, Swagger page and MCP server (see [Local API](#local-api)) are com
 (`dotnet build ProxyDivert.sln -p:EnableLocalApi=false`; the API tests are left out too). The
 settings stay in the config file either way, and the lite build hides that section of Settings.
 
-The version comes from git: `M.N` from the nearest tag `vM.N.0`, the third number counts the commits
-whose message contains `[release]` since that tag, starting at 0 (the first one after `v1.0.0` is
-`1.0.0`, the next `1.0.1`). A push to `master` whose head commit contains `[release]` is built by
-[.github/workflows/release.yml](.github/workflows/release.yml); the zip is attached to the GitHub
-Release `vM.N.0` and its notes are regenerated with git-cliff. Tag `master` with a new `vM.N.0` to
-start a new line.
+The version comes from git tags `vM.N.P`: a commit carrying the tag builds as `M.N.P`, a later commit as
+`M.N.P-dev.<commits since the tag>`. To release, tag the commit and push the tag
+(`git tag v1.0.3`, `git push origin v1.0.3`): [.github/workflows/release.yml](.github/workflows/release.yml)
+builds it and publishes a GitHub Release of the same name, with the zips and notes from git-cliff
+(commits since the previous tag). Push one tag at a time: GitHub skips the workflow when more than three
+tags arrive in one push.
 
 ## Layout
 

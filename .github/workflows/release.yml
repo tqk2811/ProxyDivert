@@ -1,38 +1,37 @@
 name: Release
 
-# Build the WPF app and attach the zip to a GitHub Release. Does NOT run on every push: only when the
-# head commit of a push to master carries the marker '[release]'. Also runnable by hand
-# (workflow_dispatch).
+# Build the WPF app and publish a GitHub Release. Runs when a tag 'vM.N.P' is pushed:
+#   git tag v1.0.3 && git push origin v1.0.3
+# Also runnable by hand (workflow_dispatch) to rebuild a release: pick the TAG as the ref, not a branch.
 #
-# Version (computed in src/ProxyDivert/ProxyDivert.csproj, target SetVersionFromGit): M.N from the
-# nearest tag vM.N.0, third number = commits carrying '[release]' since that tag, starting at 0
-# (first [release] after v1.0.0 -> 1.0.0, second -> 1.0.1).
+# Version (computed in src/ProxyDivert/ProxyDivert.csproj, target SetVersionFromGit) = the tag itself.
 #
-# /releases model: one GitHub Release per minor line, named by its tag 'vM.N.0'. Each build uploads
-# four zips to that Release and regenerates the notes (git-cliff, cliff-release.toml), grouped by
-# [release] build. The zips are {with, without the local API} x {self-contained, framework-dependent}:
+# /releases model: one GitHub Release per tag. Its notes (git-cliff, cliff-release.toml) list the
+# commits since the previous vM.N.P tag. Four zips are uploaded,
+# {with, without the local API} x {self-contained, framework-dependent}:
 #   ProxyDivert-M.N.K-win-x64.zip          local API + MCP, self-contained (no runtime needed)
 #   ProxyDivert-M.N.K-win-x64-fd.zip       local API + MCP, needs .NET 8 Desktop + ASP.NET Core Runtime
 #   ProxyDivert-M.N.K-lite-win-x64.zip     no local API (-p:EnableLocalApi=false), self-contained
 #   ProxyDivert-M.N.K-lite-win-x64-fd.zip  no local API, needs only the .NET 8 Desktop Runtime
-# Precondition: tag 'vM.N.0' is pushed to origin. Start a new line by tagging master 'vM.N.0'.
+# GitHub does not start this workflow when more than 3 tags are pushed at once: push tags one by one.
 
 on:
   push:
-    branches:
-      - master
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: release
+  # One queue per tag: a shared group keeps only one pending run, so a third tag pushed while
+  # one builds would cancel the second tag's run.
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   release:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release]')
     runs-on: windows-latest
     env:
       DOTNET_NOLOGO: 'true'
@@ -43,6 +42,14 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
+
+      # A manual run from a branch, or a tag on a commit that is not on master, is not a release.
+      - name: Check tag
+        shell: pwsh
+        run: |
+          if ('${{ github.ref_type }}' -ne 'tag') { throw "Run this workflow on a tag vM.N.P, not on '${{ github.ref_name }}'" }
+          git merge-base --is-ancestor HEAD origin/master
+          if ($LASTEXITCODE -ne 0) { throw "Tag '${{ github.ref_name }}' is not on master" }
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -131,9 +138,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $ver = (Get-Item publish/win-x64/ProxyDivert.exe).VersionInfo.ProductVersion
-          if ($ver -notmatch '^(\d+)\.(\d+)\.(\d+)$') { throw "Unexpected version '$ver'" }
-          $tag = "v$($Matches[1]).$($Matches[2]).0"
+          # The SDK may append '+<commit sha>' to the product version; the tag must match the rest.
+          $ver = ((Get-Item publish/win-x64/ProxyDivert.exe).VersionInfo.ProductVersion -split '\+')[0]
+          $tag = $env:GITHUB_REF_NAME
+          if ($ver -notmatch '^\d+\.\d+\.\d+$' -or "v$ver" -ne $tag) { throw "Built version '$ver' does not match tag '$tag'" }
           $zips = foreach ($dir in Get-ChildItem publish -Directory) {
             $zip = "ProxyDivert-$ver-$($dir.Name).zip"
             Compress-Archive -Path "$($dir.FullName)/*" -DestinationPath $zip
@@ -154,45 +162,15 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $tag = $env:TAG
-          git rev-parse -q --verify "refs/tags/$tag" *> $null
-          if ($LASTEXITCODE -ne 0) { throw "Tag '$tag' does not exist on origin. Tag the start of this minor line first." }
-          $mn = $tag.Substring(1, $tag.LastIndexOf('.') - 1)
 
-          # Release notes, newest build on top. Build point R = first-parent commit carrying
-          # '[release]'; header '- M.N.<k>' with k = ([release] commits in base..R) - 1, the same rule
-          # as the app version. A manual run on a commit without the marker is added as its own
-          # header (labelled with the built version) only for this run.
-          # git-cliff only formats each commit, prefixing every line with '__SHA_<sha>__' for lookup.
-          # The tagged commit itself counts when it carries '[release]' (it is then M.N.0), so the
-          # range starts at its parent instead of at the tag.
-          $base = $tag
-          if ((git log -1 --format=%B $tag) -match '\[release\]') { $base = "$tag^" }
-          $lineOf = @{}
-          foreach ($l in @(git-cliff --config cliff-release.toml "$base..HEAD")) {
-            if ($l -match '^__SHA_([0-9a-f]+)__ (.*)$') { $lineOf[$Matches[1]] = $Matches[2] }
-          }
-          $fps = @(git rev-list --first-parent --reverse "$base..HEAD")
-          $points = @($fps | Where-Object { (git log -1 --format=%B $_) -match '\[release\]' })
-          $labels = @{}
-          foreach ($r in $points) {
-            $n = [int](git rev-list --count --fixed-strings --grep="[release]" "$base..$r")
-            $labels[$r] = "$mn.$([Math]::Max($n - 1, 0))"
-          }
-          if ($fps.Count -gt 0 -and ($points.Count -eq 0 -or $points[-1] -ne $fps[-1])) {
-            $points += $fps[-1]
-            $labels[$fps[-1]] = "$env:VERSION (manual build)"
-          }
-          $groups = New-Object System.Collections.Generic.List[string]
-          $prev = $base
-          foreach ($r in $points) {
-            $items = @(foreach ($c in @(git rev-list --reverse $r --not $prev)) {
-              if ($lineOf.ContainsKey($c)) { "  + $($lineOf[$c])" }
-            })
-            $groups.Insert(0, ((@("- $($labels[$r])") + $items) -join "`n"))
-            $prev = $r
-          }
-          $notes = ($groups -join "`n").Trim()
+          # Release notes: commits since the previous vM.N.P tag (whole history when this is the first).
+          $range = $tag
+          $prevTag = git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' "$tag^" 2>$null
+          if ($LASTEXITCODE -eq 0 -and $prevTag) { $range = "$($prevTag.Trim())..$tag" }
+          $notes = (@(git-cliff --config cliff-release.toml $range) | Where-Object { $_.Trim() }) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "git-cliff failed" }
           $notes = $notes -replace '__REPO__', "$($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)"
+          if ($prevTag) { $notes = "$notes`n`n**Full changelog**: $($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)/compare/$($prevTag.Trim())...$tag" }
           if ([string]::IsNullOrWhiteSpace($notes)) { $notes = "Release $tag" }
           Set-Content -Path RELEASE_NOTES.md -Value $notes -Encoding utf8
 
