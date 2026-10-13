@@ -285,6 +285,20 @@ public sealed class LocalApiTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_condition_may_carry_its_kind_after_the_other_properties()
+    {
+        using var content = new StringContent(
+            """{"name":"x","condition":{"operator":"All","children":[{"pattern":"a.exe","kind":"process"}],"kind":"group"}}""",
+            System.Text.Encoding.UTF8, "application/json");
+        HttpResponseMessage response = await _client.PostAsync("/api/process-rules", content);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        ProcessRule saved = Assert.Single(_backend.Config.ProcessRules);
+        var group = Assert.IsType<ProxyDivert.Core.Routing.Models.Conditions.ConditionGroup>(saved.Condition);
+        Assert.Single(group.Children);
+    }
+
+    [Fact]
     public async Task A_process_filter_with_a_condition_tree_round_trips()
     {
         HttpResponseMessage response = await _client.PostAsJsonAsync("/api/process-rules", new

@@ -120,6 +120,8 @@ public sealed class LocalApiHost : IAsyncDisposable
     {
         options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         options.PropertyNameCaseInsensitive = true;
+        // A client (an LLM above all) may write the "kind" discriminator after the other properties.
+        options.AllowOutOfOrderMetadataProperties = true;
         options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         options.Converters.Add(new JsonStringEnumConverter());
         options.TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { OptionalIds } };

@@ -18,6 +18,13 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 - **Vì sao:** tool bên ngoài muốn chuyển sang proxy mới thì hiện phải tạo outbound bằng tay trên cửa sổ trước.
 - **Ngày ghi:** 2026-10-12.
 
+### [Thấp] API/MCP không kiểm Origin/Host khi tắt token — rủi ro DNS rebinding
+
+- **Vấn đề:** khi "Require token" tắt, mọi request tới `/api` và `/mcp` đều được nhận mà không kiểm header `Origin` hay `Host`. Một trang web trong trình duyệt của user có thể lái API qua `localhost` (DNS rebinding, hoặc request cross-origin đơn giản), ví dụ bật/tắt engine hay sửa policy.
+- **Vị trí:** `src/ProxyDivert/Api/LocalApiHost.cs` (`IsGuarded`, middleware `CheckTokenAsync`).
+- **Vì sao:** spec MCP khuyến nghị server cục bộ phải kiểm `Origin` (và chỉ bind loopback) để chặn kiểu tấn công này. Nên từ chối request có `Origin` lạ hoặc `Host` không phải loopback/địa chỉ đã cấu hình, kể cả khi token tắt.
+- **Ngày ghi:** 2026-10-13.
+
 ### Kiểm chống DPI trên mạng thật
 
 - **Vấn đề:** cờ Anti-DPI (tách tên miền trong CONNECT, tách ClientHello thành nhiều TLS record quanh SNI) mới được kiểm bằng test offline. Một server TLS thật (SslStream/SChannel trên loopback) đã nhận ClientHello bị tách và bắt tay xong. Còn hai câu hỏi chưa ai trả lời: nhà mạng đang chặn có bị lách thật không, và ra dây mỗi record có thành segment riêng không (bắt bằng Wireshark).

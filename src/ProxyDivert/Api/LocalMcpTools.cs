@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using ProxyDivert.Api.Models;
@@ -23,10 +24,12 @@ public sealed class LocalMcpTools
         + " while the window holds unsaved edits.";
 
     private readonly LocalApiService _service;
+    private readonly ILogger<LocalMcpTools> _logger;
 
-    public LocalMcpTools(LocalApiService service)
+    public LocalMcpTools(LocalApiService service, ILogger<LocalMcpTools> logger)
     {
         _service = service;
+        _logger = logger;
     }
 
     // ==== status, engine, tunnels ====
@@ -36,13 +39,13 @@ public sealed class LocalMcpTools
         + " edits (every write is refused until they are saved), and each VPN outbound's tunnel state.")]
     public Task<ApiStatus> GetStatus() => Run(() => _service.GetStatusAsync());
 
-    [McpServerTool(Name = "set_engine_running", Idempotent = true)]
+    [McpServerTool(Name = "set_engine_running", Destructive = true, Idempotent = true)]
     [Description("Switches traffic redirection on (true) or off (false). Returns whether it is running afterwards.")]
     public Task<bool> SetEngineRunning(
         [Description("True to start redirecting, false to stop.")] bool running)
         => Run(() => _service.SetEngineRunningAsync(running));
 
-    [McpServerTool(Name = "connect_vpn", Idempotent = true)]
+    [McpServerTool(Name = "connect_vpn", Destructive = true, Idempotent = true)]
     [Description("Brings up the tunnel of a VPN outbound. Get outbound ids from list_outbounds.")]
     public Task<string> ConnectVpn(
         [Description("Id of a VPN outbound.")] Guid outboundId)
@@ -52,7 +55,7 @@ public sealed class LocalMcpTools
             return "connect requested";
         });
 
-    [McpServerTool(Name = "disconnect_vpn", Idempotent = true)]
+    [McpServerTool(Name = "disconnect_vpn", Destructive = true, Idempotent = true)]
     [Description("Takes down the tunnel of a VPN outbound. Refused with CONFLICT while a live filter routes through it.")]
     public Task<string> DisconnectVpn(
         [Description("Id of a VPN outbound.")] Guid outboundId)
@@ -196,18 +199,32 @@ public sealed class LocalMcpTools
         });
 
     // The SDK turns an McpException into an error result with its message; any other exception
-    // would reach the model as a bare "an error occurred".
-    private static async Task<T> Run<T>(Func<Task<T>> call)
+    // would reach the model as a bare "an error occurred". A malformed argument is the model's to
+    // fix, so its message is kept; anything else is a fault here, logged and reported generically.
+    private async Task<T> Run<T>(Func<Task<T>> call)
     {
         try
         {
             return await call().ConfigureAwait(false);
+        }
+        catch (McpException)
+        {
+            throw;
         }
         catch (ApiException ex)
         {
             string message = $"{ex.Code} ({ex.StatusCode}): {ex.Message}";
             if (ex.Details is not null) message += " Details: " + JsonSerializer.Serialize(ex.Details);
             throw new McpException(message, ex);
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException or FormatException)
+        {
+            throw new McpException($"INVALID_REQUEST: {ex.Message}", ex);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "MCP tool failed");
+            throw new McpException("INTERNAL_ERROR: the tool failed unexpectedly; see the ProxyDivert log.", ex);
         }
     }
 }

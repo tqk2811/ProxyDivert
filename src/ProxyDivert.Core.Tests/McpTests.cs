@@ -113,6 +113,51 @@ public sealed class McpTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task With_require_token_mcp_refuses_a_wrong_token()
+    {
+        _settings.RequireToken = true;
+        _settings.Token = "secret-token";
+
+        using var http = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(_host.Address!, "/mcp"))
+        {
+            Content = new StringContent("{}"),
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "not-the-token");
+        HttpResponseMessage response = await http.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_process_rule_accepts_the_kind_discriminator_after_the_other_properties()
+    {
+        await using McpClient client = await ConnectAsync();
+        // An LLM writes JSON in whatever order it likes; "kind" last in every object, nested group included.
+        using System.Text.Json.JsonDocument rule = System.Text.Json.JsonDocument.Parse("""
+            {
+              "name": "Out of order",
+              "condition": {
+                "operator": "All",
+                "children": [
+                  { "matcher": "ExeName", "pattern": "a.exe", "kind": "process" },
+                  { "operator": "Any", "children": [ { "matcher": "Pid", "pattern": "42", "kind": "process" } ], "kind": "group" }
+                ],
+                "kind": "group"
+              }
+            }
+            """);
+        CallToolResult result = await client.CallToolAsync("create_process_rule", new Dictionary<string, object?>
+        {
+            ["rule"] = rule.RootElement.Clone(),
+        });
+        Assert.True(result.IsError != true, string.Join(" ", result.Content.OfType<TextContentBlock>().Select(c => c.Text)));
+        ProcessRule created = Assert.Single(_backend.Config.ProcessRules, r => r.Name == "Out of order");
+        var group = Assert.IsType<ProxyDivert.Core.Routing.Models.Conditions.ConditionGroup>(created.Condition);
+        Assert.Equal(2, group.Children.Count);
+        Assert.IsType<ProxyDivert.Core.Routing.Models.Conditions.ConditionGroup>(group.Children[1]);
+    }
+
+    [Fact]
     public async Task Mcp_is_not_mapped_while_switched_off()
     {
         _settings.McpEnabled = false;
