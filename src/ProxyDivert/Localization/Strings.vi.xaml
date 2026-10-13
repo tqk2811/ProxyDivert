@@ -251,6 +251,7 @@ Hại: thêm một dịch vụ và một chặng COM nên trễ hơn, và sự k
     <sys:String x:Key="Enum.ProcessMatcherType.EndsWith">Kết thúc bằng</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.Contains">Có chứa</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.Regex">Regex</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.Pid">Mã tiến trình (PID)</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Contains">Có chứa</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Wildcard">Ký tự đại diện</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Exact">Khớp chính xác</sys:String>

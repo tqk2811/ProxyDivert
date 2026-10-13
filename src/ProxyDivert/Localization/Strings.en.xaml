@@ -251,6 +251,7 @@ Downside: an extra service and a COM hop add latency, and the events of one watc
     <sys:String x:Key="Enum.ProcessMatcherType.EndsWith">Ends with</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.Contains">Contains</sys:String>
     <sys:String x:Key="Enum.ProcessMatcherType.Regex">Regex</sys:String>
+    <sys:String x:Key="Enum.ProcessMatcherType.Pid">Process ID (PID)</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Contains">Contains</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Wildcard">Wildcard</sys:String>
     <sys:String x:Key="Enum.ArgumentMatcherType.Exact">Exact</sys:String>

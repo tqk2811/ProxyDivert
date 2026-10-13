@@ -340,6 +340,11 @@ filters, the engine switch and VPN tunnels. Every route and body is documented a
 - Reads return the configuration as last saved. Outbounds are listed without URLs or credentials,
   and cannot be added or edited through the API yet.
 - The built-in Default policy keeps its name and catch-all rule; editing its rules answers 400.
+- Per-instance routing: a process filter whose condition uses matcher `Pid` with the decimal process
+  id as pattern (`{"kind":"process","matcher":"Pid","pattern":"4242"}`) claims that one running
+  instance (and its children) whatever its name, so several windows of the same program can each go
+  through their own outbound. Ids are reused, so delete the filter when the process exits; a pattern
+  that is not a number answers `400 INVALID_PATTERN`.
 
 ```
 curl -X POST http://127.0.0.1:5085/api/policies/<policyId>/rules \

@@ -65,6 +65,15 @@ public sealed class ProcessNameCondition : LeafCondition
             case ProcessMatcherType.Regex:
                 return NameOrPath(pattern, context, RegexMatches);
 
+            // The id only. Text that is not an id is Unknown, like a regex that will not compile,
+            // so a NOT in front of it cannot claim every process on the machine; the API refuses
+            // it before it is saved. Unknown too with no running process to ask about (a filter
+            // checked against a program before it starts).
+            case ProcessMatcherType.Pid:
+                if (!TryParsePid(pattern, out uint pid) || context.ProcessId is not uint actual)
+                    return ConditionResult.Unknown;
+                return Yes(actual == pid);
+
             default:
                 throw new ArgumentOutOfRangeException(nameof(Matcher), Matcher, "Unknown process matcher");
         }
@@ -90,6 +99,11 @@ public sealed class ProcessNameCondition : LeafCondition
             ? ConditionResult.Unknown
             : ConditionResult.NoMatch;
     }
+
+    /// <summary>Reads a Pid pattern: a plain decimal number, nothing else.</summary>
+    public static bool TryParsePid(string? pattern, out uint pid)
+        => uint.TryParse(pattern?.Trim(), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out pid);
 
     private static string StripExe(string name)
         => name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)

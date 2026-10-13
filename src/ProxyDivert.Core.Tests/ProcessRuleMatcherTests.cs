@@ -33,6 +33,33 @@ public class ProcessRuleMatcherTests
     private static CommandLineCondition Arguments(string pattern, ArgumentMatcherType matcher = ArgumentMatcherType.Contains)
         => new CommandLineCondition { Matcher = matcher, Pattern = pattern };
 
+    // Pid: one running instance by id, whatever its name — the emulator case, many windows of one exe.
+    [Theory]
+    [InlineData("4242", 4242u, true)]
+    [InlineData(" 4242 ", 4242u, true)]
+    [InlineData("4242", 4243u, false)]
+    [InlineData("abc", 4242u, false)]
+    [InlineData("-4242", 4242u, false)]
+    [InlineData("4242.0", 4242u, false)]
+    [InlineData("0x1092", 4242u, false)]
+    public void Pid_compares_the_process_id_only(string pattern, uint pid, bool expected)
+        => Assert.Equal(expected, ProcessRuleMatcher.IsMatch(
+            Rule(ProcessMatcherType.Pid, pattern), "emulator", @"C:\Emu\emulator.exe", null, pid));
+
+    [Fact]
+    public void Pid_ignores_the_name_and_matches_nothing_without_a_process_id()
+    {
+        Assert.False(ProcessRuleMatcher.IsMatch(Rule(ProcessMatcherType.Pid, "emulator"), "emulator", null, null, 4242));
+        Assert.False(ProcessRuleMatcher.IsMatch(Rule(ProcessMatcherType.Pid, "4242"), "emulator", null));
+    }
+
+    [Fact]
+    public void A_negated_pid_that_does_not_parse_still_matches_nothing()
+    {
+        ProcessRule rule = Rule(Not(Process("abc", ProcessMatcherType.Pid)));
+        Assert.False(ProcessRuleMatcher.IsMatch(rule, "emulator", null, null, 4242));
+    }
+
     private static T Not<T>(T condition) where T : ProcessCondition
     {
         condition.Negate = true;

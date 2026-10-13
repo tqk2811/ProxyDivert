@@ -371,7 +371,7 @@ public sealed class ProcessRuleTracker : IProcessPolicySource, IDisposable
 
         foreach (ProcessRule rule in rules)
         {
-            if (ProcessRuleMatcher.IsMatch(rule, process.Name, process.ExecutablePath, process.CommandLine))
+            if (ProcessRuleMatcher.IsMatch(rule, process.Name, process.ExecutablePath, process.CommandLine, process.ProcessId))
                 return rule;
         }
         return null;

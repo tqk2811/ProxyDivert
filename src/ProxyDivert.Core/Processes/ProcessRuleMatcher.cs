@@ -15,12 +15,13 @@ namespace ProxyDivert.Core.Processes;
 // took as well, and the one that cannot redirect a process nobody named.
 public static class ProcessRuleMatcher
 {
-    public static bool IsMatch(ProcessRule rule, string processName, string? executablePath, string? commandLine = null)
+    public static bool IsMatch(ProcessRule rule, string processName, string? executablePath, string? commandLine = null,
+        uint? processId = null)
     {
         if (rule is null) throw new ArgumentNullException(nameof(rule));
         if (!rule.IsEnabled || rule.Condition is null) return false;
 
-        var context = new ConditionContext(processName, executablePath, commandLine);
+        var context = new ConditionContext(processName, executablePath, commandLine, processId);
         return rule.Condition.Evaluate(context) == ConditionResult.Match;
     }
 }

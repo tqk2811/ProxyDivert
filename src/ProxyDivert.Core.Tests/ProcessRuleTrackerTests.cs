@@ -152,6 +152,40 @@ public class ProcessRuleTrackerTests
         Assert.Equal(new uint[] { 200 }, fixture.Attached.Select(p => p.ProcessId));
     }
 
+    // Many windows of one emulator, same exe and arguments: a Pid filter picks one instance, and
+    // that instance's children follow it while its siblings stay put.
+    [Fact]
+    public void A_pid_filter_claims_one_instance_and_its_children_only()
+    {
+        using var fixture = new Fixture();
+        fixture.Machine
+            .Start(200, "emu.exe", @"C:\Emu\emu.exe", "emu.exe -x")
+            .Start(201, "emu.exe", @"C:\Emu\emu.exe", "emu.exe -x")
+            .Start(202, "helper.exe", parentPid: 201);
+        fixture.Inventory.Refresh();
+
+        var rule = new ProcessRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "pid 201",
+            IncludeChildren = true,
+            Condition = new ConditionGroup
+            {
+                Children = { new ProcessNameCondition { Matcher = ProcessMatcherType.Pid, Pattern = "201" } },
+            },
+            PolicyIds = { ProxyPolicy },
+        };
+        fixture.Tracker.Start(new[] { rule });
+
+        Assert.Equal(new uint[] { 201, 202 }, fixture.Attached.Select(p => p.ProcessId).OrderBy(id => id));
+        Assert.Equal(new[] { ProxyPolicy }, Policies(fixture, 202));
+
+        // One that starts later is matched from the table's event the same way.
+        fixture.Machine.Start(203, "emu.exe", @"C:\Emu\emu.exe", "emu.exe -x");
+        fixture.Inventory.Refresh();
+        Assert.DoesNotContain(fixture.Attached, p => p.ProcessId == 203);
+    }
+
     // The tree poller this replaces only ever saw processes that started while it was watching, so
     // a browser opened before the engine kept its tabs out of the redirect.
     [Fact]

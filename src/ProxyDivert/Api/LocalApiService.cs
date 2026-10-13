@@ -2,7 +2,9 @@ using ProxyDivert.Api.Interfaces;
 using ProxyDivert.Api.Models;
 using ProxyDivert.Core.Configuration.Models;
 using ProxyDivert.Core.Routing.Compiled;
+using ProxyDivert.Core.Routing.Enums;
 using ProxyDivert.Core.Routing.Models;
+using ProxyDivert.Core.Routing.Models.Conditions;
 
 namespace ProxyDivert.Api;
 
@@ -224,6 +226,24 @@ public sealed class LocalApiService
             .FirstOrDefault(id => config.Policies.All(p => p.Id != id));
         if (missing is not null)
             throw ApiException.BadRequest("POLICY_NOT_FOUND", $"No policy {missing}.");
+        EnsurePidPatternsParse(rule.Condition);
+    }
+
+    // A Pid leaf whose text is not a process id never matches anything, so it is refused here like
+    // a regex that will not compile instead of being saved to fail silently. An empty one is left
+    // alone: the editor treats an empty leaf as "not filled in yet" for every matcher.
+    private static void EnsurePidPatternsParse(ProcessCondition? condition)
+    {
+        switch (condition)
+        {
+            case ProcessNameCondition { Matcher: ProcessMatcherType.Pid } leaf
+                when !string.IsNullOrWhiteSpace(leaf.Pattern) && !ProcessNameCondition.TryParsePid(leaf.Pattern, out _):
+                throw ApiException.BadRequest(
+                    "INVALID_PATTERN", $"'{leaf.Pattern}' is not a process id; a Pid pattern is a decimal number.");
+            case ConditionGroup group:
+                foreach (ProcessCondition child in group.Children) EnsurePidPatternsParse(child);
+                break;
+        }
     }
 
     private static void EnsureOutboundExists(AppConfig config, Guid outboundId)

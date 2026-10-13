@@ -300,6 +300,38 @@ public sealed class LocalApiTests : IAsyncLifetime
         Assert.Equal(new[] { RoutingPolicy.DefaultId }, saved.PolicyIds);
     }
 
+    [Fact]
+    public async Task A_process_filter_with_a_pid_that_does_not_parse_is_refused()
+    {
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/process-rules", new
+        {
+            name = "emu",
+            policyIds = new[] { RoutingPolicy.DefaultId },
+            condition = new { kind = "process", matcher = "Pid", pattern = "emu-1" },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("INVALID_PATTERN", await ErrorCode(response));
+        Assert.Empty(_backend.Config.ProcessRules);
+        Assert.Equal(0, _backend.Saves);
+    }
+
+    [Fact]
+    public async Task A_process_filter_by_pid_is_saved()
+    {
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/api/process-rules", new
+        {
+            name = "emu",
+            policyIds = new[] { RoutingPolicy.DefaultId },
+            condition = new { kind = "process", matcher = "Pid", pattern = "4242" },
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var leaf = Assert.IsType<ProxyDivert.Core.Routing.Models.Conditions.ProcessNameCondition>(
+            Assert.Single(_backend.Config.ProcessRules).Condition);
+        Assert.Equal(ProxyDivert.Core.Routing.Enums.ProcessMatcherType.Pid, leaf.Matcher);
+    }
+
     // ==== engine ====
 
     [Fact]

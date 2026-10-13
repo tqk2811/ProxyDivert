@@ -170,7 +170,10 @@ public sealed class LocalMcpTools
 
     [McpServerTool(Name = "create_process_rule")]
     [Description("Creates a process filter and returns it. Leave id out to have one assigned. Tip: read an"
-        + " existing one with list_process_rules to see the shape." + WriteNote)]
+        + " existing one with list_process_rules to see the shape. To route one running instance (e.g. one"
+        + " of many windows of the same exe) use a process condition with matcher \"Pid\" and the decimal"
+        + " process id as pattern; it compares the id only, and since ids are reused, delete the filter"
+        + " when that process exits." + WriteNote)]
     public Task<ProcessRule> CreateProcessRule(
         [Description("The process filter.")] ProcessRule rule)
         => Run(() => _service.CreateProcessRuleAsync(rule));

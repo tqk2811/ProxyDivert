@@ -32,4 +32,10 @@ public enum ProcessMatcherType
     // .NET regular expression over the path or the name. A pattern that does not compile, or one
     // that runs too long, matches nothing rather than taking the watcher down with it.
     Regex = 6,
+
+    // One running instance by its process id, written in decimal ("4242"). Compares the id only,
+    // never the name or path, so several windows of the same program can be routed apart. Text that
+    // is not a process id matches nothing. Ids are reused after a process exits, so a filter of this
+    // kind is meant to be created for a live process and deleted when it exits.
+    Pid = 7,
 }

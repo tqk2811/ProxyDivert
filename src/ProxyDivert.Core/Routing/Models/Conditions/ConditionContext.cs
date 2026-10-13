@@ -32,12 +32,16 @@ public sealed class ConditionContext
     // How many nodes are open above the one being asked. See ProcessCondition.MaxDepth.
     private int _depth;
 
-    public ConditionContext(string processName, string? executablePath, string? commandLine)
+    public ConditionContext(string processName, string? executablePath, string? commandLine, uint? processId = null)
     {
         ProcessName = processName ?? string.Empty;
         ExecutablePath = executablePath;
         CommandLine = commandLine;
+        ProcessId = processId;
     }
+
+    /// <summary>The process id, or null when the question is not about one running process.</summary>
+    public uint? ProcessId { get; }
 
     /// <summary>The executable name. Always readable.</summary>
     public string ProcessName { get; }

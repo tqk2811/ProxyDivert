@@ -320,6 +320,11 @@ tắc engine và tunnel VPN. Mọi route và body có tài liệu ở `http://12
 - Lệnh đọc trả cấu hình đã Save gần nhất. Outbound được liệt kê nhưng không có URL hay mật khẩu, và
   chưa thêm/sửa được qua API.
 - Policy Default dựng sẵn giữ nguyên tên và rule bắt-tất-cả; sửa rule của nó trả 400.
+- Định tuyến theo từng instance: bộ lọc tiến trình có điều kiện matcher `Pid`, pattern là PID dạng số
+  thập phân (`{"kind":"process","matcher":"Pid","pattern":"4242"}`), chỉ bắt đúng tiến trình đó (và
+  tiến trình con) bất kể tên, nên nhiều cửa sổ của cùng một chương trình có thể đi outbound riêng.
+  PID được tái sử dụng nên hãy xoá bộ lọc khi tiến trình thoát; pattern không phải số trả
+  `400 INVALID_PATTERN`.
 
 ```
 curl -X POST http://127.0.0.1:5085/api/policies/<policyId>/rules \
