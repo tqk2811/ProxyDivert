@@ -16,18 +16,8 @@ loại đường ra.
 
 ## Tải về
 
-Mỗi [release](https://github.com/tqk2811/ProxyDivert/releases) có bốn file zip cùng phiên bản; giải nén
-rồi chạy `ProxyDivert.exe` (.NET SDK chỉ cần khi tự build từ mã nguồn):
-
-| Zip | API localhost + MCP | Cần cài sẵn |
-|---|---|---|
-| `ProxyDivert-<ver>-win-x64.zip` | có | không cần gì (self-contained) |
-| `ProxyDivert-<ver>-win-x64-fd.zip` | có | .NET 8 Desktop Runtime **và** ASP.NET Core Runtime 8 |
-| `ProxyDivert-<ver>-lite-win-x64.zip` | không | không cần gì (self-contained) |
-| `ProxyDivert-<ver>-lite-win-x64-fd.zip` | không | .NET 8 Desktop Runtime |
-
-Bản `-fd` (framework-dependent) nhẹ hơn nhiều nhưng dùng runtime đã cài trên máy. Bản "lite" bỏ
-API localhost, Swagger và MCP server.
+Tải file zip mới nhất ở [Releases](https://github.com/tqk2811/ProxyDivert/releases), giải nén rồi chạy
+`ProxyDivert.exe`. Mỗi release có ghi rõ nên chọn file zip nào.
 
 ## Lấy mã nguồn
 
