@@ -9,10 +9,11 @@ name: Release
 # /releases model: one GitHub Release per tag. Its notes (git-cliff, cliff-release.toml) list the
 # commits since the previous vM.N.P tag. Four zips are uploaded,
 # {with, without the local API} x {self-contained, framework-dependent}:
-#   ProxyDivert-M.N.K-win-x64.zip          local API + MCP, self-contained (no runtime needed)
-#   ProxyDivert-M.N.K-win-x64-fd.zip       local API + MCP, needs .NET 8 Desktop + ASP.NET Core Runtime
-#   ProxyDivert-M.N.K-lite-win-x64.zip     no local API (-p:EnableLocalApi=false), self-contained
-#   ProxyDivert-M.N.K-lite-win-x64-fd.zip  no local API, needs only the .NET 8 Desktop Runtime
+#   ProxyDivert-M.N.K-win-x64-api-mcp-standalone.zip     local API + MCP, self-contained (no runtime needed)
+#   ProxyDivert-M.N.K-win-x64-api-mcp-needs-dotnet8.zip  local API + MCP, needs .NET 8 Desktop + ASP.NET Core Runtime
+#   ProxyDivert-M.N.K-win-x64-standalone.zip             no local API (-p:EnableLocalApi=false), self-contained
+#   ProxyDivert-M.N.K-win-x64-needs-dotnet8.zip          no local API, needs only the .NET 8 Desktop Runtime
+# The notes start with a table explaining these four downloads.
 # GitHub does not start this workflow when more than 3 tags are pushed at once: push tags one by one.
 
 on:
@@ -83,10 +84,10 @@ jobs:
           # The suffix is also the zip name's tail (see the header). obj/ is shared between the runs,
           # so each publish restores again for its own EnableLocalApi/self-contained combination.
           $variants = @(
-            @{ Suffix = 'win-x64';         Api = 'true';  SelfContained = 'true'  }
-            @{ Suffix = 'win-x64-fd';      Api = 'true';  SelfContained = 'false' }
-            @{ Suffix = 'lite-win-x64';    Api = 'false'; SelfContained = 'true'  }
-            @{ Suffix = 'lite-win-x64-fd'; Api = 'false'; SelfContained = 'false' }
+            @{ Suffix = 'win-x64-api-mcp-standalone';    Api = 'true';  SelfContained = 'true'  }
+            @{ Suffix = 'win-x64-api-mcp-needs-dotnet8'; Api = 'true';  SelfContained = 'false' }
+            @{ Suffix = 'win-x64-standalone';            Api = 'false'; SelfContained = 'true'  }
+            @{ Suffix = 'win-x64-needs-dotnet8';         Api = 'false'; SelfContained = 'false' }
           )
           foreach ($v in $variants) {
             dotnet publish src/ProxyDivert/ProxyDivert.csproj -c Release -o "publish/$($v.Suffix)" `
@@ -107,7 +108,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           # The SDK may append '+<commit sha>' to the product version; the tag must match the rest.
-          $ver = ((Get-Item publish/win-x64/ProxyDivert.exe).VersionInfo.ProductVersion -split '\+')[0]
+          $ver = ((Get-Item publish/win-x64-standalone/ProxyDivert.exe).VersionInfo.ProductVersion -split '\+')[0]
           $tag = $env:GITHUB_REF_NAME
           if ($ver -notmatch '^\d+\.\d+\.\d+$' -or "v$ver" -ne $tag) { throw "Built version '$ver' does not match tag '$tag'" }
           $zips = foreach ($dir in Get-ChildItem publish -Directory) {
@@ -140,6 +141,24 @@ jobs:
           $notes = $notes -replace '__REPO__', "$($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)"
           if ($prevTag) { $notes = "$notes`n`n**Full changelog**: $($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)/compare/$($prevTag.Trim())...$tag" }
           if ([string]::IsNullOrWhiteSpace($notes)) { $notes = "Release $tag" }
+          $ver = $env:VERSION
+          $downloads = @(
+            '## Which file to download'
+            ''
+            'All builds are Windows x64. Unzip and run `ProxyDivert.exe` (it asks for administrator rights).'
+            ''
+            '| File | Local API + MCP | .NET runtime |'
+            '|---|---|---|'
+            "| ``ProxyDivert-$ver-win-x64-standalone.zip`` | No | Included, nothing to install (**pick this if unsure**) |"
+            "| ``ProxyDivert-$ver-win-x64-needs-dotnet8.zip`` | No | Install [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |"
+            "| ``ProxyDivert-$ver-win-x64-api-mcp-standalone.zip`` | Yes | Included, nothing to install |"
+            "| ``ProxyDivert-$ver-win-x64-api-mcp-needs-dotnet8.zip`` | Yes | Install [.NET 8 Desktop Runtime + ASP.NET Core Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |"
+            ''
+            '- **Local API + MCP**: a built-in HTTP API (Swagger) and MCP server, so scripts or AI agents can control ProxyDivert. Skip it if you only use the window.'
+            '- **standalone** zips are larger because they carry the .NET runtime; **needs-dotnet8** zips are small but need that runtime installed first.'
+            ''
+          ) -join "`n"
+          $notes = "$downloads`n$notes"
           Set-Content -Path RELEASE_NOTES.md -Value $notes -Encoding utf8
 
           # gh is a native command: a non-zero exit does not throw under 'Stop', so check by hand.
