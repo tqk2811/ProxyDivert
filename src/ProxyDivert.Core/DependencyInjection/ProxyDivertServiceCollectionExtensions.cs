@@ -2,6 +2,7 @@ using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using ProxyDivert.Core.Configuration;
 using ProxyDivert.Core.Engine;
 using ProxyDivert.Core.Hosting;
 using ProxyDivert.Core.Logging;
@@ -71,6 +72,9 @@ public static class ProxyDivertServiceCollectionExtensions
             builder.AddProvider(provider);
         });
 
+        // Read when the first pump is built, not here: a host that never starts the engine (a test)
+        // should not leave the file behind.
+        services.TryAddSingleton(_ => new PumpLatencyAlertStore().LoadOrCreate());
         services.AddWinDivertRedirect();
         services.AddWinDivertProcessControl();
 
