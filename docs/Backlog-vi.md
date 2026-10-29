@@ -4,6 +4,34 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 
 Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát toàn repo ngày 2026-09-08, trước đây nằm trong `docs/FixList-vi.md` (lịch sử: `git log -p -- docs/FixList-vi.md`). A = lỗi tiềm ẩn ProxyDivert, B = WinDivert, C = cách dùng VpnClient, D = TqkLibrary.Proxy, E = thiết kế (OOP, tái sử dụng, test). Mức: `Cao` = mất dữ liệu / mất mạng / rò tài nguyên tích luỹ trong dùng bình thường; `Vừa` = sai trong tình huống thường gặp nhưng có đường tránh; `Thấp` = hiếm gặp hoặc chỉ tốn tài nguyên; với mục E: `Must` = đã gây lỗi thật hoặc chặn việc mở rộng đã dự định, `Should` = giảm trùng lặp hoặc cho phép test, `Nice` = sạch hơn, không đổi hành vi. Link của các mục này được đối chiếu lại với code ngày 2026-10-09; link không có số dòng (nhóm D7 và phần lớn E) là chưa dò lại dòng, tra theo tên ký hiệu.
 
+### [Thấp] VpnClient: TcpConnection gọi SendIp khi đang giữ `_sync`
+
+- **Vấn đề:** `EmitSegment` gọi `_sendIp` trong các khối `lock (_sync)`, và egress của `TcpIpStack` giờ ghi channel ngay trên thread đó khi rảnh. Channel nào raise `InboundIpPacket` đồng bộ bên trong `WriteIpPacketAsync` (vd một switch nội bộ nối hai `VirtualHost`) sẽ làm gói trả lời vào lại connection giữa lúc đang cập nhật, hoặc deadlock hai connection. Hiện chưa channel nào trong repo làm vậy; hợp đồng đã ghi ở doc `IPacketChannel.WriteIpPacketAsync`.
+- **Vị trí:** `libs/TqkLibrary.VpnClient/src/TqkLibrary.VpnClient.IpStack/Tcp/TcpConnection.cs` (`EmitSegment`), `libs/TqkLibrary.VpnClient/src/TqkLibrary.VpnClient.Ethernet/VirtualHost.cs` (raise inbound từ switch).
+- **Vì sao:** cách chắc nhất là TcpConnection gom gói ra trong lock và chỉ gửi sau khi nhả `_sync`; hoặc thêm Debug.Assert/test chặn channel giao inbound đồng bộ.
+- **Ngày ghi:** 2026-10-29.
+
+### [Thấp] VpnClient: BouncyCastle TLS/DTLS chạy chế độ chặn trên thread riêng
+
+- **Vấn đề:** `BouncyCastleTlsByteStream` và `DtlsDatagramTransport` giữ một thread đọc riêng (TLS thêm một thread ghi) cho mỗi tunnel vì dùng API chặn của BouncyCastle; thread nhận DTLS poll 250 ms để thấy dispose. Bên trong `dtls.Receive`, BouncyCastle có thể tự gửi (alert, retransmit) mà không qua `_sendLock` (có từ trước).
+- **Vị trí:** `libs/TqkLibrary.VpnClient/src/TqkLibrary.VpnClient.Transport.Tls/BouncyCastleTlsByteStream.cs`, `libs/TqkLibrary.VpnClient/src/TqkLibrary.VpnClient.Transport.Dtls/DtlsDatagramTransport.cs`.
+- **Vì sao:** chế độ không chặn (`TlsClientProtocol()` + `OfferInput`/`ReadOutput`) trên socket async bỏ được cả thread lẫn semaphore và poll; công lớn (viết lại handshake + đường dữ liệu, cần test với server thật).
+- **Ngày ghi:** 2026-10-29.
+
+### [Thấp] VpnClient: ARP thất bại không được cache
+
+- **Vấn đề:** gateway chết thì mỗi gói ra chờ trọn timeout ARP (khoảng 3 s: RequestTimeout 1 s × 3 lần) trong `VirtualHost.WriteIpPacketAsync`, giữ cả hàng egress của stack; queue đầy thì phần dư bị bỏ (có đếm, có log Warning).
+- **Vị trí:** `libs/TqkLibrary.VpnClient/src/TqkLibrary.VpnClient.Ethernet/VirtualHost.cs`, `ArpResolver`.
+- **Vì sao:** cache âm ngắn (vài giây) để gói sau báo lỗi ngay thay vì chờ lại.
+- **Ngày ghi:** 2026-10-29.
+
+### [Thấp] VpnClient: các chỗ còn bọc lệnh chặn trong `Task.Run`
+
+- **Vấn đề:** cùng kiểu async-over-sync (giữ một thread pool thread trong lúc chờ) còn ở `OpenVpnBouncyCastleControlTls`, `SshClient`, `PptpGreChannel` và các channel IpEncap. Khi thread pool bị nghẽn thì các đường này chậm hoặc đứng.
+- **Vị trí:** `libs/TqkLibrary.VpnClient/src/TqkLibrary.VpnClient.OpenVpn/OpenVpnBouncyCastleControlTls.cs`, `TqkLibrary.VpnClient.Ssh/SshClient.cs`, `TqkLibrary.VpnClient.Pptp/Gre/PptpGreChannel.cs`, `TqkLibrary.VpnClient.IpEncap/*Channel.cs` (grep `Task.Run`).
+- **Vì sao:** làm theo khuôn đã dùng cho TLS/DTLS/RawIp (thread riêng cho vòng đọc chặn, hoặc API socket async thật).
+- **Ngày ghi:** 2026-10-29.
+
 ### [Thấp] API cục bộ: trả 500 khi engine áp cấu hình lỗi dù thay đổi đã lưu
 
 - **Vấn đề:** `EditAsync` thay danh sách trong `AppServices.Config` và ghi file trước khi chờ `Session.ApplyAsync`. Nếu bước áp vào engine ném lỗi, request trả 500 nhưng thay đổi đã nằm trong file và trên cửa sổ. Tool gọi lại thì tạo trùng (POST không kèm id).
