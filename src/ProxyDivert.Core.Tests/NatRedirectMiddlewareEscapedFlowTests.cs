@@ -64,7 +64,7 @@ public class NatRedirectMiddlewareEscapedFlowTests
             NullLogger<NatRedirectMiddleware>.Instance, flowsToReset: flowsToReset);
 
     [Fact]
-    public async Task A_flow_the_host_asked_to_reset_is_answered_with_an_rst_and_its_packet_dropped()
+    public void A_flow_the_host_asked_to_reset_is_answered_with_an_rst_and_its_packet_dropped()
     {
         var tracker = new FakeTracker(TheFlow);
         var injector = new RecordingInjector();
@@ -74,7 +74,7 @@ public class NatRedirectMiddlewareEscapedFlowTests
         PacketContext ctx = Context(DataPacket(), injector);
         bool nextCalled = false;
 
-        await middleware.InvokeAsync(ctx, _ => { nextCalled = true; return Task.CompletedTask; });
+        middleware.Invoke(ctx, _ => { nextCalled = true; });
 
         Assert.Equal(PacketDisposition.Drop, ctx.Disposition);
         Assert.False(nextCalled);
@@ -94,7 +94,7 @@ public class NatRedirectMiddlewareEscapedFlowTests
 
     // The default for a pre-existing flow is unchanged: it passes, and the host is warned once.
     [Fact]
-    public async Task A_flow_nobody_asked_about_still_passes_through()
+    public void A_flow_nobody_asked_about_still_passes_through()
     {
         var tracker = new FakeTracker(TheFlow);
         var injector = new RecordingInjector();
@@ -102,7 +102,7 @@ public class NatRedirectMiddlewareEscapedFlowTests
         PacketContext ctx = Context(DataPacket(), injector);
         bool nextCalled = false;
 
-        await middleware.InvokeAsync(ctx, _ => { nextCalled = true; return Task.CompletedTask; });
+        middleware.Invoke(ctx, _ => { nextCalled = true; });
 
         Assert.Equal(PacketDisposition.Pass, ctx.Disposition);
         Assert.True(nextCalled);
@@ -113,7 +113,7 @@ public class NatRedirectMiddlewareEscapedFlowTests
     // connection. This is what keeps a flow whose SYN was still in flight when the list was built
     // from being reset by mistake.
     [Fact]
-    public async Task A_syn_is_redirected_even_when_the_flow_is_listed()
+    public void A_syn_is_redirected_even_when_the_flow_is_listed()
     {
         var tracker = new FakeTracker(TheFlow);
         var injector = new RecordingInjector();
@@ -123,7 +123,7 @@ public class NatRedirectMiddlewareEscapedFlowTests
         NatRedirectMiddleware middleware = Middleware(nat, tracker, flowsToReset);
         PacketContext ctx = Context(SynPacket(), injector);
 
-        await middleware.InvokeAsync(ctx, _ => Task.CompletedTask);
+        middleware.Invoke(ctx, _ => { });
 
         Assert.Equal(PacketDisposition.Modified, ctx.Disposition);
         Assert.Empty(injector.Packets);

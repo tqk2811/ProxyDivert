@@ -373,11 +373,11 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 - **Cách sửa:** `IRedirectHost { HandleTcpAsync(session, conn, ct); UdpVerdict HandleUdp(dg); bool ShouldRedirectUdp(target); }` + `IProcessSelector` + `ProcessScopeKind` enum tường minh; `RedirectOptions` chỉ còn dữ liệu; `InitialProcessIds` thay sentinel 0, bỏ fallback root pid. Giữ overload extension nhận lambda cho Demo.
 - **Ngày ghi:** 2026-09-08.
 
-### E4.4. Packet model: `WinDivertAddress` rò lên middleware, chữ ký async mời làm sai, `MarkModified` tách rời (Should)
+### E4.4. Packet model: `WinDivertAddress` rò lên middleware, `MarkModified` tách rời (Should)
 
-- **Vấn đề:** `PacketContext.Address` là struct native public, `IPacketInjector.Inject(..., in WinDivertAddress)`, magic `IfIdx = 1`, dựng address inbound trùng ở `NatRedirectMiddleware` và `DnsOverHttpsMiddleware`. `IPacketMiddleware.InvokeAsync` trả `Task` nhưng pump `GetAwaiter().GetResult()` và cấm await I/O: consumer NuGet viết `await http.GetAsync()` sẽ treo mạng cả máy. `SetSource/SetDestination` ghi buffer nhưng phải nhớ gọi `MarkModified` riêng; setter trên header view struct không có tác dụng (`TcpHeader.cs`).
+- **Vấn đề:** `PacketContext.Address` là struct native public, `IPacketInjector.Inject(..., in WinDivertAddress)`, magic `IfIdx = 1`, dựng address inbound trùng ở `NatRedirectMiddleware` và `DnsOverHttpsMiddleware`. `SetSource/SetDestination` ghi buffer nhưng phải nhớ gọi `MarkModified` riêng; setter trên header view struct không có tác dụng (`TcpHeader.cs`).
 - **Vị trí:** `libs/TqkLibrary.WinDivert/src/TqkLibrary.WinDivert/Pipeline/Models/PacketContext.cs`, `Pipeline/PacketPump.cs`, `Packet/Models/ParsedPacket.cs`, `Packet/Models/TcpHeader.cs`.
-- **Cách sửa:** value type `PacketRoute { Direction; Loopback; InterfaceRef; Family }` với factory `LoopbackOutbound(family)`/`InboundOn(iface)`; `PacketPump` là nơi duy nhất map sang `WinDivertAddress`; struct native `internal`. `void Invoke(PacketContext, PacketDelegate next)` đồng bộ (middleware built-in đều đã đồng bộ nên đổi cơ học), `IPacketInjector` là đường duy nhất cho việc chậm. Bỏ setter trên view; ghi qua `ctx.Rewrite(...)` tự đặt `Modified`.
+- **Cách sửa:** value type `PacketRoute { Direction; Loopback; InterfaceRef; Family }` với factory `LoopbackOutbound(family)`/`InboundOn(iface)`; `PacketPump` là nơi duy nhất map sang `WinDivertAddress`; struct native `internal`. Bỏ setter trên view; ghi qua `ctx.Rewrite(...)` tự đặt `Modified`.
 - **Ngày ghi:** 2026-09-08.
 
 ### E4.5. Redirect phụ thuộc cứng SecureDns/Inspection, không thêm được feature thứ 6 (Should)
