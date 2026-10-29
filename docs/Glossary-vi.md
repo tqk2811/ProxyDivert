@@ -635,3 +635,7 @@ Thiết bị trên đường truyền (của nhà mạng hoặc tường lửa) 
 ## MMCSS (Multimedia Class Scheduler Service)
 
 Dịch vụ của Windows giúp thread cần phản hồi tức thì (âm thanh, video) không bị việc thường chen lấn. Thread đăng ký với MMCSS theo một loại tác vụ (vd "Pro Audio") thì được Windows đẩy priority lên vùng realtime (16–26), cao hơn mọi thread thường, mà không phải chuyển cả tiến trình sang Realtime. Để máy không đơ, MMCSS luôn chừa lại một phần mỗi chu kỳ cho thread thường (`SystemResponsiveness`, mặc định 20%). Khi đã đăng ký, MMCSS tự quản lý priority của thread và ghi đè giá trị đặt bằng `SetThreadPriority`. ProxyDivert đăng ký MMCSS cho thread pump của các handle NETWORK, để gói của cả máy không phải chờ khi CPU bận.
+
+## BouncyCastle
+
+Thư viện mật mã mã nguồn mở viết bằng C# thuần (gói NuGet `BouncyCastle.Cryptography`, namespace `Org.BouncyCastle.*`), có bản Java gốc. Nó cài đủ các thuật toán và giao thức mà thư viện chuẩn của .NET (BCL) thiếu hoặc không có trên `netstandard2.0`: X25519, BLAKE2s, ChaCha20-Poly1305, AES-GCM, cùng TLS và DTLS chạy hoàn toàn trong code C#. Submodule VpnClient dùng nó cho mật mã Noise (WireGuard, Tailscale), cho kênh điều khiển `tls-ekm` của OpenVPN (cần lấy key theo RFC 5705, `SslStream` không làm được) và cho DTLS. API TLS/DTLS của nó chủ yếu là kiểu **chặn**: `TlsClientProtocol(stream)` gọi `Read`/`Write` đồng bộ, và `DatagramTransport` của DTLS chỉ có `Send`/`Receive` đồng bộ. Vì vậy các lớp nối từ nó sang tunnel async buộc phải giữ hàm đồng bộ.
