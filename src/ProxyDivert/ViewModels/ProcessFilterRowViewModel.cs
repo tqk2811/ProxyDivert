@@ -28,12 +28,22 @@ public sealed partial class ProcessFilterRowViewModel : ObservableObject
 
     public Guid Id => Model.Id;
 
+    /// <summary>
+    /// False while the filter names no policy. Such a filter does not run whatever its switch
+    /// says, so the switch is shown off and locked until a policy is ticked.
+    /// </summary>
+    public bool HasPolicy => Model.PolicyIds.Count > 0;
+
+    /// <summary>
+    /// The switch as the grid shows it: off while there is no policy, without touching what the
+    /// user set, so ticking a policy brings the filter back the way it was left.
+    /// </summary>
     public bool IsEnabled
     {
-        get => Model.IsEnabled;
+        get => Model.IsEnabled && HasPolicy;
         set
         {
-            if (value == Model.IsEnabled) return;
+            if (!HasPolicy || value == Model.IsEnabled) return;
             Model.IsEnabled = value;
             OnPropertyChanged();
         }

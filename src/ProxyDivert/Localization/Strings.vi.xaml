@@ -38,6 +38,7 @@
 
     <sys:String x:Key="Str.Process.Rules">Luật tiến trình</sys:String>
     <sys:String x:Key="Str.Process.RuleOrderHint">Xét từ trên xuống: tiến trình khớp bộ lọc nào trước thì theo bộ lọc đó. Kéo tay cầm ở đầu dòng để sắp lại.</sys:String>
+    <sys:String x:Key="Str.Process.NoPolicyHint">Chưa tick policy nào nên filter này không chạy. Mở Edit và tick một policy để bật lại.</sys:String>
     <sys:String x:Key="Str.Process.Applied">Tiến trình đang áp dụng</sys:String>
     <sys:String x:Key="Str.Process.Conditions">Điều kiện</sys:String>
     <sys:String x:Key="Str.Process.Edit">Sửa…</sys:String>

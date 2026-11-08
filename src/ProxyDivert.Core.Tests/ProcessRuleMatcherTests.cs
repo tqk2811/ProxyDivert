@@ -310,6 +310,18 @@ public class ProcessRuleMatcherTests
         Assert.False(ProcessRuleMatcher.IsMatch(Rule(Process(string.Empty)), "chrome", @"C:\chrome.exe"));
     }
 
+    // Besides its conditions a filter carries one more, unwritten: it names at least one policy.
+    // A filter with none has nowhere to send a process, so it leaves it to the filters below.
+    [Fact]
+    public void A_filter_with_no_policy_matches_nothing()
+    {
+        ProcessRule rule = Rule(ProcessMatcherType.ExeName, "chrome");
+        Assert.True(ProcessRuleMatcher.IsMatch(rule, "chrome", null));
+
+        rule.PolicyIds.Clear();
+        Assert.False(ProcessRuleMatcher.IsMatch(rule, "chrome", null));
+    }
+
     [Fact]
     public void A_filter_with_no_condition_at_all_matches_nothing()
     {

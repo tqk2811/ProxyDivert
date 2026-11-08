@@ -97,15 +97,10 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
         rule.PolicyOrder = Policies.Select(c => c.Policy.Id).ToList();
     }
 
-    // Ticking nothing would leave the filter catching processes and then having no rules to route
-    // them by — they would fall through to the untracked default, which is Direct. That is the one
-    // outcome a redirector must not produce by accident, so the first policy stands in.
+    // Ticking nothing is saved as nothing: a filter with no policy does not run at all, so the
+    // processes it would have caught are left to the filters below it.
     private List<Guid> ChosenPolicyIds()
-    {
-        List<Guid> chosen = Policies.Where(p => p.IsSelected).Select(p => p.Policy.Id).ToList();
-        if (chosen.Count == 0 && Policies.Count > 0) chosen.Add(Policies[0].Policy.Id);
-        return chosen;
-    }
+        => Policies.Where(p => p.IsSelected).Select(p => p.Policy.Id).ToList();
 
     // The order the rule was left in — every row, ticked or not — then everything it does not
     // mention, so the whole set is there to be ticked without a second list to go to.
@@ -130,6 +125,12 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
             if (!Policies.Any(c => c.Policy.Id == policy.Id))
                 Policies.Add(new PolicyChoice(this, policy));
 
+        // The built-in Default matches everything, so anything ranked after it would never be
+        // reached. It is pinned to the bottom whatever the saved order says; ticking it stays the
+        // user's choice.
+        PolicyChoice? builtIn = Policies.FirstOrDefault(c => c.Policy.IsBuiltIn);
+        if (builtIn != null) Policies.Move(Policies.IndexOf(builtIn), Policies.Count - 1);
+
         // Only the tick: Rank is written by RenumberPolicies itself, and reacting to it would both
         // loop back into it and call opening the window an edit.
         foreach (PolicyChoice choice in Policies)
@@ -151,11 +152,11 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
 
     private void MovePolicy(PolicyChoice? choice, int delta)
     {
-        if (choice is null) return;
+        if (choice is null || choice.Policy.IsBuiltIn) return;
 
         int index = Policies.IndexOf(choice);
         int target = index + delta;
-        if (index < 0 || target < 0 || target >= Policies.Count) return;
+        if (index < 0 || target < 0 || target > LastMovableIndex) return;
 
         Policies.Move(index, target);
         RenumberPolicies();
@@ -171,17 +172,21 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
     private void MovePolicyTo(PolicyChoice choice, int index)
     {
         int from = Policies.IndexOf(choice);
-        if (from < 0) return;
+        if (from < 0 || choice.Policy.IsBuiltIn) return;
 
         if (index > from) index--;
 
-        index = Math.Clamp(index, 0, Policies.Count - 1);
+        index = Math.Clamp(index, 0, LastMovableIndex);
         if (index == from) return;
 
         Policies.Move(from, index);
         RenumberPolicies();
         IsDirty = true;
     }
+
+    // The last place a user policy may go: just above the pinned Default, when there is one.
+    private int LastMovableIndex
+        => Policies.Count - (Policies.Count > 0 && Policies[^1].Policy.IsBuiltIn ? 2 : 1);
 
     // The number shown against a ticked row, and the sentence under the list. Both are derived from
     // the list, so they are recomputed rather than maintained.
@@ -224,6 +229,8 @@ public sealed partial class ProcessFilterViewModel : ObservableObject
         public bool CanAccept(object source, DropWhere where)
             => source is PolicyChoice moved
             && !ReferenceEquals(moved, this)
+            && !moved.Policy.IsBuiltIn
+            && !(Policy.IsBuiltIn && where == DropWhere.After)
             && where is DropWhere.Before or DropWhere.After;
 
         public void Accept(object source, DropWhere where)

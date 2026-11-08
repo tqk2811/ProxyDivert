@@ -49,6 +49,7 @@ public class ProcessFilterRowViewModelTests
     public void EditingACell_ReachesTheFilterTheEngineWillBeGivenACopyOf()
     {
         ProcessRule model = Filter("one.exe");
+        model.PolicyIds.Add(Guid.NewGuid());
         var row = new ProcessFilterRowViewModel(model);
 
         row.Name = "renamed";
@@ -71,5 +72,26 @@ public class ProcessFilterRowViewModelTests
         row.Name = "  ";
 
         Assert.Equal("one.exe", model.Name);
+    }
+
+    // A filter with no policy does not run, so its switch shows off and cannot be flicked; what the
+    // user had set is kept for when a policy is ticked again.
+    [Fact]
+    public void WithNoPolicy_TheSwitchReadsOffAndIgnoresClicks_KeepingWhatWasSet()
+    {
+        ProcessRule model = Filter("one.exe");
+        model.IsEnabled = true;
+        var row = new ProcessFilterRowViewModel(model);
+
+        Assert.False(row.HasPolicy);
+        Assert.False(row.IsEnabled);
+
+        row.IsEnabled = false;
+        Assert.True(model.IsEnabled);
+
+        model.PolicyIds.Add(Guid.NewGuid());
+        row.Refresh();
+        Assert.True(row.HasPolicy);
+        Assert.True(row.IsEnabled);
     }
 }

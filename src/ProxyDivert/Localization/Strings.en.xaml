@@ -38,6 +38,7 @@
 
     <sys:String x:Key="Str.Process.Rules">Process rules</sys:String>
     <sys:String x:Key="Str.Process.RuleOrderHint">Tried from the top down: a process is caught by the first filter that matches it. Drag a row by its grip to rearrange them.</sys:String>
+    <sys:String x:Key="Str.Process.NoPolicyHint">No policy is ticked, so this filter does not run. Edit it and tick a policy to turn it on.</sys:String>
     <sys:String x:Key="Str.Process.Applied">Processes being redirected</sys:String>
     <sys:String x:Key="Str.Process.Conditions">Conditions</sys:String>
     <sys:String x:Key="Str.Process.Edit">Edit…</sys:String>

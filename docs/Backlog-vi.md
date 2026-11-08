@@ -4,13 +4,13 @@ Việc còn treo và việc nên làm. Xử lý xong mục nào thì xoá mục 
 
 Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát toàn repo ngày 2026-09-08, trước đây nằm trong `docs/FixList-vi.md` (lịch sử: `git log -p -- docs/FixList-vi.md`). A = lỗi tiềm ẩn ProxyDivert, B = WinDivert, C = cách dùng VpnClient, D = TqkLibrary.Proxy, E = thiết kế (OOP, tái sử dụng, test). Mục có chỗ sửa chính nằm trong một thư viện đã chuyển sang backlog của submodule đó: [TqkLibrary.WinDivert](../libs/TqkLibrary.WinDivert/docs/Backlog-vi.md), [TqkLibrary.Proxy](../libs/TqkLibrary.Proxy/docs/Backlog-vi.md), [TqkLibrary.VpnClient](../libs/TqkLibrary.VpnClient/.docs/Backlog-vi.md); file này giữ mục sửa ở `src/ProxyDivert.*` và mục trải đều app lẫn thư viện. Mức: `Cao` = mất dữ liệu / mất mạng / rò tài nguyên tích luỹ trong dùng bình thường; `Vừa` = sai trong tình huống thường gặp nhưng có đường tránh; `Thấp` = hiếm gặp hoặc chỉ tốn tài nguyên; với mục E: `Must` = đã gây lỗi thật hoặc chặn việc mở rộng đã dự định, `Should` = giảm trùng lặp hoặc cho phép test, `Nice` = sạch hơn, không đổi hành vi. Link của các mục này được đối chiếu lại với code ngày 2026-10-09; link không có số dòng (nhóm D7 và phần lớn E) là chưa dò lại dòng, tra theo tên ký hiệu.
 
-### A10. Các tab không đồng bộ danh sách với nhau (Cao, còn hở)
+### A10. `Reload()` dựng lại toàn bộ row VM mỗi lần đổi tab (Thấp)
 
-- **Vấn đề:** đã sửa bằng cách `MainViewModel` gọi `Reload()` của ba tab khi đổi tab (giữ selection khi nạp lại); phần tham chiếu treo khi xoá policy/outbound do mô hình dữ liệu bịt. Còn hở: chưa chạy thử trên UI thật, không test nào chạm `Reload()`; fallback `Policies[0]` ở `ProcessFilterViewModel` vẫn còn, chỉ an toàn nhờ danh sách đã nạp lại; `Reload()` dựng lại toàn bộ row VM mỗi lần đổi tab nên hàng nào sau này giữ state riêng (không proxy xuống model) sẽ mất state.
-- **Vị trí:** [MainViewModel.cs:291-334](../src/ProxyDivert/ViewModels/MainViewModel.cs#L291-L334), [ProcessesViewModel.cs:104](../src/ProxyDivert/ViewModels/ProcessesViewModel.cs#L104), [RulesViewModel.cs:66](../src/ProxyDivert/ViewModels/RulesViewModel.cs#L66), [OutboundsViewModel.cs:64](../src/ProxyDivert/ViewModels/OutboundsViewModel.cs#L64), [ProcessFilterViewModel.cs:105-106](../src/ProxyDivert/ViewModels/ProcessFilterViewModel.cs#L105-L106).
-- **Vì sao:** tạo policy rồi gán cho tiến trình là luồng thao tác chính của app.
-- **Cách sửa:** chạy thử UI (thêm policy ở Rules thì editor filter tab Processes thấy ngay; xoá policy đang được filter dùng) và thêm một test cho `Reload()` giữ selection.
-- **Ngày ghi:** 2026-09-08 (kiểm lại 2026-09-11).
+- **Vấn đề:** phần đồng bộ danh sách giữa các tab đã xong (chạy thử UI 2026-11-08, có `TabReloadTests`). Còn lại: `Reload()` của ba tab tạo mới mọi row VM mỗi lần đổi tab, nên hàng nào sau này giữ state riêng (không chuyển tiếp xuống model) sẽ mất state đó; `OutboundsViewModel` đã phải tự áp lại trạng thái VPN.
+- **Vị trí:** [ProcessesViewModel.cs:104](../src/ProxyDivert/ViewModels/ProcessesViewModel.cs#L104), [RulesViewModel.cs:66](../src/ProxyDivert/ViewModels/RulesViewModel.cs#L66), [OutboundsViewModel.cs:64](../src/ProxyDivert/ViewModels/OutboundsViewModel.cs#L64).
+- **Vì sao:** chưa gây lỗi, nhưng là bẫy cho lần thêm state vào row.
+- **Cách sửa:** khi có row giữ state riêng thì đổi sang đối chiếu theo Id (giữ row cũ, chỉ thêm/bớt).
+- **Ngày ghi:** 2026-09-08 (thu hẹp 2026-11-08).
 
 ### A21. `OutboundRegistry.DropAsync` bỏ rơi instance đang dựng dở (Cao)
 

@@ -57,24 +57,30 @@ public class AppConfigIntegrityTests
         Assert.Equal(new[] { config.Policies[0].Id }, filter.PolicyIds);
     }
 
-    // The dangerous direction. A filter still catches its processes after losing its last policy —
-    // it just has no rules for them, so every connection resolves to nothing and leaves direct,
-    // under the user's own address, with the window showing a filter that looks configured.
+    // A filter that loses its last policy is left with none rather than handed one the user never
+    // picked — and a filter with no policy does not run, so it claims nothing.
     [Fact]
-    public void AFilterLeftWithNoPolicy_IsGivenOneRatherThanQuietlyGoingDirect()
+    public void AFilterLeftWithNoPolicy_StaysEmptyAndStopsMatching()
     {
         AppConfig config = AppConfig.CreateDefault();
         RoutingPolicy doomed = Policy("only one it used");
         config.Policies.Add(doomed);
 
-        var filter = new ProcessRule { Id = Guid.NewGuid(), Name = "game", PolicyIds = { doomed.Id } };
+        var filter = new ProcessRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "game",
+            PolicyIds = { doomed.Id },
+            Condition = ConditionGroup.CreateDefault("game"),
+        };
         config.ProcessRules.Add(filter);
+        Assert.True(ProxyDivert.Core.Processes.ProcessRuleMatcher.IsMatch(filter, "game", null));
 
         config.RemovePolicy(doomed.Id);
 
-        Guid replacement = Assert.Single(filter.PolicyIds);
-        Assert.Equal(config.Policies[0].Id, replacement);
-        Assert.Contains(replacement, filter.PolicyOrder);
+        Assert.Empty(filter.PolicyIds);
+        Assert.Empty(filter.PolicyOrder);
+        Assert.False(ProxyDivert.Core.Processes.ProcessRuleMatcher.IsMatch(filter, "game", null));
     }
 
     [Fact]
@@ -203,7 +209,7 @@ public class AppConfigIntegrityTests
 
         Assert.DoesNotContain(gone, filter.PolicyIds);
         Assert.DoesNotContain(gone, filter.PolicyOrder);
-        Assert.Equal(config.Policies[0].Id, Assert.Single(filter.PolicyIds));
+        Assert.Empty(filter.PolicyIds);
     }
 
     [Fact]
@@ -451,23 +457,5 @@ public class AppConfigIntegrityTests
 
         RouteDecision decision = resolver.Resolve(new RouteTarget(42, System.Net.IPAddress.Parse("1.2.3.4"), 8080, null));
         Assert.Equal(proxyId, decision.Outbound.Id);
-    }
-
-    // Default claims everything, so a filter that lost its last policy must not fall back to it
-    // while the user has a policy of their own.
-    [Fact]
-    public void AFilterLosingItsLastPolicy_FallsBackToTheUsersPolicy_NotTheDefault()
-    {
-        AppConfig config = AppConfig.CreateDefault();
-        RoutingPolicy mine = Policy("mine");
-        RoutingPolicy doomed = Policy("doomed");
-        config.Policies.Add(mine);
-        config.Policies.Add(doomed);
-        var filter = new ProcessRule { Id = Guid.NewGuid(), Name = "x", PolicyIds = { doomed.Id } };
-        config.ProcessRules.Add(filter);
-
-        Assert.True(config.RemovePolicy(doomed.Id));
-
-        Assert.Equal(mine.Id, Assert.Single(filter.PolicyIds));
     }
 }
