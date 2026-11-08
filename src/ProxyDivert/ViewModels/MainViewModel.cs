@@ -1,17 +1,19 @@
 ﻿using System;
-using System.Security.Principal;
+using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ProxyDivert.Core.Processes.Models;
 using ProxyDivert.Localization;
 using ProxyDivert.Services;
 using ProxyDivert.Themes;
 
 namespace ProxyDivert.ViewModels;
 
-// Window-level state: the engine switch, the admin warning, and the tab view models.
+// Window-level state, built with the window and disposed with it: the tab view models and what
+// the window shows of the engine switch, which itself lives in EngineController.
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly AppServices _services;
@@ -38,29 +40,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public LogViewModel Log { get; }
     public SettingsViewModel Settings { get; }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsRunning))]
-    [NotifyPropertyChangedFor(nameof(IsSwitchedOn))]
-    [NotifyPropertyChangedFor(nameof(IsBusy))]
-    [NotifyCanExecuteChangedFor(nameof(ToggleEngineCommand))]
-    private EngineState _state;
+    /// <summary>The engine switch, shared with the tray and the local API; outlives this window.</summary>
+    public EngineController Engine { get; }
+
+    public EngineState State => Engine.State;
 
     /// <summary>True only once redirection is actually happening.</summary>
-    public bool IsRunning => State == EngineState.Running;
+    public bool IsRunning => Engine.IsRunning;
 
-    /// <summary>
-    /// Where the knob sits: on the right unless redirection is fully off. It moves to the right the
-    /// moment Start is asked for and comes back only once Stop has finished, so the knob never
-    /// claims the engine is gone while its driver handles are still closing.
-    /// </summary>
-    public bool IsSwitchedOn => State != EngineState.Stopped;
+    /// <inheritdoc cref="EngineController.IsSwitchedOn"/>
+    public bool IsSwitchedOn => Engine.IsSwitchedOn;
 
-    /// <summary>
-    /// True while the engine is coming up or going down. The switch is painted a third colour and
-    /// refuses a second press: starting opens the driver and dials tunnels, and a click landing in
-    /// the middle of that would be asking for a stop of something that is not up yet.
-    /// </summary>
-    public bool IsBusy => State is EngineState.Starting or EngineState.Stopping;
+    /// <inheritdoc cref="EngineController.IsBusy"/>
+    public bool IsBusy => Engine.IsBusy;
 
     /// <summary>
     /// Which tab is showing. Bound so that switching tabs can refresh what the new one displays.
@@ -68,9 +60,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private int _selectedTabIndex;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasNotice))]
-    private string? _statusMessage;
+    public string? StatusMessage => Engine.StatusMessage;
 
     /// <summary>Whether there is anything for the notice strip to say; it is hidden otherwise.</summary>
     public bool HasNotice => !IsElevated || !string.IsNullOrWhiteSpace(StatusMessage);
@@ -84,35 +74,42 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     // WinDivert loads a kernel driver, so without elevation the engine cannot start at all. The
     // window says so up front instead of failing at the first click.
-    public bool IsElevated { get; }
+    public bool IsElevated => Engine.IsElevated;
 
     /// <summary>
-    /// Whether the close button hides the window instead of ending the process. Read straight from
+    /// Whether the close button only closes the window (the process stays in the tray) instead of
+    /// ending the process. Read straight from
     /// the configuration on every close rather than cached, so ticking the box in Settings changes
     /// what the button does at once.
     /// </summary>
     public bool MinimizeToTrayOnClose => _services.Config.MinimizeToTrayOnClose;
 
-    public MainViewModel(AppServices services)
+    private readonly CoalescedDispatcherAction _refreshApplied;
+
+    public MainViewModel(AppServices services, EngineController engine)
     {
         _services = services;
-        IsElevated = CheckElevated();
+        Engine = engine;
 
         Processes = new ProcessesViewModel(services);
         Outbounds = new OutboundsViewModel(services);
         Rules = new RulesViewModel(services);
         Connections = new ConnectionsViewModel(services);
         Log = new LogViewModel(services);
-        Settings = new SettingsViewModel(services);
+        Settings = new SettingsViewModel(services, engine);
 
         // One rebuild of the process tree per burst of events, not one per event: the engine
         // reports sixty processes one at a time, and the tree only needs to be read once after.
         // A save that merely re-routes processes attaches and detaches nothing, so it is reported
         // separately and refreshes the same way.
-        var refreshApplied = new CoalescedDispatcherAction(() => Processes.RefreshApplied());
-        services.Engine.ProcessAttached += _ => refreshApplied.Request();
-        services.Engine.ProcessDetached += _ => refreshApplied.Request();
-        services.Engine.ConfigurationApplied += () => refreshApplied.Request();
+        // Unhooked in Dispose: the engine outlives this view model, which is built per window.
+        _refreshApplied = new CoalescedDispatcherAction(() => Processes.RefreshApplied());
+        services.Engine.ProcessAttached += OnProcessAttachedOrDetached;
+        services.Engine.ProcessDetached += OnProcessAttachedOrDetached;
+        services.Engine.ConfigurationApplied += OnConfigurationApplied;
+        Engine.PropertyChanged += OnEnginePropertyChanged;
+        Engine.ConfigurationReplaced += OnConfigurationReplaced;
+        Settings.IsEngineRunning = Engine.IsRunning;
 
         // The button's tooltip is composed in code rather than written in XAML, so it is one of the
         // few things a dictionary swap does not reach on its own.
@@ -138,29 +135,44 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         HasPendingChanges = false;
     }
 
-#if LOCAL_API
-    /// <summary>
-    /// What the local API does after writing the configuration: the same as Save, then the grids
-    /// re-read the lists the request replaced.
-    /// </summary>
-    internal async Task SaveFromApiAsync()
+    private void OnProcessAttachedOrDetached(TrackedProcess _) => _refreshApplied.Request();
+
+    private void OnConfigurationApplied() => _refreshApplied.Request();
+
+    // The local API replaced the routing lists and saved them: the grids re-read the new lists.
+    private void OnConfigurationReplaced()
     {
-        Task applied = _services.SaveAndApply();
         ReloadAll();
         Rules.CheckPatterns();
         HasPendingChanges = false;
-        await applied;
     }
 
-    /// <summary>The engine switch, driven from the local API. Returns whether redirection is on afterwards.</summary>
-    internal async Task<bool> SetEngineRunningAsync(bool running)
+    private void OnEnginePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (running) await StartAsync();
-        else await StopAsync();
-        OnPropertyChanged(nameof(IsSwitchedOn));
-        return IsRunning;
+        switch (e.PropertyName)
+        {
+            case nameof(EngineController.State):
+                OnPropertyChanged(nameof(State));
+                OnPropertyChanged(nameof(IsRunning));
+                OnPropertyChanged(nameof(IsSwitchedOn));
+                OnPropertyChanged(nameof(IsBusy));
+                ToggleEngineCommand.NotifyCanExecuteChanged();
+                if (Engine.State is EngineState.Running or EngineState.Stopped)
+                {
+                    // Redirection came on or went off: the tree must say which processes are
+                    // redirected, a tunnel a live filter routes through may not be disconnected,
+                    // and the detection settings lock while it is on.
+                    Processes.RefreshApplied();
+                    Outbounds.RefreshVpnCommands();
+                    Settings.IsEngineRunning = Engine.IsRunning;
+                }
+                break;
+            case nameof(EngineController.StatusMessage):
+                OnPropertyChanged(nameof(StatusMessage));
+                OnPropertyChanged(nameof(HasNotice));
+                break;
+        }
     }
-#endif
 
     [RelayCommand]
     private void DiscardChanges()
@@ -197,105 +209,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     // One switch rather than two buttons, so there is one command: what it does is decided by what
     // the engine is doing now, not by which control was pressed. Asynchronous because starting
-    // opens the driver and stopping waits for it to let go — neither belongs on the thread that
-    // paints the window — and the command stays disabled until the switch has actually moved.
+    // opens the driver and stopping waits for it to let go, and the command stays disabled until
+    // the switch has actually moved.
     [RelayCommand(CanExecute = nameof(CanToggleEngine))]
     private async Task ToggleEngine()
     {
-        if (IsRunning) await StopAsync();
-        else await StartAsync();
+        await Engine.ToggleAsync();
 
         // The switch moved itself the moment it was clicked. If Start threw, State went back to
-        // Stopped and nothing would push the knob back — so say so explicitly either way.
+        // Stopped and nothing would push the knob back, so say so explicitly either way.
         OnPropertyChanged(nameof(IsSwitchedOn));
     }
 
     private bool CanToggleEngine() => !IsBusy;
-
-    /// <summary>
-    /// Puts the switch back where the user left it at the end of the last run. Called once at
-    /// startup, and deliberately not through <see cref="ToggleEngineCommand"/>: this restores a
-    /// state rather than asking for a change, so a configuration that says "off" does nothing here.
-    /// </summary>
-    public async Task RestoreEngineAsync()
-    {
-        if (!_services.Config.EngineEnabled) return;
-
-        // Checked here rather than left to fail inside the driver: at logon there may be nobody
-        // looking, and the notice strip is the only place the reason can go.
-        if (!IsElevated)
-        {
-            StatusMessage = Loc.S("Str.App.RestoreNeedsAdmin");
-            return;
-        }
-
-        await StartAsync();
-        OnPropertyChanged(nameof(IsSwitchedOn));
-    }
-
-    private async Task StartAsync()
-    {
-        if (State != EngineState.Stopped) return;
-        // Set before the await, so the knob is already over on the right and painted "coming up"
-        // while the driver opens and the tunnels dial — seconds during which the old switch simply
-        // sat on the left and looked like nothing had been clicked.
-        State = EngineState.Starting;
-        try
-        {
-            await _services.StartEngineAsync();
-            State = EngineState.Running;
-            StatusMessage = null;
-            RememberEngineState();
-            Processes.RefreshApplied();
-            // A tunnel a filter routes through may not be disconnected while that filter is live,
-            // so the Outbounds tab has to be told the moment redirection comes on.
-            Outbounds.RefreshVpnCommands();
-            // ...and the detection settings lock while it is on.
-            Settings.IsEngineRunning = true;
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"{ex.GetType().Name}: {ex.Message}";
-            // Leave nothing half-started: a failed Start must not leave WinDivert handles open.
-            try { await _services.StopEngineAsync(); } catch { }
-            State = EngineState.Stopped;
-        }
-    }
-
-    private async Task StopAsync()
-    {
-        if (State != EngineState.Running) return;
-        State = EngineState.Stopping;
-        try
-        {
-            await _services.StopEngineAsync();
-        }
-        finally
-        {
-            // Whatever the driver did on the way down, the window is no longer redirecting: leaving
-            // the switch stuck on "going down" would mean it could never be pressed again.
-            State = EngineState.Stopped;
-        }
-
-        RememberEngineState();
-        // Nothing is being redirected any more, so the tree must not keep claiming otherwise.
-        Processes.RefreshApplied();
-        // The tunnels stay up — but nothing is routing through them now, so they may be
-        // disconnected by hand again.
-        Outbounds.RefreshVpnCommands();
-        Settings.IsEngineRunning = false;
-    }
-
-    // Written the moment the switch moves rather than at the next Save, for the same reason the
-    // theme is: what is worth restoring is the state the user last chose, and a reboot must not be
-    // able to forget it. This persists the live configuration, edits in progress on the grids
-    // included — the appearance settings have always behaved this way, and two different meanings
-    // of "write the file" would be worse than the one shared meaning.
-    private void RememberEngineState()
-    {
-        _services.Config.EngineEnabled = IsRunning;
-        _services.Save();
-    }
 
     /// <summary>
     /// Re-reads the shared lists whenever a different tab comes up.
@@ -358,24 +284,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Rules.Reload();
     }
 
-    private static bool CheckElevated()
-    {
-        try
-        {
-            using var identity = WindowsIdentity.GetCurrent();
-            return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     public void Dispose()
     {
+        _services.Engine.ProcessAttached -= OnProcessAttachedOrDetached;
+        _services.Engine.ProcessDetached -= OnProcessAttachedOrDetached;
+        _services.Engine.ConfigurationApplied -= OnConfigurationApplied;
+        Engine.PropertyChanged -= OnEnginePropertyChanged;
+        Engine.ConfigurationReplaced -= OnConfigurationReplaced;
         LocalizationManager.LanguageChanged -= UpdateThemeButton;
         _pendingChangesTimer.Stop();
         Connections.Dispose();
         Log.Dispose();
+        Outbounds.Dispose();
+        Settings.Dispose();
     }
 }

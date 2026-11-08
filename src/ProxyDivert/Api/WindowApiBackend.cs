@@ -18,13 +18,13 @@ namespace ProxyDivert.Api;
 public sealed class WindowApiBackend : IApiBackend
 {
     private readonly AppServices _services;
-    private readonly MainViewModel _main;
+    private readonly EngineController _engine;
     private readonly Dispatcher _dispatcher;
 
-    public WindowApiBackend(AppServices services, MainViewModel main, Dispatcher dispatcher)
+    public WindowApiBackend(AppServices services, EngineController engine, Dispatcher dispatcher)
     {
         _services = services;
-        _main = main;
+        _engine = engine;
         _dispatcher = dispatcher;
     }
 
@@ -49,7 +49,7 @@ public sealed class WindowApiBackend : IApiBackend
             // KeepConnected, which the tunnels flip on their own.
             _services.Config.Policies = copy.Policies;
             _services.Config.ProcessRules = copy.ProcessRules;
-            await _main.SaveFromApiAsync();
+            await _engine.SaveFromApiAsync();
 
             // The objects the request built are live in the window from here on; what goes back
             // over the wire is a copy the grids cannot change while it is being written out.
@@ -75,9 +75,9 @@ public sealed class WindowApiBackend : IApiBackend
     public Task<bool> SetEngineRunningAsync(bool running)
         => _dispatcher.InvokeAsync(async () =>
         {
-            bool now = await _main.SetEngineRunningAsync(running);
+            bool now = await _engine.SetRunningAsync(running);
             if (running && !now)
-                throw new ApiException(500, "ENGINE_START_FAILED", _main.StatusMessage ?? "Redirection did not start.");
+                throw new ApiException(500, "ENGINE_START_FAILED", _engine.StatusMessage ?? "Redirection did not start.");
             return now;
         }).Task.Unwrap();
 

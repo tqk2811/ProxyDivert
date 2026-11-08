@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
@@ -19,6 +19,7 @@ namespace ProxyDivert;
 public partial class App : Application
 {
     private AppServices? _services;
+    private EngineController? _engine;
     private MainViewModel? _mainViewModel;
     private TrayIconController? _tray;
 #if LOCAL_API
@@ -59,7 +60,8 @@ public partial class App : Application
         ThemeManager.Apply(ThemeManager.Parse(_services.Config.Theme));
         LocalizationManager.Apply(LocalizationManager.Parse(_services.Config.Language));
 
-        _mainViewModel = new MainViewModel(_services);
+        _engine = new EngineController(_services);
+        _mainViewModel = new MainViewModel(_services, _engine);
         var window = new MainWindow { DataContext = _mainViewModel };
         // Assigned even when it is never shown: the tray needs something to bring back, and the
         // window has to exist for the engine to have somewhere to report to.
@@ -77,12 +79,12 @@ public partial class App : Application
         // Not awaited: starting the engine opens the driver, enumerates every process and dials the
         // tunnels the filters route through, and the window must be up and painting while that
         // happens rather than after it. Failures land on the notice strip and in the log.
-        _ = _mainViewModel.RestoreEngineAsync();
+        _ = _engine.RestoreAsync();
 
 #if LOCAL_API
         // Built always, listening only when Settings says so; a change there restarts it.
         _api = new LocalApiHost(
-            new WindowApiBackend(_services, _mainViewModel, Dispatcher),
+            new WindowApiBackend(_services, _engine, Dispatcher),
             () => _services.Config.LocalApi,
             _services.LoggerProvider);
         _services.LocalApiChanged += settings => _ = ApplyLocalApiAsync(settings);
@@ -120,7 +122,7 @@ public partial class App : Application
             string? error = await _api!.ApplyAsync(settings);
             await Dispatcher.InvokeAsync(() =>
             {
-                if (_mainViewModel is not null) _mainViewModel.Settings.LocalApiError = error;
+                if (_engine is not null) _engine.LocalApiError = error;
             });
         }
         catch (Exception ex)

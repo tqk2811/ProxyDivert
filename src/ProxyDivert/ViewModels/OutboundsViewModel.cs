@@ -21,7 +21,7 @@ namespace ProxyDivert.ViewModels;
 // Each row is an OutboundRowViewModel over the configuration's own Outbound. Direct and Block are
 // in the list — a policy has to be able to reference them — and the row is what refuses to let them
 // be edited.
-public sealed partial class OutboundsViewModel : ObservableObject
+public sealed partial class OutboundsViewModel : ObservableObject, IDisposable
 {
     private readonly AppServices _services;
 
@@ -113,6 +113,9 @@ public sealed partial class OutboundsViewModel : ObservableObject
     // Called from the tunnel's supervision thread. BeginInvoke, never Invoke: the thread that
     // saves the configuration is the UI thread, and it can be inside the keeper's Sync while this
     // arrives — a synchronous marshal would have the two waiting on each other.
+    // The tunnels outlive this view model, which is built per window.
+    public void Dispose() => _services.Vpn.StatusChanged -= OnVpnStatusChanged;
+
     private void OnVpnStatusChanged(VpnStatus status)
     {
         Application.Current?.Dispatcher.BeginInvoke(new Action(() => ApplyVpnStatus(status)));

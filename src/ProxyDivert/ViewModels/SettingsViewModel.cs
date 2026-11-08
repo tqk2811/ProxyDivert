@@ -22,7 +22,7 @@ namespace ProxyDivert.ViewModels;
 // The Settings tab. Everything here writes straight into AppConfig and saves; the options that
 // live inside the WinDivert handles (DoH endpoint, the IPv6 mode, log file) only take effect on the
 // next engine start, which the view says out loud rather than pretending otherwise.
-public sealed partial class SettingsViewModel : ObservableObject
+public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 {
     private readonly AppServices _services;
 
@@ -48,7 +48,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         ProcessPriorityClass.Normal, ProcessPriorityClass.AboveNormal, ProcessPriorityClass.High,
     };
 
-    public SettingsViewModel(AppServices services)
+    private readonly EngineController _engine;
+
+    public SettingsViewModel(AppServices services, EngineController engine)
     {
         _cpuPriority = services.Config.CpuPriority;
         _services = services;
@@ -67,6 +69,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         RefreshWatermarkStatus();
         VerifyStartWithWindows();
         LoadLocalApi();
+
+        // The listener lives above the window, so its last error does too; this tab shows it and
+        // follows it while open.
+        _engine = engine;
+        LocalApiError = engine.LocalApiError;
+        engine.PropertyChanged += OnEnginePropertyChanged;
     }
 
     // The logon task can be gone without this tool knowing — removed by hand, or left behind on a
@@ -350,6 +358,13 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string? _localApiError;
 
     public bool HasLocalApiError => !string.IsNullOrEmpty(LocalApiError);
+
+    private void OnEnginePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(EngineController.LocalApiError)) LocalApiError = _engine.LocalApiError;
+    }
+
+    public void Dispose() => _engine.PropertyChanged -= OnEnginePropertyChanged;
 
     // Every box below writes the whole settings object back, and AppServices.SetLocalApi restarts
     // or stops the listener. Port and LAN are only editable while it is off, so the address it is
