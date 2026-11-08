@@ -120,6 +120,42 @@ public class WpfResourceSmokeTests
         });
     }
 
+    // The window's resources are merged only while it is open, so the process in the tray does not
+    // keep the styles alive. Closing must take them all out again (a palette left behind by a theme
+    // change while closed would defeat it), and opening again must bring back a working set.
+    [Fact]
+    public void Window_resources_unload_and_load_again()
+    {
+        RunOnStaThread(() =>
+        {
+            Application application = EnsureApplication();
+
+            UiResources.Unload(application);
+            try
+            {
+                Assert.Null(application.TryFindResource("Brush.Window.Background"));
+                Assert.Null(application.TryFindResource("EnumComboColumn"));
+                // The tray reads its menu from the strings with no window open.
+                Assert.IsType<string>(application.TryFindResource("Str.Tray.Exit"));
+
+                // A mode change with the window closed is remembered, not loaded.
+                ThemeManager.Apply(ThemeMode.Dark);
+                Assert.Null(application.TryFindResource("Brush.Window.Background"));
+                Assert.Single(application.Resources.MergedDictionaries);
+            }
+            finally
+            {
+                UiResources.Load(application);
+            }
+
+            Assert.NotNull(application.TryFindResource("Brush.Window.Background"));
+            Assert.NotNull(application.TryFindResource("EnumComboColumn"));
+            var window = new MainWindow();
+            window.Measure(new Size(1200, 800));
+            Assert.NotNull(window.Content);
+        });
+    }
+
     [Fact]
     public void Main_window_loads()
     {
@@ -136,12 +172,18 @@ public class WpfResourceSmokeTests
     // facts in the same process.
     private static Application EnsureApplication()
     {
-        if (Application.Current != null) return Application.Current;
+        if (Application.Current != null)
+        {
+            UiResources.Load(Application.Current);
+            return Application.Current;
+        }
 
         var application = new ProxyDivert.App();
         // InitializeComponent is what merges App.xaml's dictionaries; OnStartup is deliberately
-        // NOT called, since that would build the engine and open a window.
+        // NOT called, since that would build the engine and open a window. The window's own
+        // resources are loaded the way App.ShowWindow loads them.
         application.InitializeComponent();
+        UiResources.Load(application);
         return application;
     }
 

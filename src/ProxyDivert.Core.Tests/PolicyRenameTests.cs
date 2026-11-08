@@ -232,6 +232,8 @@ public class PolicyRenameTests
         {
             var application = new ProxyDivert.App();
             application.InitializeComponent();
+            // The window resources, merged the way App.ShowWindow merges them.
+            ProxyDivert.Themes.UiResources.Load(application);
         }
 
         if (Application.Current.CheckAccess())

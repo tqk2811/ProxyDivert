@@ -6,7 +6,7 @@ namespace ProxyDivert.Themes
 {
     /// <summary>
     /// Swaps the active color palette (Dark/Light) at runtime by replacing a single color
-    /// ResourceDictionary in Application.Resources. All control styles reference brushes via
+    /// ResourceDictionary in Application.Resources, while the window's resources are loaded. All control styles reference brushes via
     /// DynamicResource so they update live. Ported from AndroidSyncControl (persistence removed —
     /// the caller persists the chosen mode).
     /// </summary>
@@ -54,12 +54,35 @@ namespace ProxyDivert.Themes
             _ => IsSystemLight(),
         };
 
-        static void ApplyResolvedPalette() => SwapPalette(IsCurrentlyLight());
+        /// <summary>
+        /// Puts the palette for the current mode in front of everything else. Called when the UI
+        /// resources are loaded for the window; a no-op swap otherwise keeps the idle tray process
+        /// from holding a palette nobody is looking at.
+        /// </summary>
+        public static void LoadPalette() => SwapPalette(IsCurrentlyLight(), insertIfMissing: true);
 
-        static void SwapPalette(bool light)
+        /// <summary>Removes the palette again, when the window closes.</summary>
+        public static void UnloadPalette()
+        {
+            var dicts = Application.Current?.Resources.MergedDictionaries;
+            var existing = dicts?.FirstOrDefault(d => d.Contains(PaletteMarkerKey));
+            if (existing != null)
+                dicts!.Remove(existing);
+        }
+
+        // Replaces the palette only while one is loaded: with the window closed a mode change is
+        // just remembered, and LoadPalette picks it up on the next opening.
+        static void ApplyResolvedPalette() => SwapPalette(IsCurrentlyLight(), insertIfMissing: false);
+
+        static void SwapPalette(bool light, bool insertIfMissing)
         {
             var app = Application.Current;
             if (app == null)
+                return;
+
+            var dicts = app.Resources.MergedDictionaries;
+            var existing = dicts.FirstOrDefault(d => d.Contains(PaletteMarkerKey));
+            if (existing == null && !insertIfMissing)
                 return;
 
             var newDict = new ResourceDictionary
@@ -67,8 +90,6 @@ namespace ProxyDivert.Themes
                 Source = new Uri(light ? LightUri : DarkUri, UriKind.Absolute)
             };
 
-            var dicts = app.Resources.MergedDictionaries;
-            var existing = dicts.FirstOrDefault(d => d.Contains(PaletteMarkerKey));
             if (existing != null)
                 dicts[dicts.IndexOf(existing)] = newDict;
             else

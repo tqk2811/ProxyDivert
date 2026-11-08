@@ -103,7 +103,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // A save that merely re-routes processes attaches and detaches nothing, so it is reported
         // separately and refreshes the same way.
         // Unhooked in Dispose: the engine outlives this view model, which is built per window.
-        _refreshApplied = new CoalescedDispatcherAction(() => Processes.RefreshApplied());
+        // A request already queued when the window closes must not refresh a disposed tree.
+        _refreshApplied = new CoalescedDispatcherAction(() =>
+        {
+            if (!_disposed) Processes.RefreshApplied();
+        });
         services.Engine.ProcessAttached += OnProcessAttachedOrDetached;
         services.Engine.ProcessDetached += OnProcessAttachedOrDetached;
         services.Engine.ConfigurationApplied += OnConfigurationApplied;
@@ -284,8 +288,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Rules.Reload();
     }
 
+    private bool _disposed;
+
     public void Dispose()
     {
+        _disposed = true;
         _services.Engine.ProcessAttached -= OnProcessAttachedOrDetached;
         _services.Engine.ProcessDetached -= OnProcessAttachedOrDetached;
         _services.Engine.ConfigurationApplied -= OnConfigurationApplied;

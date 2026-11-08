@@ -13,8 +13,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // Hidden to the tray and minimised both mean nobody is looking, and the view model stops
-        // its polling for as long as that lasts.
+        // Minimised means nobody is looking, and the view model stops its polling for as long as
+        // that lasts. Closed needs nothing: the view model is disposed with the window.
         IsVisibleChanged += (_, _) => ReportVisibility();
         StateChanged += (_, _) => ReportVisibility();
         DataContextChanged += (_, _) => ReportVisibility();
@@ -77,22 +77,19 @@ public partial class MainWindow : Window
 
     // Closing the window is not the same as quitting when there is a tray icon to fall back on:
     // the redirect is meant to outlive the window, and the icon is what says it still is. Which of
-    // the two the button means is the user's choice, in Settings.
+    // the two the button means is the user's choice, in Settings. Either way the window really
+    // closes (it is not hidden): the application builds a new one on the next opening, so nothing
+    // of it stays in memory while the process sits in the tray.
     protected override void OnClosing(CancelEventArgs e)
     {
         base.OnClosing(e);
 
         // Exit on the tray menu comes through here too, and must not be caught by the rule below.
-        if (App.IsExiting) return;
+        if (App.IsExiting || e.Cancel) return;
 
-        if (DataContext is MainViewModel viewModel && viewModel.MinimizeToTrayOnClose)
-        {
-            e.Cancel = true;
-            Hide();
-            return;
-        }
+        if (DataContext is MainViewModel viewModel && viewModel.MinimizeToTrayOnClose) return;
 
-        // Shutdown is explicit now, so closing the last window no longer ends the process on its own.
+        // Shutdown is explicit, so closing the window does not end the process on its own.
         App.BeginExit();
     }
 }

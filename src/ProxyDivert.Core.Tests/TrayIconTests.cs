@@ -12,35 +12,17 @@ namespace ProxyDivert.Core.Tests;
 // the ways it can fail silently are checked here: an icon Windows will not accept, and a menu whose
 // text was never translated.
 //
-// The TaskbarIcon itself is never constructed. It attaches to Application in its constructor, so it
-// can only be built on the thread that owns the Application — and every test here gets an STA
-// thread of its own. That constraint is the subject of the first test rather than an obstacle to it.
+// The icon itself is never added: Shell_NotifyIcon would put a real icon in the test machine's
+// notification area.
 [Collection("WPF")]
 public class TrayIconTests
 {
     private const string AppIcon = "pack://application:,,,/ProxyDivert;component/Assets/app.ico";
 
-    // TaskbarIcon subscribes to the application's events inside its constructor. Merged into
-    // Application.Resources it would therefore be built by anything that merely walks the
-    // resources — off the UI thread that throws, which is exactly how this was found.
-    [Fact]
-    public void The_tray_icon_is_not_merged_into_the_application_resources()
-    {
-        RunOnStaThread(() =>
-        {
-            Application application = EnsureApplication();
-
-            Assert.DoesNotContain(
-                application.Resources.MergedDictionaries,
-                dictionary => dictionary.Source?.OriginalString.Contains(
-                    "TrayIcon.xaml", StringComparison.OrdinalIgnoreCase) == true);
-        });
-    }
-
-    // A wrong path here has no symptom other than an empty space in the notification area, and the
-    // icon has to survive the trip through System.Drawing that the tray library makes to get an
-    // HICON — which is what rejects an .ico whose small sizes were written as PNG rather than as
-    // bitmaps. Sixteen pixels because that is the size the notification area asks for.
+    // The tray takes the exe's own icon (ApplicationIcon, built from this file), and a broken one has
+    // no symptom other than the stock icon in the notification area. Loaded the way the shell does,
+    // through LoadImage into an HICON; sixteen pixels because that is the size the notification
+    // area asks for.
     [Fact]
     public void The_application_icon_is_something_windows_will_show()
     {
@@ -48,11 +30,24 @@ public class TrayIconTests
         {
             EnsureApplication();
 
-            using System.IO.Stream stream = Application.GetResourceStream(new Uri(AppIcon))!.Stream;
-            using var icon = new System.Drawing.Icon(stream, 16, 16);
+            string path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), $"proxydivert-icon-{Guid.NewGuid():N}.ico");
+            try
+            {
+                using (System.IO.Stream stream = Application.GetResourceStream(new Uri(AppIcon))!.Stream)
+                using (System.IO.FileStream file = System.IO.File.Create(path))
+                {
+                    stream.CopyTo(file);
+                }
 
-            Assert.Equal(16, icon.Width);
-            Assert.NotEqual(IntPtr.Zero, icon.Handle);
+                IntPtr icon = LoadImage(IntPtr.Zero, path, ImageIcon, 16, 16, LoadFromFile);
+                Assert.NotEqual(IntPtr.Zero, icon);
+                DestroyIcon(icon);
+            }
+            finally
+            {
+                System.IO.File.Delete(path);
+            }
         });
     }
 
@@ -72,11 +67,20 @@ public class TrayIconTests
             LocalizationManager.Apply(AppLanguage.Vietnamese);
             HashSet<string> vietnamese = TrayKeys();
 
-            // The menu, the tooltip and the balloon shown the first time the window disappears.
-            Assert.True(english.Count >= 7, $"only {english.Count} tray strings found");
+            // The menu (open, engine, exit) and the tooltip.
+            Assert.True(english.Count >= 4, $"only {english.Count} tray strings found");
             Assert.Equal(english.OrderBy(key => key), vietnamese.OrderBy(key => key));
         });
     }
+
+    private const uint ImageIcon = 1;
+    private const uint LoadFromFile = 0x10;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, EntryPoint = "LoadImageW")]
+    private static extern IntPtr LoadImage(IntPtr hInst, string name, uint type, int cx, int cy, uint fuLoad);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool DestroyIcon(IntPtr hIcon);
 
     private static HashSet<string> TrayKeys()
     {

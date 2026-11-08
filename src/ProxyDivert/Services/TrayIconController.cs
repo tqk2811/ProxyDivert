@@ -1,107 +1,222 @@
 using System;
 using System.ComponentModel;
-using System.Windows;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
-using Hardcodet.Wpf.TaskbarNotification;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using ProxyDivert.Localization;
-using ProxyDivert.ViewModels;
+using ProxyDivert.Services.Native;
+using static ProxyDivert.Services.Native.TrayNativeMethods;
 
 namespace ProxyDivert.Services;
 
 /// <summary>
-/// The notification-area icon and everything reachable from it. Owns the window's visibility —
-/// showing and hiding it is the one thing the tray does that no view model has any business
-/// knowing about — and borrows everything else: switching redirection on and off is the main view
-/// model's command, used as it stands rather than reimplemented beside it.
+/// The notification-area icon, through <c>Shell_NotifyIcon</c> directly. It is the whole user
+/// interface while the window is closed, so it holds nothing of WPF but a hidden message window:
+/// no context-menu styles, no resource dictionaries, no System.Windows.Forms. Double-click opens the
+/// window; right-click shows a native menu built per opening (open, the engine switch, exit).
+/// Re-adds the icon when Explorer restarts. Owns its message window and icon handle; borrows the
+/// engine controller and the two actions.
 /// </summary>
-public sealed partial class TrayIconController : ObservableObject, IDisposable
+public sealed class TrayIconController : IDisposable
 {
-    private readonly TaskbarIcon _icon;
-    private readonly Window _window;
+    private const int CallbackMessage = WM_APP + 1;
+    private const uint IconId = 1;
+    private const uint CommandOpen = 1;
+    private const uint CommandEngine = 2;
+    private const uint CommandExit = 3;
 
-    // Shown once, the first time the window disappears rather than closes. Repeating it every time
-    // would be nagging; never saying it once leaves the user believing they quit.
-    private bool _explainedHiding;
+    private readonly EngineController _engine;
+    private readonly Action _openWindow;
+    private readonly Action _exit;
+    private readonly HwndSource _messageWindow;
+    private readonly IntPtr _icon;
+    private readonly bool _ownsIcon;
+    private readonly int _taskbarCreatedMessage;
+    private bool _disposed;
 
-    /// <summary>The window's state, for the menu to bind the engine switch and the admin lock to.</summary>
-    public MainViewModel ViewModel { get; }
-
-    [ObservableProperty]
-    private string _windowToggleText = string.Empty;
-
-    [ObservableProperty]
-    private string _toolTipText = string.Empty;
-
-    public TrayIconController(TaskbarIcon icon, Window window, MainViewModel viewModel)
+    public TrayIconController(EngineController engine, Action openWindow, Action exit)
     {
-        _icon = icon ?? throw new ArgumentNullException(nameof(icon));
-        _window = window ?? throw new ArgumentNullException(nameof(window));
-        ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        _openWindow = openWindow ?? throw new ArgumentNullException(nameof(openWindow));
+        _exit = exit ?? throw new ArgumentNullException(nameof(exit));
+        _taskbarCreatedMessage = RegisterWindowMessage("TaskbarCreated");
+        (_icon, _ownsIcon) = LoadSmallIcon();
 
-        _icon.DataContext = this;
+        // Top-level but never shown: a message-only window does not receive the TaskbarCreated
+        // broadcast, and without it the icon would be lost for good when Explorer restarts.
+        _messageWindow = new HwndSource(new HwndSourceParameters(nameof(TrayIconController))
+        {
+            Width = 0,
+            Height = 0,
+            WindowStyle = 0,
+        });
+        _messageWindow.AddHook(WndProc);
+        // The process runs elevated and Explorer does not, so UIPI drops its TaskbarCreated
+        // broadcast unless this window lets it through: without it the icon is gone for good after
+        // an Explorer restart, and with the window closed that is the only way back in.
+        ChangeWindowMessageFilterEx(_messageWindow.Handle, (uint)_taskbarCreatedMessage, MSGFLT_ALLOW, IntPtr.Zero);
+        AddIcon();
 
-        _window.IsVisibleChanged += OnWindowVisibilityChanged;
-        ViewModel.PropertyChanged += OnViewModelPropertyChanged;
-        // Both texts are composed in code from two pieces, so a dictionary swap does not reach
-        // them on its own — the same reason the theme button rebuilds itself.
-        LocalizationManager.LanguageChanged += UpdateTexts;
-
-        UpdateTexts();
-    }
-
-    [RelayCommand]
-    private void ToggleWindow()
-    {
-        if (_window.IsVisible) _window.Hide();
-        else ShowWindow();
-    }
-
-    /// <summary>Brings the window back, whatever it was doing: hidden, minimised, or behind
-    /// something else. Double-clicking the icon does this, which is what everything else in the
-    /// notification area does.</summary>
-    [RelayCommand]
-    private void ShowWindow()
-    {
-        _window.Show();
-        if (_window.WindowState == WindowState.Minimized) _window.WindowState = WindowState.Normal;
-        _window.Activate();
-    }
-
-    [RelayCommand]
-    private void Exit() => App.BeginExit();
-
-    private void OnWindowVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
-    {
-        UpdateTexts();
-
-        if (_window.IsVisible || _explainedHiding) return;
-
-        _explainedHiding = true;
-        _icon.ShowBalloonTip(
-            Loc.S("Str.Tray.HiddenTitle"), Loc.S("Str.Tray.HiddenMessage"), BalloonIcon.Info);
-    }
-
-    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is null or nameof(MainViewModel.IsRunning)) UpdateTexts();
-    }
-
-    private void UpdateTexts()
-    {
-        WindowToggleText = Loc.S(_window.IsVisible ? "Str.Tray.Hide" : "Str.Tray.Show");
-        ToolTipText = Loc.F(
-            "Str.Tray.ToolTip",
-            Loc.S(ViewModel.IsRunning ? "Str.App.Running" : "Str.App.Stopped"));
+        // The tooltip says whether redirection is on, in the current language.
+        _engine.PropertyChanged += OnEnginePropertyChanged;
+        LocalizationManager.LanguageChanged += UpdateToolTip;
     }
 
     public void Dispose()
     {
-        LocalizationManager.LanguageChanged -= UpdateTexts;
-        ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        _window.IsVisibleChanged -= OnWindowVisibilityChanged;
+        if (_disposed) return;
+        _disposed = true;
+        _engine.PropertyChanged -= OnEnginePropertyChanged;
+        LocalizationManager.LanguageChanged -= UpdateToolTip;
         // Without this the icon is left in the notification area as a ghost until something makes
         // the shell notice the process is gone.
-        _icon.Dispose();
+        NOTIFYICONDATA data = CreateData(0);
+        Shell_NotifyIcon(NIM_DELETE, ref data);
+        _messageWindow.RemoveHook(WndProc);
+        _messageWindow.Dispose();
+        if (_ownsIcon) DestroyIcon(_icon);
+    }
+
+    private void OnEnginePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is null or nameof(EngineController.State)) UpdateToolTip();
+    }
+
+    private void AddIcon()
+    {
+        NOTIFYICONDATA data = CreateData(NIF_MESSAGE | NIF_ICON | NIF_TIP);
+        // Already there when TaskbarCreated raced with startup.
+        if (!Shell_NotifyIcon(NIM_ADD, ref data)) Shell_NotifyIcon(NIM_MODIFY, ref data);
+    }
+
+    private void UpdateToolTip()
+    {
+        if (_disposed) return;
+        NOTIFYICONDATA data = CreateData(NIF_TIP);
+        Shell_NotifyIcon(NIM_MODIFY, ref data);
+    }
+
+    private NOTIFYICONDATA CreateData(uint flags) => new()
+    {
+        cbSize = (uint)Marshal.SizeOf<NOTIFYICONDATA>(),
+        hWnd = _messageWindow.Handle,
+        uID = IconId,
+        uFlags = flags,
+        uCallbackMessage = CallbackMessage,
+        hIcon = _icon,
+        szTip = ToolTipText(),
+        szInfo = string.Empty,
+        szInfoTitle = string.Empty,
+    };
+
+    private string ToolTipText()
+        => Loc.F("Str.Tray.ToolTip", Loc.S(_engine.IsRunning ? "Str.App.Running" : "Str.App.Stopped"));
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == _taskbarCreatedMessage)
+        {
+            AddIcon();
+            return IntPtr.Zero;
+        }
+        if (msg != CallbackMessage) return IntPtr.Zero;
+
+        handled = true;
+        try
+        {
+            switch ((int)lParam)
+            {
+                case WM_LBUTTONDBLCLK:
+                case NIN_SELECT:
+                case NIN_KEYSELECT:
+                    _openWindow();
+                    break;
+                case WM_RBUTTONUP:
+                    ShowMenu();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            // An exception must not unwind through the window procedure: report it and keep the
+            // tray alive, since it is the only way back into the application.
+            System.Windows.MessageBox.Show(ex.ToString(), "ProxyDivert",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+        }
+        return IntPtr.Zero;
+    }
+
+    /// <summary>Built per opening, so it always has the current language and engine state.</summary>
+    private void ShowMenu()
+    {
+        IntPtr menu = CreatePopupMenu();
+        if (menu == IntPtr.Zero) return;
+
+        uint command;
+        try
+        {
+            AppendMenu(menu, MF_STRING, CommandOpen, Loc.S("Str.Tray.Open"));
+            AppendMenu(menu, MF_SEPARATOR, 0, null);
+            // The same switch as the one on the title bar. Greyed without Administrator rights,
+            // since WinDivert loads a kernel driver, and while the engine is already moving.
+            uint engineFlags = MF_STRING
+                | (_engine.IsSwitchedOn ? MF_CHECKED : 0)
+                | (!_engine.IsElevated || _engine.IsBusy ? MF_GRAYED : 0);
+            AppendMenu(menu, engineFlags, CommandEngine, Loc.S("Str.Tray.Engine"));
+            AppendMenu(menu, MF_SEPARATOR, 0, null);
+            AppendMenu(menu, MF_STRING, CommandExit, Loc.S("Str.Tray.Exit"));
+            SetMenuDefaultItem(menu, CommandOpen, 0);
+
+            GetCursorPos(out POINT point);
+            // Foreground first and WM_NULL after: the documented way to make the menu close when
+            // the user clicks elsewhere.
+            SetForegroundWindow(_messageWindow.Handle);
+            command = TrackPopupMenuEx(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
+                point.X, point.Y, _messageWindow.Handle, IntPtr.Zero);
+            PostMessage(_messageWindow.Handle, WM_NULL, IntPtr.Zero, IntPtr.Zero);
+        }
+        finally
+        {
+            DestroyMenu(menu);
+        }
+
+        switch (command)
+        {
+            case CommandOpen:
+                _openWindow();
+                break;
+            case CommandEngine:
+                _ = ToggleEngineAsync();
+                break;
+            case CommandExit:
+                _exit();
+                break;
+        }
+    }
+
+    // Fire-and-forget from the menu, so nothing may escape: a failed start is already reported on
+    // the notice strip by the controller, and a failed stop goes there too.
+    private async System.Threading.Tasks.Task ToggleEngineAsync()
+    {
+        try
+        {
+            await _engine.ToggleAsync();
+        }
+        catch (Exception ex)
+        {
+            _engine.StatusMessage = $"{ex.GetType().Name}: {ex.Message}";
+        }
+    }
+
+    /// <summary>The tray-size frame of the exe's own icon; the stock application icon otherwise.</summary>
+    private static (IntPtr Icon, bool Owned) LoadSmallIcon()
+    {
+        IntPtr[] small = [IntPtr.Zero];
+        if (Environment.ProcessPath is { } path
+            && ExtractIconEx(path, 0, null, small, 1) > 0
+            && small[0] != IntPtr.Zero)
+        {
+            return (small[0], true);
+        }
+        return (LoadIcon(IntPtr.Zero, IDI_APPLICATION), false);
     }
 }

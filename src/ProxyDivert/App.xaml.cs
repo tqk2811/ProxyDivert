@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using System.Windows;
-using Hardcodet.Wpf.TaskbarNotification;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 #if LOCAL_API
 using ProxyDivert.Api;
@@ -20,16 +20,20 @@ public partial class App : Application
 {
     private AppServices? _services;
     private EngineController? _engine;
-    private MainViewModel? _mainViewModel;
     private TrayIconController? _tray;
+
+    // Both exist only while the window is open: built on each opening, disposed on each close, so
+    // the process sitting in the tray holds none of the visual tree, the grids' rows or the styles.
+    private MainWindow? _window;
+    private MainViewModel? _mainViewModel;
 #if LOCAL_API
     private LocalApiHost? _api;
 #endif
 
     /// <summary>
     /// True once the user has actually asked to quit. The window checks it before deciding whether
-    /// closing means hiding: without it, Exit on the tray menu would be swallowed by the very rule
-    /// that keeps the tool running when the window is closed.
+    /// its close button ends the process, and the close handler skips the cleanup meant for a
+    /// process that goes on running in the tray.
     /// </summary>
     internal static bool IsExiting { get; private set; }
 
@@ -45,32 +49,25 @@ public partial class App : Application
         base.OnStartup(e);
         HorizontalWheelScroll.Register();
 
-        // Nothing closes this application by accident any more: the window may be hidden to the
-        // tray, and starting with --minimized means it is never shown at all, so the default rule
-        // of "quit when the last window closes" would end a redirect that is still wanted.
-        ShutdownMode = ShutdownMode.OnExplicitShutdown;
-
         // Reads the configuration file and builds the container, and nothing else: no sweep of the
         // machine's processes, no driver, no VPN dialled. All of that belongs to redirection being
         // switched on, and is started below — in the background, and only if it is.
         _services = new AppServices();
 
         // Appearance comes from the same config file as everything else, so the window opens the
-        // way the user left it rather than flashing the default palette first.
+        // way the user left it rather than flashing the default palette first. Only the mode is
+        // remembered here: the palette itself is loaded with the window (UiResources.Load).
         ThemeManager.Apply(ThemeManager.Parse(_services.Config.Theme));
         LocalizationManager.Apply(LocalizationManager.Parse(_services.Config.Language));
 
         _engine = new EngineController(_services);
-        _mainViewModel = new MainViewModel(_services, _engine);
-        var window = new MainWindow { DataContext = _mainViewModel };
-        // Assigned even when it is never shown: the tray needs something to bring back, and the
-        // window has to exist for the engine to have somewhere to report to.
-        MainWindow = window;
+        _tray = new TrayIconController(_engine, ShowWindow, BeginExit);
 
-        _tray = new TrayIconController(LoadTrayIcon(), window, _mainViewModel);
-
+        // Started at logon with --minimized: no window, so none of WPF's visual side is built
+        // until the user opens it from the tray.
         AppArguments arguments = AppArguments.Parse(e.Args);
-        if (!arguments.Minimized) window.Show();
+        if (arguments.Minimized) ScheduleTrim();
+        else ShowWindow();
 
         // Everything from here on is behind the window rather than in front of it. Nothing above
         // touches the registry, the driver, the network or the process table, so what the user sees
@@ -98,19 +95,49 @@ public partial class App : Application
         _ = Task.Run(StartupRegistration.RemoveLegacyRunKey);
     }
 
-    // Loaded here rather than merged into Application.Resources: TaskbarIcon subscribes to the
-    // application's events in its constructor, so merging it would mean anything that walks the
-    // application's resources builds a live tray icon as a side effect — off the UI thread, that
-    // throws. Its context menu still finds the shared styles and strings, because a menu with no
-    // parent falls back to the application's resources anyway.
-    private static TaskbarIcon LoadTrayIcon()
+    /// <summary>
+    /// Brings the window up, building it (and its resources and view model) if it is closed, or
+    /// bringing it back from minimised or behind something else if it is open.
+    /// </summary>
+    private void ShowWindow()
     {
-        var dictionary = new ResourceDictionary
+        if (IsExiting || _services is null || _engine is null) return;
+
+        if (_window is null)
         {
-            Source = new Uri("pack://application:,,,/ProxyDivert;component/Views/TrayIcon.xaml"),
-        };
-        return (TaskbarIcon)dictionary["Tray"];
+            UiResources.Load(this);
+            _mainViewModel = new MainViewModel(_services, _engine);
+            _window = new MainWindow { DataContext = _mainViewModel };
+            _window.Closed += OnWindowClosed;
+            // Owner for the dialogs the view models open.
+            MainWindow = _window;
+        }
+
+        _window.Show();
+        if (_window.WindowState == WindowState.Minimized) _window.WindowState = WindowState.Normal;
+        _window.Activate();
     }
+
+    private void OnWindowClosed(object? sender, EventArgs e)
+    {
+        _window!.Closed -= OnWindowClosed;
+        _window.DataContext = null;
+        _window = null;
+        MainWindow = null;
+        _mainViewModel?.Dispose();
+        _mainViewModel = null;
+
+        if (IsExiting) return;
+        UiResources.Unload(this);
+        ScheduleTrim();
+    }
+
+    /// <summary>Trims once the dispatcher is idle, after the closed window's last messages are processed.</summary>
+    private void ScheduleTrim()
+        => Dispatcher.BeginInvoke(() =>
+        {
+            if (_window is null && !IsExiting) MemoryTrimmer.Trim();
+        }, DispatcherPriority.ApplicationIdle);
 
 #if LOCAL_API
     // Fire-and-forget from the settings event, so nothing may escape: a port already taken is

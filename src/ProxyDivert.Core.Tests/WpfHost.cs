@@ -19,6 +19,8 @@ internal static class WpfHost
         {
             var application = new ProxyDivert.App();
             application.InitializeComponent();
+            // The window resources, merged the way App.ShowWindow merges them.
+            ProxyDivert.Themes.UiResources.Load(application);
         }
 
         // Default is OnLastWindowClose, which would shut the dispatcher down the first time a test
