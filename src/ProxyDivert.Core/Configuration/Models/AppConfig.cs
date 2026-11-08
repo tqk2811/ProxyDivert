@@ -230,8 +230,8 @@ public sealed class AppConfig
     }
 
     /// <summary>
-    /// Takes out of every filter the policies that are no longer there, and gives a filter left
-    /// with none the first policy in the list.
+    /// Takes out of every filter the policies that are no longer there. A filter left with none
+    /// stays empty, and an empty filter does not run (see ProcessRuleMatcher).
     /// </summary>
     /// <remarks>
     /// The resolver skips an id it cannot find, so a dangling reference crashes nothing — it only
@@ -240,12 +240,7 @@ public sealed class AppConfig
     /// </remarks>
     private void DropMissingPolicyReferences()
     {
-        if (Policies.Count == 0) return;
-
         var policyIds = new HashSet<Guid>(Policies.Select(p => p.Id));
-        // The user's first policy rather than the built-in Default: Default claims everything, so a
-        // filter falling back to it would send all of that process's traffic its way.
-        Guid fallback = FirstPolicyForNewFilter()!.Id;
 
         foreach (ProcessRule rule in ProcessRules)
         {
@@ -253,11 +248,6 @@ public sealed class AppConfig
             // and a policy that no longer exists has no place to remember.
             rule.PolicyOrder.RemoveAll(id => !policyIds.Contains(id));
             rule.PolicyIds.RemoveAll(id => !policyIds.Contains(id));
-
-            if (rule.PolicyIds.Count > 0) continue;
-
-            rule.PolicyIds.Add(fallback);
-            if (!rule.PolicyOrder.Contains(fallback)) rule.PolicyOrder.Insert(0, fallback);
         }
     }
 

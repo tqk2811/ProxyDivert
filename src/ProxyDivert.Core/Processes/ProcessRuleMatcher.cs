@@ -20,6 +20,9 @@ public static class ProcessRuleMatcher
     {
         if (rule is null) throw new ArgumentNullException(nameof(rule));
         if (!rule.IsEnabled || rule.Condition is null) return false;
+        // A filter with no policy ticked does not run: it has nowhere to send what it catches, so
+        // it leaves the process to the next filter rather than claiming it.
+        if (rule.PolicyIds is not { Count: > 0 }) return false;
 
         var context = new ConditionContext(processName, executablePath, commandLine, processId);
         return rule.Condition.Evaluate(context) == ConditionResult.Match;

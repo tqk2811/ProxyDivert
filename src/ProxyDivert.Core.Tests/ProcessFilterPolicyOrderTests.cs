@@ -170,10 +170,10 @@ public class ProcessFilterPolicyOrderTests
             reopened.Policies.Select(p => p.Name));
     }
 
-    // Nothing ticked would leave the filter catching processes with no rules to route them by, and
-    // they would go out direct — the one outcome a redirector must never produce by accident.
+    // Nothing ticked is saved as nothing: such a filter does not run, so it cannot claim a process
+    // and then route it by a policy the user never chose.
     [Fact]
-    public void A_filter_with_nothing_ticked_still_gets_a_policy()
+    public void A_filter_with_nothing_ticked_is_saved_with_no_policy()
     {
         var rule = Filter(Streaming.Id);
         var model = new ProcessFilterViewModel(rule, All);
@@ -181,7 +181,30 @@ public class ProcessFilterPolicyOrderTests
         foreach (ProcessFilterViewModel.PolicyChoice choice in model.Policies) choice.IsSelected = false;
         model.ApplyTo(rule);
 
-        Assert.Equal(new[] { Streaming.Id }, rule.PolicyIds);
+        Assert.Empty(rule.PolicyIds);
+    }
+
+    // The built-in Default matches everything, so a policy ranked under it would never be reached.
+    [Fact]
+    public void The_builtin_default_is_pinned_to_the_bottom_whatever_the_saved_order()
+    {
+        RoutingPolicy builtIn = RoutingPolicy.CreateDefault();
+        var rule = Filter(builtIn.Id, Work.Id);
+        rule.PolicyOrder = new List<Guid> { builtIn.Id, Work.Id };
+        var model = new ProcessFilterViewModel(rule, new[] { builtIn, Work, Streaming });
+
+        Assert.True(model.Policies[^1].Policy.IsBuiltIn);
+        Assert.True(model.Policies[^1].IsSelected);
+
+        // Neither the arrows nor a drop get anything under it, nor move it up.
+        model.MovePolicyDownCommand.Execute(model.Policies[^2]);
+        model.MovePolicyUpCommand.Execute(model.Policies[^1]);
+        Assert.False(model.Policies[^1].CanAccept(model.Policies[0], DropWhere.After));
+        Assert.False(model.Policies[0].CanAccept(model.Policies[^1], DropWhere.Before));
+        Assert.True(model.Policies[^1].Policy.IsBuiltIn);
+
+        model.ApplyTo(rule);
+        Assert.Equal(new[] { Work.Id, builtIn.Id }, rule.PolicyIds);
     }
 
     // The list holds every policy so one can be ticked without going to a second list, and a policy
