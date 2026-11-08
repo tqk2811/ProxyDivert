@@ -27,6 +27,19 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <!-- A filter with no policy does not run, so its switch is locked off and says why. -->
+        <Style x:Key="FilterSwitch" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasPolicy}" Value="False">
+                    <Setter Property="IsEnabled" Value="False"/>
+                    <Setter Property="ToolTip" Value="{DynamicResource Str.Process.NoPolicyHint}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
     <Grid Margin="4">
         <Grid.RowDefinitions>
@@ -72,7 +85,9 @@
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
                         <DataGridCheckBoxColumn Header="{b:LocalizedBinding Str.App.Enabled}" b:ColumnLayoutBehavior.ColumnKey="enabled"
-                                                Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
+                                                Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" Width="60"
+                                                ElementStyle="{StaticResource FilterSwitch}"
+                                                EditingElementStyle="{StaticResource FilterSwitch}"/>
                         <DataGridTextColumn Header="{b:LocalizedBinding Str.App.Name}" b:ColumnLayoutBehavior.ColumnKey="name" Width="180"
                                             Binding="{Binding Name}"/>
                         <!-- A condition tree does not fit in a cell, so the cell shows what the
