@@ -15,7 +15,8 @@ public sealed class ConditionGroup : ProcessCondition
     {
         Negate = Negate,
         Operator = Operator,
-        Children = Children.Select(child => child.Clone()).ToList(),
+        // A "null" in a hand-built or hand-edited list is skipped, as Answer skips it.
+        Children = Children.Where(child => child != null).Select(child => child.Clone()).ToList(),
     };
 
     // Kleene logic, plus the fourth state for rows that are not conditions yet:
