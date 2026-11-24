@@ -152,6 +152,7 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
             // parent has already exited the child stands on its own rather than disappearing —
             // it is still being redirected, which is the whole point of this list.
             if (process.ParentProcessId != 0
+                && !InLoop(process, byId)
                 && nodes.TryGetValue(process.ParentProcessId, out AppliedProcessNode? parent))
             {
                 parent.Children.Add(node);
@@ -163,6 +164,22 @@ public sealed partial class ProcessesViewModel : ObservableObject, IDragList
         }
 
         return roots;
+    }
+
+    // Pids are reused, so parent ids can close into a ring. Every member of a ring has a parent, so
+    // none would ever be a root and the whole ring would vanish from the tree while its processes are
+    // still redirected: its members stand as roots instead. Anything hanging below a ring still
+    // hangs there.
+    private static bool InLoop(TrackedProcess process, IReadOnlyDictionary<uint, TrackedProcess> byId)
+    {
+        TrackedProcess at = process;
+        for (int step = 0; step < byId.Count; step++)
+        {
+            if (at.ParentProcessId == 0 || !byId.TryGetValue(at.ParentProcessId, out TrackedProcess? parent)) return false;
+            if (ReferenceEquals(parent, process)) return true;
+            at = parent;
+        }
+        return false;
     }
 
     // Which filter put this process under redirection. The tracker remembers it only on the process

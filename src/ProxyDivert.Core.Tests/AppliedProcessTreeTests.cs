@@ -97,9 +97,9 @@ public class AppliedProcessTreeTests
             Adopted(200, "two.exe", parent: 100),
         });
 
-        // Each claims the other as its parent, so neither is a root and the tree draws nothing.
-        // What matters is that the answer arrives at all.
-        Assert.Empty(roots);
+        // Each claims the other as its parent. Both are still being redirected, so both must stay on
+        // screen: a loop has no root, and its members stand as roots themselves.
+        Assert.Equal(new[] { "one.exe", "two.exe" }, roots.Select(r => r.Name));
     }
 
     [Fact]
