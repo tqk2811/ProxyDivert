@@ -73,7 +73,8 @@ public static class HostPredicate
             case HostMatcherType.EndsWith:
             case HostMatcherType.Contains:
             case HostMatcherType.DomainSuffix:
-                return new NamePredicate(matcher, trimmed);
+                // ".example.com" is how a suffix is often written; the leading dot is not part of the name.
+                return new NamePredicate(matcher, matcher == HostMatcherType.DomainSuffix ? trimmed.TrimStart('.') : trimmed);
 
             default:
                 error = $"unknown matcher {matcher}";

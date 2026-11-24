@@ -24,6 +24,9 @@ public class HostMatcherTests
     [InlineData("example.com", "www.example.com", true)]
     [InlineData("example.com", "notexample.com", false)]     // the boundary must be a dot
     [InlineData("example.com", "example.com.evil.net", false)]
+    [InlineData(".example.com", "www.example.com", true)]    // a leading dot is how suffixes are often written
+    [InlineData(".example.com", "example.com", true)]
+    [InlineData(".example.com", "notexample.com", false)]
     public void DomainSuffix_respects_label_boundary(string pattern, string host, bool expected)
         => Assert.Equal(expected, HostMatcher.IsMatch(HostMatcherType.DomainSuffix, pattern, host, SomeIp, 443));
 
