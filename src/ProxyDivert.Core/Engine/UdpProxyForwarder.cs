@@ -219,6 +219,7 @@ public sealed class UdpProxyForwarder : IAsyncDisposable
         private readonly CancellationTokenSource _cts;
         private readonly Task _ready;
         private IUdpAssociateSource? _tunnel;
+        private int _disposing;
         private Task? _receiveLoop;
         private long _lastUsedTicks;
 
@@ -256,9 +257,28 @@ public sealed class UdpProxyForwarder : IAsyncDisposable
                 }
 
                 IUdpAssociateSource tunnel = await udp.GetUdpAssociateSourceAsync(Guid.NewGuid(), ct).ConfigureAwait(false);
-                await tunnel.AssociateAsync(ct).ConfigureAwait(false);
-                _tunnel = tunnel;
-                _receiveLoop = Task.Run(() => ReceiveLoopAsync(ct));
+                try
+                {
+                    await tunnel.AssociateAsync(ct).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Refused, or cancelled by DisposeAsync: the control connection and the UDP
+                    // socket are already open, and nobody but this method holds them.
+                    try { tunnel.Dispose(); } catch { }
+                    throw;
+                }
+
+                Interlocked.Exchange(ref _tunnel, tunnel);
+                if (Volatile.Read(ref _disposing) != 0)
+                {
+                    // DisposeAsync gave up waiting before this finished. Whichever of the two takes
+                    // the tunnel out of the field closes it, so it is closed exactly once.
+                    try { Interlocked.Exchange(ref _tunnel, null)?.Dispose(); } catch { }
+                    return;
+                }
+
+                _receiveLoop = Task.Run(() => ReceiveLoopAsync(tunnel, ct));
                 _owner._logger.LogDebug("UDP associate for :{ClientPort} is up, relay={Relay}", _key.ClientPort, tunnel.RelayEndPoint);
             }
             catch (Exception ex)
@@ -303,10 +323,9 @@ public sealed class UdpProxyForwarder : IAsyncDisposable
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
 
-        private async Task ReceiveLoopAsync(CancellationToken ct)
+        private async Task ReceiveLoopAsync(IUdpAssociateSource tunnel, CancellationToken ct)
         {
-            IUdpAssociateSource? tunnel = _tunnel;
-            while (!ct.IsCancellationRequested && tunnel != null)
+            while (!ct.IsCancellationRequested)
             {
                 UdpAssociateDatagram datagram;
                 try
@@ -328,9 +347,11 @@ public sealed class UdpProxyForwarder : IAsyncDisposable
 
         public async ValueTask DisposeAsync()
         {
+            Interlocked.Exchange(ref _disposing, 1);
             try { _cts.Cancel(); } catch { }
             try { await _ready.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false); } catch { }
-            try { _tunnel?.Dispose(); } catch { }
+            // An associate still running past the wait sees _disposing and closes its own tunnel.
+            try { Interlocked.Exchange(ref _tunnel, null)?.Dispose(); } catch { }
             if (_receiveLoop is not null)
             {
                 try { await _receiveLoop.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false); } catch { }

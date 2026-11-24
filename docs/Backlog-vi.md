@@ -91,14 +91,6 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 - **Vì sao:** hiếm gặp hoặc chỉ tốn tài nguyên, nhưng vài gạch (cháu không detach, vòng PID biến mất khỏi cây, NRE `AttachProcessId`) có thể lộ ra lúc dùng thật.
 - **Ngày ghi:** 2026-09-08 (kiểm lại 2026-09-11 và 2026-10-09).
 
-### A22. `PortTunnel` để lại association SOCKS5 mồ côi khi associate hỏng, bị huỷ hoặc xong muộn (Vừa)
-
-- **Vấn đề:** (1) `AssociateAsync` lấy được `tunnel` từ `GetUdpAssociateSourceAsync` rồi `tunnel.AssociateAsync(ct)` ném (proxy từ chối, hoặc `_cts.Cancel()` từ `DisposeAsync`) thì `catch` chỉ log, không dispose `tunnel`. (2) Associate xong sau mốc 1 giây của `DisposeAsync` thì `_tunnel?.Dispose()` chạy khi `_tunnel` còn `null`, rồi `AssociateAsync` mới gán `_tunnel`: kết nối điều khiển SOCKS5 + socket UDP không ai đóng.
-- **Vị trí:** [UdpProxyForwarder.cs:244-270](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L244-L270) (`AssociateAsync`), [:329-340](../src/ProxyDivert.Core/Engine/UdpProxyForwarder.cs#L329-L340) (`DisposeAsync`: `_ready.WaitAsync(1s)` rồi `_tunnel?.Dispose()`).
-- **Vì sao:** reaper dispose tunnel idle liên tục; proxy ở xa (>1 s để ASSOCIATE) hoặc proxy từ chối UDP là chạm ngay. Finalizer của `BaseProxySourceTunnel` (D5, ở [backlog TqkLibrary.Proxy](../libs/TqkLibrary.Proxy/docs/Backlog-vi.md)) cũng đi qua đường này.
-- **Cách sửa:** bọc phần sau khi có `tunnel` bằng `try/catch` riêng, ném thì `tunnel.Dispose()`; `DisposeAsync` chờ `_ready` không giới hạn (nó đã bị huỷ qua `_cts`) hoặc đọc lại `_tunnel` sau khi chờ; hoặc gán `_tunnel` trước rồi mới `AssociateAsync`.
-- **Ngày ghi:** 2026-09-11 (kiểm lại 2026-10-09).
-
 ### A23. Không ai trong app nghe `PumpStopped` (Vừa)
 
 - **Vấn đề:** thư viện đã bắn `IProcessRedirector.PumpStopped`, nhưng `grep` toàn `src/` không có subscriber. Pump gói tin chết (32 lỗi `Recv` liên tiếp, hoặc handle bị đóng) thì engine vẫn báo `IsRunning`, redirect ngừng trong im lặng. Nửa "báo UI" chưa từng được làm. Liên quan mục "Một nửa cặp pump chết..." và B17 ở [backlog TqkLibrary.WinDivert](../libs/TqkLibrary.WinDivert/docs/Backlog-vi.md).
