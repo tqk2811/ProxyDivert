@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ProxyDivert.Core.Outbounds;
 using ProxyDivert.Core.Outbounds.Builders;
@@ -174,5 +175,55 @@ public class OutboundRegistryTests
             }));
 
         Assert.Contains("Socks5", error.Message, StringComparison.Ordinal);
+    }
+    // A21: a save landing while the first connection is still building the instance (spawning
+    // wireproxy, dialling a VPN) used to remove the entry, find nothing built, and leave the
+    // instance that finished afterwards owned by nobody.
+    [Fact]
+    public async Task Reconcile_WhileTheInstanceIsBeingBuilt_DisposesItExactlyOnce()
+    {
+        using var building = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        int calls = 0;
+        var builder = new FakeOutboundSourceBuilder(OutboundKind.Socks5, _ =>
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                building.Set();
+                release.Wait(TimeSpan.FromSeconds(10));
+            }
+            return new FakeManagedProxySource();
+        });
+        Outbound outbound = Socks5(Guid.NewGuid());
+        using var registry = Registry(builder);
+
+        Task<IOutboundInstance> connecting = Task.Run(() => registry.GetOrCreate(outbound));
+        Assert.True(building.Wait(TimeSpan.FromSeconds(10)));
+
+        Task<IReadOnlyCollection<Guid>> reconcile = Task.Run(() => registry.ReconcileAsync(Array.Empty<Outbound>(), null));
+        await Task.Delay(100);
+        release.Set();
+        await reconcile.WaitAsync(TimeSpan.FromSeconds(10));
+        IOutboundInstance handedOut = await connecting.WaitAsync(TimeSpan.FromSeconds(10));
+
+        FakeProxySource first = builder.Builds[0].Source;
+        for (int i = 0; i < 100 && first.Disposals == 0; i++) await Task.Delay(20);
+        await Task.Delay(100);
+
+        Assert.Equal(1, first.Disposals);
+        Assert.NotSame(first, handedOut.Source);
+    }
+
+    // A supervisor loop still running after the application closed the registry must not build an
+    // instance nobody will ever dispose.
+    [Fact]
+    public async Task GetOrCreate_AfterDispose_Refuses()
+    {
+        var builder = new FakeOutboundSourceBuilder(OutboundKind.Socks5);
+        var registry = Registry(builder);
+        await registry.DisposeAsync();
+
+        Assert.Throws<ObjectDisposedException>(() => registry.GetOrCreate(Socks5(Guid.NewGuid())));
+        Assert.Empty(builder.Builds);
     }
 }

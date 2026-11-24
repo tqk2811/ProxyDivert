@@ -47,6 +47,8 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
     // comparison then rebuilds.
     private volatile string? _wireProxyPath;
 
+    private volatile bool _disposed;
+
     public OutboundRegistry(OutboundSourceFactory factory, ILoggerFactory? loggerFactory = null)
     {
         _factory = factory ?? throw new ArgumentNullException(nameof(factory));
@@ -100,9 +102,26 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
     public IOutboundInstance GetOrCreate(Outbound outbound)
     {
         if (outbound is null) throw new ArgumentNullException(nameof(outbound));
-        return _instances.GetOrAdd(
-            InstanceKey.Of(outbound),
-            _ => new Entry(SignatureOf(outbound), () => Build(outbound))).Instance;
+        InstanceKey key = InstanceKey.Of(outbound);
+        while (true)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(OutboundRegistry));
+
+            Entry entry = _instances.GetOrAdd(key, _ => new Entry(SignatureOf(outbound), () => Build(outbound)));
+            IOutboundInstance instance = entry.Instance;
+
+            // Building can take seconds (wireproxy, a VPN dial). If a drop removed the entry in the
+            // meantime, whoever dropped it disposes it too, but this caller must not hand out an
+            // instance nobody owns any more: it asks again, which builds against the current table.
+            if (!_disposed
+                && _instances.TryGetValue(key, out Entry? current)
+                && ReferenceEquals(current, entry))
+            {
+                return instance;
+            }
+
+            _ = entry.DisposeOnceAsync().AsTask();
+        }
     }
 
     // How often GetReadyAsync looks again. Short enough that a connection made while the tunnel was
@@ -249,12 +268,7 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
         Raise(outboundId);
     }
 
-    private static async ValueTask DisposeAsync(Entry entry)
-    {
-        IOutboundInstance? instance = entry.InstanceIfBuilt;
-        if (instance is null) return;
-        try { await instance.DisposeAsync().ConfigureAwait(false); } catch { }
-    }
+    private static ValueTask DisposeAsync(Entry entry) => entry.DisposeOnceAsync();
 
     private void Raise(Guid outboundId)
     {
@@ -265,6 +279,9 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
     /// <summary>Drops every instance, as the application closes.</summary>
     public async ValueTask DisposeAsync()
     {
+        // Set first, so a supervisor loop still running cannot build a new instance behind the
+        // teardown; GetOrCreate rechecks it after building and disposes what it built.
+        _disposed = true;
         var ids = new HashSet<Guid>();
         foreach (InstanceKey key in _instances.Keys) ids.Add(key.Id);
         foreach (Guid outboundId in ids)
@@ -314,12 +331,50 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
         /// </summary>
         public string Signature { get; }
 
-        public IOutboundInstance Instance => _instance.Value;
+        // Set before the Lazy is touched, so a drop can tell "nobody asked" (nothing to dispose)
+        // from "someone is building it right now" (wait for the build, then dispose it).
+        private volatile bool _requested;
+        private int _disposed;
+
+        public IOutboundInstance Instance
+        {
+            get
+            {
+                _requested = true;
+                return _instance.Value;
+            }
+        }
 
         /// <summary>
         /// The instance if something has already asked for it, else null — for callers that must
         /// not cause one to be built.
         /// </summary>
         public IOutboundInstance? InstanceIfBuilt => _instance.IsValueCreated ? _instance.Value : null;
+
+        /// <summary>
+        /// Disposes the instance once, whoever asks first: the drop that removed the entry, or the
+        /// caller that finished building it and found the entry gone. An instance still being built
+        /// is waited for rather than left to whoever finishes building it.
+        /// </summary>
+        /// <remarks>
+        /// An entry nobody had asked for is left unbuilt. If a caller asks for it after this check,
+        /// that caller sees the entry is no longer in the table and disposes it itself.
+        /// </remarks>
+        public async ValueTask DisposeOnceAsync()
+        {
+            if (!_requested) return;
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+            IOutboundInstance instance;
+            try
+            {
+                instance = _instance.IsValueCreated
+                    ? _instance.Value
+                    : await Task.Run(() => _instance.Value).ConfigureAwait(false);
+            }
+            catch { return; /* the build failed: there is nothing to release */ }
+
+            try { await instance.DisposeAsync().ConfigureAwait(false); } catch { }
+        }
     }
 }

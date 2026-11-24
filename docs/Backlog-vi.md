@@ -12,14 +12,6 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 - **Cách sửa:** khi có row giữ state riêng thì đổi sang đối chiếu theo Id (giữ row cũ, chỉ thêm/bớt).
 - **Ngày ghi:** 2026-09-08 (thu hẹp 2026-11-08).
 
-### A21. `OutboundRegistry.DropAsync` bỏ rơi instance đang dựng dở (Cao)
-
-- **Vấn đề:** `ReconcileAsync`/`DiscardAsync`/`DisposeAsync` chen vào lúc một luồng kết nối đang dựng instance (`Lazy.Value` đang chạy `Build`: spawn wireproxy, quay số VPN) hoặc vừa lấy được entry mà chưa gọi `.Instance`. Entry đã rời bảng, `InstanceIfBuilt` là `null` (khi `Lazy` chưa hoặc đang dựng) nên không dispose gì, instance dựng xong không ai sở hữu. Sau khi registry đã `DisposeAsync`, một vòng giám sát còn sót vẫn `GetOrCreate` dựng được instance mới (không có cờ disposed).
-- **Vị trí:** [OutboundRegistry.cs:100-106](../src/ProxyDivert.Core/Outbounds/OutboundRegistry.cs#L100-L106) (`GetOrCreate`: `GetOrAdd` trả `Entry` rồi mới chạm `.Instance`), [:237-250](../src/ProxyDivert.Core/Outbounds/OutboundRegistry.cs#L237-L250) (`DropAsync`: `TryRemove` rồi dispose), [:252-257](../src/ProxyDivert.Core/Outbounds/OutboundRegistry.cs#L252-L257) (`DisposeAsync(Entry)`), [:323](../src/ProxyDivert.Core/Outbounds/OutboundRegistry.cs#L323) (`InstanceIfBuilt`).
-- **Vì sao:** đúng loại rò đã bịt ở chỗ khác: `wireproxy.exe` mồ côi giữ cổng SOCKS, session VPN sống mãi, qua đường Save cấu hình trong lúc kết nối đầu tiên đang dựng (lúc vừa sửa outbound vừa thử).
-- **Cách sửa:** `DisposeAsync(Entry)` chờ `entry.Instance` (Lazy block tới khi dựng xong) rồi dispose, như `UdpProxyForwarder.DisposeAsync(Lazy)` đang làm; `GetOrCreate` sau khi `.Instance` xong kiểm entry còn trong `_instances` không, không còn thì dispose và `GetOrCreate` lại; cờ `_disposed` từ chối `GetOrCreate` sau `DisposeAsync`. Test: hai luồng, một `GetOrCreate` với builder chậm, một `ReconcileAsync` đổi chữ ký giữa chừng, khẳng định instance bị dispose đúng một lần.
-- **Ngày ghi:** 2026-09-11 (kiểm lại 2026-10-09).
-
 ### [Thấp] API cục bộ: trả 500 khi engine áp cấu hình lỗi dù thay đổi đã lưu
 
 - **Vấn đề:** `EditAsync` thay danh sách trong `AppServices.Config` và ghi file trước khi chờ `Session.ApplyAsync`. Nếu bước áp vào engine ném lỗi, request trả 500 nhưng thay đổi đã nằm trong file và trên cửa sổ. Tool gọi lại thì tạo trùng (POST không kèm id).
