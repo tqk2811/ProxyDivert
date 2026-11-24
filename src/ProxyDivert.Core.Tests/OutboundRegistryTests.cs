@@ -180,7 +180,7 @@ public class OutboundRegistryTests
     // wireproxy, dialling a VPN) used to remove the entry, find nothing built, and leave the
     // instance that finished afterwards owned by nobody.
     [Fact]
-    public async Task Reconcile_WhileTheInstanceIsBeingBuilt_DisposesItExactlyOnce()
+    public async Task Reconcile_WhileTheInstanceIsBeingBuilt_ReturnsAtOnceAndDisposesItExactlyOnce()
     {
         using var building = new ManualResetEventSlim(false);
         using var release = new ManualResetEventSlim(false);
@@ -200,10 +200,11 @@ public class OutboundRegistryTests
         Task<IOutboundInstance> connecting = Task.Run(() => registry.GetOrCreate(outbound));
         Assert.True(building.Wait(TimeSpan.FromSeconds(10)));
 
+        // The save must not wait for the build: a VPN dial can take a minute and more.
         Task<IReadOnlyCollection<Guid>> reconcile = Task.Run(() => registry.ReconcileAsync(Array.Empty<Outbound>(), null));
-        await Task.Delay(100);
+        await reconcile.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, builder.Builds.Count);
         release.Set();
-        await reconcile.WaitAsync(TimeSpan.FromSeconds(10));
         IOutboundInstance handedOut = await connecting.WaitAsync(TimeSpan.FromSeconds(10));
 
         FakeProxySource first = builder.Builds[0].Source;

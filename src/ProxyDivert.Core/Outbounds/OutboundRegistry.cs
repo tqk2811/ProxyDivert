@@ -354,7 +354,7 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
         /// <summary>
         /// Disposes the instance once, whoever asks first: the drop that removed the entry, or the
         /// caller that finished building it and found the entry gone. An instance still being built
-        /// is waited for rather than left to whoever finishes building it.
+        /// is disposed when its build ends, without making the caller wait for it.
         /// </summary>
         /// <remarks>
         /// An entry nobody had asked for is left unbuilt. If a caller asks for it after this check,
@@ -365,16 +365,22 @@ public sealed class OutboundRegistry : IDisposable, IAsyncDisposable
             if (!_requested) return;
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
-            IOutboundInstance instance;
-            try
+            if (!_instance.IsValueCreated)
             {
-                instance = _instance.IsValueCreated
-                    ? _instance.Value
-                    : await Task.Run(() => _instance.Value).ConfigureAwait(false);
+                // Still being built — a VPN dial can take a minute and more. Waiting here would hold
+                // a Save, or the application closing, for that long, so the dispose is attached to
+                // the end of the build instead and the caller goes on.
+                _ = Task.Run(async () =>
+                {
+                    IOutboundInstance built;
+                    try { built = _instance.Value; }
+                    catch { return; /* the build failed: there is nothing to release */ }
+                    try { await built.DisposeAsync().ConfigureAwait(false); } catch { }
+                });
+                return;
             }
-            catch { return; /* the build failed: there is nothing to release */ }
 
-            try { await instance.DisposeAsync().ConfigureAwait(false); } catch { }
+            try { await _instance.Value.DisposeAsync().ConfigureAwait(false); } catch { }
         }
     }
 }
