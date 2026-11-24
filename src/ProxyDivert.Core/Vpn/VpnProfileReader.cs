@@ -201,8 +201,8 @@ public static class VpnProfileReader
                     + "box straight at the .conf instead.");
         }
 
-        // A secret in the outbound's own box is encrypted at rest; one written into this file is
-        // not. So the boxes win where they are filled in, and the file only fills the gaps.
+        // A secret in the outbound's own box and one written into this file are both stored as typed,
+        // so the boxes win where they are filled in, and the file only fills the gaps.
         string? user = Blank(outbound.Username) ?? Value(values, "user", "username");
         string? pass = Blank(outbound.Password) ?? Value(values, "pass", "password");
         string? psk = Blank(outbound.PreSharedKey) ?? Value(values, "psk", "presharedkey");
