@@ -118,7 +118,6 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 ### C8. Nhóm mức Thấp (cách dùng VpnClient)
 
 - **Vấn đề:**
-  - Dial timeout tới proxy hiện ra như "cancelled": [VpnClientConnectSource.cs:50-53](../src/ProxyDivert.Core/Vpn/Client/VpnClientConnectSource.cs#L50-L53) và [:68-71](../src/ProxyDivert.Core/Vpn/Client/VpnClientConnectSource.cs#L68-L71) rethrow OCE vô điều kiện, trong khi timeout đến từ `cts.CancelAfter(ConnectTimeout)` ở [VpnDialer.cs:260](../libs/TqkLibrary.VpnClient/src/TqkLibrary.VpnClient.Tunnels/VpnDialer.cs#L260). Chỉ rethrow OCE khi token của caller thật sự bị huỷ, còn lại bọc `InitConnectSourceFailedException`.
   - File `.vpn` không stamp config nó trỏ tới: [OutboundSignature.cs:51](../src/ProxyDivert.Core/Outbounds/OutboundSignature.cs#L51), [VpnProfileReader.cs](../src/ProxyDivert.Core/Vpn/VpnProfileReader.cs) (`ReadIni`, dòng 298). Stamp cả file được tham chiếu.
 - **Vị trí:** xem từng gạch.
 - **Ngày ghi:** 2026-09-08 (kiểm lại 2026-09-11 và 2026-10-09).

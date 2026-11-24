@@ -47,7 +47,7 @@ internal sealed class VpnClientConnectSource : IConnectSource
         {
             ip = await _resolver.ResolveAsync(address.Host, _allowIpv6, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
@@ -65,7 +65,7 @@ internal sealed class VpnClientConnectSource : IConnectSource
             _stream = client.GetStream();
             _logger?.LogDebug("connected to {Host}:{Port} ({Ip}) through the tunnel", address.Host, port, ip);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
