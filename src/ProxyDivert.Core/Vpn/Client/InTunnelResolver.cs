@@ -63,12 +63,13 @@ internal sealed class InTunnelResolver : IDisposable
         string name = host.Trim().Trim('[', ']');
         if (IPAddress.TryParse(name, out IPAddress? literal)) return literal;
 
-        if (_cache.TryGetValue(name, out CacheEntry? cached) && !cached.IsStale)
+        string cacheKey = CacheKey(name, allowIpv6);
+        if (_cache.TryGetValue(cacheKey, out CacheEntry? cached) && !cached.IsStale)
             return cached.Address;
 
-        IPAddress? answer = await QueryAsync(name, DnsType.A, cancellationToken).ConfigureAwait(false);
+        IPAddress? answer = await QueryAsync(name, cacheKey, DnsType.A, cancellationToken).ConfigureAwait(false);
         if (answer is null && allowIpv6)
-            answer = await QueryAsync(name, DnsType.Aaaa, cancellationToken).ConfigureAwait(false);
+            answer = await QueryAsync(name, cacheKey, DnsType.Aaaa, cancellationToken).ConfigureAwait(false);
 
         if (answer is null)
             throw new SocketException((int)SocketError.HostNotFound);
@@ -76,7 +77,11 @@ internal sealed class InTunnelResolver : IDisposable
         return answer;
     }
 
-    private async Task<IPAddress?> QueryAsync(string name, ushort type, CancellationToken cancellationToken)
+    // An answer found with AAAA allowed may be an IPv6 address, which a caller that cannot route IPv6
+    // must never be handed from the cache.
+    internal static string CacheKey(string name, bool allowIpv6) => (allowIpv6 ? "6|" : "4|") + name;
+
+    private async Task<IPAddress?> QueryAsync(string name, string cacheKey, ushort type, CancellationToken cancellationToken)
     {
         byte[] question = BuildQuery(name, type, out ushort id);
 
@@ -94,11 +99,15 @@ internal sealed class InTunnelResolver : IDisposable
                     if (reply is null) continue;
 
                     answered = true;
-                    (IPAddress? address, uint ttl) = ReadAnswer(reply, id, type);
-                    if (address is null) return null;
+                    DnsAnswer parsed = ReadAnswer(reply, id, type);
+                    if (parsed.Address is null)
+                    {
+                        if (parsed.Final) return null;
+                        break;   // not a verdict on the name: ask the next server instead of this one again
+                    }
 
-                    _cache[name] = new CacheEntry(address, Expiry(ttl));
-                    return address;
+                    _cache[cacheKey] = new CacheEntry(parsed.Address, Expiry(parsed.Ttl));
+                    return parsed.Address;
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -182,11 +191,15 @@ internal sealed class InTunnelResolver : IDisposable
 
     // Walks the answer section for the first address record of the type asked for. A CNAME chain
     // needs no following: a resolver that answers one puts the addresses in the same reply.
-    private static (IPAddress? Address, uint Ttl) ReadAnswer(byte[] reply, ushort id, ushort type)
+    internal static DnsAnswer ReadAnswer(byte[] reply, ushort id, ushort type)
     {
-        if (reply.Length < 12) return (null, 0);
-        if (((reply[0] << 8) | reply[1]) != id) return (null, 0);   // not the reply to our question
-        if ((reply[3] & 0x0F) != 0) return (null, 0);               // the server said no
+        if (reply.Length < 12) return new DnsAnswer(null, 0, final: false);
+        if (((reply[0] << 8) | reply[1]) != id) return new DnsAnswer(null, 0, final: false);   // not the reply to our question
+        int rcode = reply[3] & 0x0F;
+        // NXDOMAIN is the zone speaking: the name does not exist, and another server will say the same.
+        // Any other refusal (SERVFAIL, REFUSED, ...) is this server having a bad moment.
+        if (rcode == 3) return new DnsAnswer(null, 0, final: true);
+        if (rcode != 0) return new DnsAnswer(null, 0, final: false);
 
         int questions = (reply[4] << 8) | reply[5];
         int answers = (reply[6] << 8) | reply[7];
@@ -194,14 +207,14 @@ internal sealed class InTunnelResolver : IDisposable
 
         for (int i = 0; i < questions; i++)
         {
-            if (!SkipName(reply, ref offset)) return (null, 0);
+            if (!SkipName(reply, ref offset)) return new DnsAnswer(null, 0, final: false);
             offset += 4;                                            // qtype + qclass
         }
 
         for (int i = 0; i < answers; i++)
         {
-            if (!SkipName(reply, ref offset)) return (null, 0);
-            if (offset + 10 > reply.Length) return (null, 0);
+            if (!SkipName(reply, ref offset)) return new DnsAnswer(null, 0, final: false);
+            if (offset + 10 > reply.Length) return new DnsAnswer(null, 0, final: false);
 
             int recordType = (reply[offset] << 8) | reply[offset + 1];
             uint ttl = (uint)((reply[offset + 4] << 24) | (reply[offset + 5] << 16)
@@ -209,19 +222,20 @@ internal sealed class InTunnelResolver : IDisposable
             int length = (reply[offset + 8] << 8) | reply[offset + 9];
             offset += 10;
 
-            if (offset + length > reply.Length) return (null, 0);
+            if (offset + length > reply.Length) return new DnsAnswer(null, 0, final: false);
 
             if (recordType == type && (length == 4 || length == 16))
             {
                 var bytes = new byte[length];
                 Buffer.BlockCopy(reply, offset, bytes, 0, length);
-                return (new IPAddress(bytes), ttl);
+                return new DnsAnswer(new IPAddress(bytes), ttl, final: true);
             }
 
             offset += length;
         }
 
-        return (null, 0);
+        // A well-formed, successful reply with no record of this type: that is the answer.
+        return new DnsAnswer(null, 0, final: true);
     }
 
     // Names are either labels ending in a zero byte or a two-byte pointer into the message; either
@@ -236,6 +250,23 @@ internal sealed class InTunnelResolver : IDisposable
             offset += length + 1;
         }
         return false;
+    }
+
+    internal readonly struct DnsAnswer
+    {
+        public DnsAnswer(IPAddress? address, uint ttl, bool final)
+        {
+            Address = address;
+            Ttl = ttl;
+            Final = final;
+        }
+
+        public IPAddress? Address { get; }
+
+        public uint Ttl { get; }
+
+        /// <summary>True when no other server is worth asking: an address, NXDOMAIN, or an empty success.</summary>
+        public bool Final { get; }
     }
 
     private static DateTime Expiry(uint ttl)

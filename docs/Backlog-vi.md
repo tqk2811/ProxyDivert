@@ -118,8 +118,6 @@ Các mục mang mã A/B/C/D/E (ở cuối file) đến từ đợt rà soát to�
 ### C8. Nhóm mức Thấp (cách dùng VpnClient)
 
 - **Vấn đề:**
-  - `InTunnelResolver` bỏ luôn fallback server khi gặp SERVFAIL: [InTunnelResolver.cs:189](../src/ProxyDivert.Core/Vpn/Client/InTunnelResolver.cs#L189) (`(reply[3] & 0x0F) != 0` trả null) và `return null` ở [:98](../src/ProxyDivert.Core/Vpn/Client/InTunnelResolver.cs#L98) bỏ luôn server còn lại. Chỉ dừng khi NXDOMAIN (rcode 3).
-  - Cache DNS khoá theo tên, không theo loại A/AAAA: [InTunnelResolver.cs:66](../src/ProxyDivert.Core/Vpn/Client/InTunnelResolver.cs#L66), [:100](../src/ProxyDivert.Core/Vpn/Client/InTunnelResolver.cs#L100). Khoá `(name, type)`.
   - Dial timeout tới proxy hiện ra như "cancelled": [VpnClientConnectSource.cs:50-53](../src/ProxyDivert.Core/Vpn/Client/VpnClientConnectSource.cs#L50-L53) và [:68-71](../src/ProxyDivert.Core/Vpn/Client/VpnClientConnectSource.cs#L68-L71) rethrow OCE vô điều kiện, trong khi timeout đến từ `cts.CancelAfter(ConnectTimeout)` ở [VpnDialer.cs:260](../libs/TqkLibrary.VpnClient/src/TqkLibrary.VpnClient.Tunnels/VpnDialer.cs#L260). Chỉ rethrow OCE khi token của caller thật sự bị huỷ, còn lại bọc `InitConnectSourceFailedException`.
   - File `.vpn` không stamp config nó trỏ tới: [OutboundSignature.cs:51](../src/ProxyDivert.Core/Outbounds/OutboundSignature.cs#L51), [VpnProfileReader.cs](../src/ProxyDivert.Core/Vpn/VpnProfileReader.cs) (`ReadIni`, dòng 298). Stamp cả file được tham chiếu.
 - **Vị trí:** xem từng gạch.
