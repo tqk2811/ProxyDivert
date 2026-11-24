@@ -129,6 +129,31 @@ public class VpnConnectionKeeperTests
     private static OutboundRegistry RegistryOf(FakeOutboundSourceBuilder builder)
         => new OutboundRegistry(new OutboundSourceFactory(new IOutboundSourceBuilder[] { builder }));
 
+    // Closing the application can dispose the registry before the keeper. The loop used to treat
+    // the refusal as one more failed dial and retry it, logging a warning each time, until cancelled.
+    [Fact]
+    public async Task ARegistryAlreadyDisposed_StopsTheLoopInsteadOfRetrying()
+    {
+        Outbound vpn = MissingConfigVpn();
+        var builder = new FakeOutboundSourceBuilder(OutboundKind.Vpn, _ => new FakeManagedProxySource());
+        var registry = RegistryOf(builder);
+        await registry.DisposeAsync();
+
+        using var keeper = new VpnConnectionKeeper(registry, NullLogger<VpnConnectionKeeper>.Instance);
+        var seen = new List<VpnConnectionState>();
+        var stopped = new ManualResetEventSlim();
+        keeper.StatusChanged += status =>
+        {
+            lock (seen) seen.Add(status.State);
+            if (status.State == VpnConnectionState.Stopped) stopped.Set();
+        };
+
+        await keeper.SyncAsync(new[] { vpn }, null);
+
+        Assert.True(stopped.Wait(TimeSpan.FromSeconds(5)), "the loop kept retrying a disposed registry");
+        lock (seen) Assert.DoesNotContain(VpnConnectionState.Reconnecting, seen);
+    }
+
     [Fact]
     public async Task ADisabledVpnOutbound_IsNotKept()
     {

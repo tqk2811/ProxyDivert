@@ -118,6 +118,12 @@ internal sealed class KeptVpnTunnel : IAsyncDisposable
             {
                 break;
             }
+            catch (ObjectDisposedException ex) when (ex.ObjectName == nameof(OutboundRegistry))
+            {
+                // The application is closing and the registry went first: there is nothing left to
+                // build a tunnel from, so retrying would only log the same warning until cancelled.
+                break;
+            }
             catch (Exception ex)
             {
                 reason = $"{ex.GetType().Name}: {ex.Message}";
