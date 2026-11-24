@@ -135,6 +135,23 @@ public class ProcessRuleTrackerTests
     }
 
     [Fact]
+    public void A_process_that_exits_takes_its_grandchildren_out_of_the_table_too()
+    {
+        using var fixture = new Fixture();
+        fixture.Machine.Start(100, "chrome.exe").Start(101, "crashpad.exe", parentPid: 100)
+            .Start(102, "helper.exe", parentPid: 101);
+        fixture.Tracker.Start(new[] { Rule("chrome.exe", DirectPolicy) });
+        fixture.Settle();
+        Assert.Equal(3, fixture.Tracker.Tracked.Count());
+
+        fixture.Machine.Exit(100);
+        fixture.Inventory.Refresh();
+
+        Assert.Equal(new uint[] { 100, 101, 102 }, fixture.Detached.Select(p => p.ProcessId).OrderBy(id => id));
+        Assert.Empty(fixture.Tracker.Tracked);
+    }
+
+    [Fact]
     public void The_tool_refuses_to_redirect_itself()
     {
         using var fixture = new Fixture();

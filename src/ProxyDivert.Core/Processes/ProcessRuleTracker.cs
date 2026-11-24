@@ -250,7 +250,12 @@ public sealed class ProcessRuleTracker : IProcessPolicySource, IDisposable
             includeChildren: includeChildren,
             commandLine: info?.CommandLine);
 
-        if (!_tracked.TryAdd(processId, tracked)) return _tracked[processId];
+        if (!_tracked.TryAdd(processId, tracked))
+        {
+            // Already there; or it was detached again between the two calls, in which case there is nothing to return.
+            _tracked.TryGetValue(processId, out TrackedProcess? alreadyThere);
+            return alreadyThere;
+        }
         _logger.LogInformation("attached pid={Pid} name={Name} explicitly, policy={Policy}", processId, tracked.Name, policyId);
         ProcessAttached?.Invoke(tracked);
 
@@ -396,12 +401,21 @@ public sealed class ProcessRuleTracker : IProcessPolicySource, IDisposable
     {
         Detach(process.ProcessId, "exited");
 
-        // Its children were tracked only because of it.
-        foreach (var kv in _tracked)
+        // Its children were tracked only because of it, and theirs only because of them: go down the
+        // tree until a pass finds nobody left whose parent has just been detached.
+        bool detached;
+        do
         {
-            if (kv.Value.IsChild && kv.Value.ParentProcessId == process.ProcessId)
-                Detach(kv.Key, "parent no longer tracked");
-        }
+            detached = false;
+            foreach (var kv in _tracked)
+            {
+                if (kv.Value.IsChild && !_tracked.ContainsKey(kv.Value.ParentProcessId))
+                {
+                    Detach(kv.Key, "parent no longer tracked");
+                    detached = true;
+                }
+            }
+        } while (detached);
     }
 
     // After a filter change, every tracked process is read against the new filters. One no filter
